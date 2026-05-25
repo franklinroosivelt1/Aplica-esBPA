@@ -1,0 +1,23 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-military-900: #1a1c0e;
+  --color-military-800: #2d3118;
+  --color-military-700: #3d4221;
+  --color-military-600: #4B5320;
+  --color-military-500: #5c6628;
+  --color-military-400: #7d8a36;
+  --color-military-300: #a1b045;
+  --color-military-200: #c5cf8c;
+  --color-military-100: #e2e7c6;
+}
+
+@layer base {
+  body {
+    @apply bg-military-900 text-military-100 antialiased;
+  }
+}
