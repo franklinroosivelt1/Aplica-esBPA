@@ -43,6 +43,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
           });
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
+            videoRef.current.play().catch(err => console.error("Video play error:", err));
           }
           setHasPermission(true);
         } catch (err) {

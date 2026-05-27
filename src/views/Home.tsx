@@ -9,6 +9,7 @@ import {
   Trees
 } from 'lucide-react';
 import { View } from '../App';
+import brandLogo from '../assets/images/batalhao_ambiental_logo_1779854041969.png';
 
 interface HomeProps {
   onNavigate: (view: View) => void;
@@ -23,16 +24,22 @@ export default function Home({ onNavigate }: HomeProps) {
       description: 'CamStamp - Captura de imagens com dados de GPS'
     },
     { 
+      id: 'mapas', 
+      label: 'Mapas Georreferenciados', 
+      icon: Map,
+      description: 'Visualização de mapas e camadas geocodificadas'
+    },
+    { 
       id: 'cubagem', 
       label: 'Cubagem de Madeiras', 
       icon: Calculator,
       description: 'Cálculo de volume para fiscalização ambiental'
     },
     { 
-      id: 'mapas', 
-      label: 'Mapas Georreferenciados', 
-      icon: Map,
-      description: 'Visualização de mapas e camadas geocodificadas'
+      id: 'bpaoperacional', 
+      label: 'Buscar Dados do CAR', 
+      icon: Shield,
+      description: 'Verificar dados de uma propriedade a partir de uma coordenada geográfica.'
     },
     { 
       id: 'fotopdf', 
@@ -45,12 +52,6 @@ export default function Home({ onNavigate }: HomeProps) {
       label: 'Identificação de Madeiras', 
       icon: Trees,
       description: 'Guia para reconhecimento de espécies'
-    },
-    { 
-      id: 'bpaoperacional', 
-      label: 'BPA Operacional', 
-      icon: Shield,
-      description: 'Projetos e fiscalização em desenvolvimento'
     }
   ];
 
@@ -62,8 +63,13 @@ export default function Home({ onNavigate }: HomeProps) {
         animate={{ opacity: 1, y: 0 }}
         className="text-center mb-10 w-full"
       >
-        <div className="inline-flex items-center justify-center p-3 bg-military-800 rounded-2xl mb-4 border border-military-700 shadow-xl">
-          <Shield className="w-10 h-10 text-military-300" />
+        <div className="inline-flex items-center justify-center p-0 bg-[#121911] rounded-2xl mb-4 border border-military-700 shadow-xl overflow-hidden w-16 h-16">
+          <img 
+            src={brandLogo} 
+            alt="Batalhão Ambiental Logo" 
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer" 
+          />
         </div>
         <h1 className="text-3xl font-black tracking-tight text-military-100 uppercase">
           APLICAÇÕES BPA

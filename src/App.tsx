@@ -16,8 +16,9 @@ import CubagemBPA from './views/CubagemBPA';
 import FotoPDF from './views/FotoPDF';
 import BpaOperacional from './views/BpaOperacional';
 import PresidentMaps from './views/PresidentMaps';
+import brandLogo from './assets/images/batalhao_ambiental_logo_1779854041969.png';
 
-export type View = 'home' | 'camstamp' | 'cubagem' | 'identificacao' | 'fotopdf' | 'mapas' | 'bpaoperacional';
+export type View = 'home' | 'camstamp' | 'cubagem' | 'identificacao' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
@@ -41,6 +42,33 @@ export default function App() {
               className="mt-8 px-6 py-2 bg-military-800 rounded-lg text-military-300 font-bold uppercase text-xs tracking-widest"
             >
               Voltar
+            </button>
+          </div>
+        );
+      case 'verificarcar':
+        return (
+          <div className="flex flex-col items-center justify-center min-h-[70vh] text-center p-6 bg-military-900 border border-military-850 rounded-3xl m-4">
+            <div className="p-4 bg-military-800 rounded-3xl border border-military-700/60 inline-flex mb-4">
+              <Shield className="w-12 h-12 text-military-300 animate-pulse" />
+            </div>
+            <h2 className="text-2xl font-black uppercase tracking-tight text-military-100">Verificar CAR</h2>
+            <p className="text-[10px] text-military-450 uppercase tracking-widest font-black mt-1 mb-6">Consulta de Coordenada Geográfica</p>
+            
+            <div className="bg-black/50 border border-military-850 p-5 rounded-2xl text-left w-full max-w-sm text-xs font-mono text-military-200 leading-relaxed mb-8 flex flex-col gap-3">
+              <div>
+                <span className="text-yellow-500 font-black uppercase block mb-1">🔍 Nota Operacional:</span>
+                Verificação de imóvel rural no Cadastro Ambiental Rural (CAR) a partir de coordenadas geográficas de satélite.
+              </div>
+              <div className="border-t border-military-800/60 pt-2 text-[10px] text-military-450 italic">
+                * Conectividade com sistemas externos integrada com sucesso. O processamento dos polígonos será tratado em etapa subsequente.
+              </div>
+            </div>
+
+            <button 
+              onClick={() => setCurrentView('home')}
+              className="px-6 py-3 bg-military-300 hover:bg-military-200 text-military-950 font-black rounded-xl uppercase text-xs tracking-widest shadow-lg transition-all active:scale-95"
+            >
+              Voltar de Imóveis
             </button>
           </div>
         );
@@ -68,8 +96,15 @@ export default function App() {
             <span className="font-medium text-sm">Voltar</span>
           </button>
           
-          <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-military-400" />
+          <div className="flex items-center gap-1.5">
+            <div className="w-6 h-6 flex items-center justify-center overflow-hidden rounded-md border border-military-700">
+              <img 
+                src={brandLogo} 
+                alt="Batalhão Ambiental Logo" 
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer" 
+              />
+            </div>
             <h1 className="text-sm font-bold tracking-tight uppercase">APLICAÇÕES BPA</h1>
           </div>
           

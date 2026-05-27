@@ -645,31 +645,70 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
       // Pulse circle
       ctx.beginPath();
-      ctx.arc(px, py, 14, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // Red indicator dot with white ring
-      ctx.beginPath();
-      ctx.arc(px, py, 7, 0, Math.PI * 2);
-      ctx.fillStyle = '#ef4444'; // Red
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
+      ctx.arc(px, py, 18, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // Standard point label styled professionally
+      // Classic pin marker pointing at (px, py)
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(-rotation);
+
+      // Draw pin shadow
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 5, 2, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.fill();
+
+      // Pin Path pointing down to 0,0
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(-6, -6, -7, -12, -7, -16);
+      ctx.arc(0, -16, 7, Math.PI, 0, false);
+      ctx.bezierCurveTo(7, -12, 6, -6, 0, 0);
+      ctx.closePath();
+      ctx.fillStyle = '#ef4444'; // Red teardrop pin
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2;
+      ctx.fill();
+      ctx.stroke();
+
+      // Inside white dot
+      ctx.beginPath();
+      ctx.arc(0, -16, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+
+      // --- DRAW THE WHITE BANNER WITH RED BORDER ABOVE THE PIN ---
+      const labelText = pt.name || 'Ponto';
+      ctx.font = 'bold 9.5px sans-serif';
+      const textWidth = ctx.measureText(labelText).width;
       
-      ctx.fillStyle = '#ef5350';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.shadowColor = 'rgba(0,0,0,0.85)';
-      ctx.shadowBlur = 4;
-      ctx.fillText(pt.name || 'Ponto', 10, 3);
-      ctx.shadowColor = 'transparent';
+      const badgeW = textWidth + 10;
+      const badgeH = 15;
+      const bx = -badgeW / 2;
+      const by = -36; // Positioned above the pin which is 16px high + spacing
+
+      // Draw badge back
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(bx, by, badgeW, badgeH, 3);
+      } else {
+        ctx.rect(bx, by, badgeW, badgeH);
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#ef4444'; // Red border
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      // Draw badge text inside
+      ctx.fillStyle = '#ef4444'; // Red text in the banner
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(labelText, 0, by + badgeH / 2 + 0.5);
+
       ctx.restore();
     });
 
@@ -873,6 +912,49 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     };
   };
 
+  const averageLatLng = (points: Array<{lat: number, lng: number}>) => {
+    if (points.length === 0) return { lat: 0, lng: 0 };
+    let sumLat = 0;
+    let sumLng = 0;
+    points.forEach(p => {
+      sumLat += p.lat;
+      sumLng += p.lng;
+    });
+    return { lat: sumLat / points.length, lng: sumLng / points.length };
+  };
+
+  const findSavedDistanceAt = (sx: number, sy: number): SavedDistance | null => {
+    for (const sd of savedDistances) {
+      if (sd.points.length < 2) continue;
+      const pts = sd.points.map(pt => getScreenPos(pt.lat, pt.lng));
+      for (let i = 0; i < pts.length - 1; i++) {
+        const dist = distToSegment({ x: sx, y: sy }, pts[i], pts[i+1]);
+        if (dist <= 15) {
+          return sd;
+        }
+      }
+    }
+    return null;
+  };
+
+  const findSavedAreaAt = (sx: number, sy: number): SavedArea | null => {
+    for (const sa of savedAreas) {
+      if (sa.points.length < 3) continue;
+      const pts = sa.points.map(pt => getScreenPos(pt.lat, pt.lng));
+      if (isPointInPolygon({ x: sx, y: sy }, pts)) {
+        return sa;
+      }
+      for (let i = 0; i < pts.length; i++) {
+        const nextIdx = (i + 1) % pts.length;
+        const dist = distToSegment({ x: sx, y: sy }, pts[i], pts[nextIdx]);
+        if (dist <= 15) {
+          return sa;
+        }
+      }
+    }
+    return null;
+  };
+
   const findFeatureAt = (sx: number, sy: number) => {
     const centerPixel = latLngToWorldPixel(center.lat, center.lng, zoom);
     
@@ -1004,14 +1086,34 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
             if (foundSavedPoint) {
               setSelectedSavedPoint(foundSavedPoint);
+              setSelectedDistance(null);
+              setSelectedArea(null);
               setSelectedFeature(null);
             } else {
-              setSelectedSavedPoint(null);
-              const matched = findFeatureAt(sx, sy);
-              if (matched) {
-                setSelectedFeature(matched);
-              } else {
+              const foundDistance = findSavedDistanceAt(sx, sy);
+              if (foundDistance) {
+                setSelectedDistance(foundDistance);
+                setSelectedSavedPoint(null);
+                setSelectedArea(null);
                 setSelectedFeature(null);
+              } else {
+                const foundArea = findSavedAreaAt(sx, sy);
+                if (foundArea) {
+                  setSelectedArea(foundArea);
+                  setSelectedSavedPoint(null);
+                  setSelectedDistance(null);
+                  setSelectedFeature(null);
+                } else {
+                  setSelectedSavedPoint(null);
+                  setSelectedDistance(null);
+                  setSelectedArea(null);
+                  const matched = findFeatureAt(sx, sy);
+                  if (matched) {
+                    setSelectedFeature(matched);
+                  } else {
+                    setSelectedFeature(null);
+                  }
+                }
               }
             }
           }
@@ -1122,14 +1224,34 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
             if (foundSavedPoint) {
               setSelectedSavedPoint(foundSavedPoint);
+              setSelectedDistance(null);
+              setSelectedArea(null);
               setSelectedFeature(null);
             } else {
-              setSelectedSavedPoint(null);
-              const matched = findFeatureAt(sx, sy);
-              if (matched) {
-                setSelectedFeature(matched);
-              } else {
+              const foundDistance = findSavedDistanceAt(sx, sy);
+              if (foundDistance) {
+                setSelectedDistance(foundDistance);
+                setSelectedSavedPoint(null);
+                setSelectedArea(null);
                 setSelectedFeature(null);
+              } else {
+                const foundArea = findSavedAreaAt(sx, sy);
+                if (foundArea) {
+                  setSelectedArea(foundArea);
+                  setSelectedSavedPoint(null);
+                  setSelectedDistance(null);
+                  setSelectedFeature(null);
+                } else {
+                  setSelectedSavedPoint(null);
+                  setSelectedDistance(null);
+                  setSelectedArea(null);
+                  const matched = findFeatureAt(sx, sy);
+                  if (matched) {
+                    setSelectedFeature(matched);
+                  } else {
+                    setSelectedFeature(null);
+                  }
+                }
               }
             }
           }
@@ -1942,6 +2064,174 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               </div>
 
               {/* Little Speech Bubble Arrow pointing down at the feature location */}
+              <div className="w-3 h-3 bg-military-900 border-r border-b border-military-600 rotate-45 -translate-y-1.5 shadow" />
+            </div>
+          );
+        })()}
+
+        {/* selectedDistance Balloon (Floating on the trajectory's center position) */}
+        {selectedDistance && (() => {
+          const centroid = averageLatLng(selectedDistance.points);
+          const screenPos = getScreenPos(centroid.lat, centroid.lng);
+          const isOffScreen = screenPos.x < 0 || screenPos.x > dimensions.width || screenPos.y < 0 || screenPos.y > dimensions.height;
+          if (isOffScreen) return null;
+
+          return (
+            <div 
+              style={{ 
+                left: screenPos.x, 
+                top: screenPos.y,
+              }}
+              className="absolute pointer-events-auto z-40 -translate-x-1/2 -translate-y-[105%] flex flex-col items-center select-text"
+              id="saved-distance-balloon-overlay"
+              onMouseDown={e => e.stopPropagation()}
+              onMouseUp={e => e.stopPropagation()}
+              onTouchStart={e => e.stopPropagation()}
+              onTouchEnd={e => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-military-900 border border-military-600 rounded-xl p-3.5 shadow-xl w-[250px] flex flex-col gap-2 relative text-military-100">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2 border-b border-military-700/60 pb-1.5">
+                  <div className="flex flex-col">
+                    <h4 className="font-sans text-xs font-bold text-military-100 uppercase tracking-wide truncate max-w-[200px]">
+                      {selectedDistance.name || "Sem Nome"}
+                    </h4>
+                    <span className="text-[7.5px] font-mono text-military-400 uppercase tracking-widest mt-0.5">Dispositivo Medidor de Linhas</span>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedDistance(null)}
+                    className="p-1 rounded-md text-military-400 hover:text-military-100 hover:bg-military-800 transition-colors shrink-0"
+                    title="Fechar Balão"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                
+                {/* Body Details */}
+                <div className="flex flex-col gap-1.5 text-[10px] font-mono select-all">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Distância Medida</span>
+                    <div className="bg-black/60 px-2 py-1 rounded text-emerald-400 border border-military-800/60 text-xs font-black font-mono">
+                      {selectedDistance.distance.toFixed(2)} km
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Metros</span>
+                    <div className="bg-black/60 px-2 py-1 rounded text-military-205 border border-military-800/60 text-[9px]">
+                      {(selectedDistance.distance * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Quantidade de Nós / Pontos</span>
+                    <div className="bg-black/60 px-2 py-1 rounded text-military-205 border border-military-800/60 text-[9px]">
+                      {selectedDistance.points.length} pontos
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Copy */}
+                <div className="flex gap-1.5 mt-1">
+                  <button
+                    onClick={() => {
+                      const text = `${selectedDistance.name} | Distância: ${selectedDistance.distance.toFixed(2)} km | ${selectedDistance.points.length} pontos`;
+                      navigator.clipboard.writeText(text);
+                      showTemporaryStatus("Informações de trajeto copiadas!");
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] font-mono text-white font-extrabold uppercase tracking-widest transition-all"
+                  >
+                    Copiar Dados
+                  </button>
+                </div>
+              </div>
+
+              {/* Speech pointer */}
+              <div className="w-3 h-3 bg-military-900 border-r border-b border-military-600 rotate-45 -translate-y-1.5 shadow" />
+            </div>
+          );
+        })()}
+
+        {/* selectedArea Balloon (Floating on the polygon's center position) */}
+        {selectedArea && (() => {
+          const centroid = averageLatLng(selectedArea.points);
+          const screenPos = getScreenPos(centroid.lat, centroid.lng);
+          const isOffScreen = screenPos.x < 0 || screenPos.x > dimensions.width || screenPos.y < 0 || screenPos.y > dimensions.height;
+          if (isOffScreen) return null;
+
+          return (
+            <div 
+              style={{ 
+                left: screenPos.x, 
+                top: screenPos.y,
+              }}
+              className="absolute pointer-events-auto z-40 -translate-x-1/2 -translate-y-[105%] flex flex-col items-center select-text"
+              id="saved-area-balloon-overlay"
+              onMouseDown={e => e.stopPropagation()}
+              onMouseUp={e => e.stopPropagation()}
+              onTouchStart={e => e.stopPropagation()}
+              onTouchEnd={e => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-military-900 border border-military-600 rounded-xl p-3.5 shadow-xl w-[250px] flex flex-col gap-2 relative text-military-100">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2 border-b border-military-700/60 pb-1.5">
+                  <div className="flex flex-col">
+                    <h4 className="font-sans text-xs font-bold text-military-100 uppercase tracking-wide truncate max-w-[200px]">
+                      {selectedArea.name || "Sem Nome"}
+                    </h4>
+                    <span className="text-[7.5px] font-mono text-military-400 uppercase tracking-widest mt-0.5">Dispositivo Medidor de Polígonos</span>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedArea(null)}
+                    className="p-1 rounded-md text-military-400 hover:text-military-100 hover:bg-military-800 transition-colors shrink-0"
+                    title="Fechar Balão"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                
+                {/* Body Details */}
+                <div className="flex flex-col gap-1.5 text-[10px] font-mono select-all">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Área Calculada</span>
+                    <div className="bg-black/60 px-2 py-1 rounded text-yellow-300 border border-military-800/60 text-xs font-black font-mono">
+                      {selectedArea.area.toFixed(2)} ha
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Metros Quadrados</span>
+                    <div className="bg-black/60 px-2 py-1 rounded text-military-205 border border-military-800/60 text-[9px]">
+                      {(selectedArea.area * 10000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m²
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Quantidade de Vértices</span>
+                    <div className="bg-black/60 px-2 py-1 rounded text-military-205 border border-military-800/60 text-[9px]">
+                      {selectedArea.points.length} vertices
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Action */}
+                <div className="flex gap-1.5 mt-1">
+                  <button
+                    onClick={() => {
+                      const text = `${selectedArea.name} | Área: ${selectedArea.area.toFixed(2)} ha | ${selectedArea.points.length} vertices`;
+                      navigator.clipboard.writeText(text);
+                      showTemporaryStatus("Informações de área copiadas!");
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] font-mono text-white font-extrabold uppercase tracking-widest transition-all"
+                  >
+                    Copiar Dados
+                  </button>
+                </div>
+              </div>
+
+              {/* Speech pointer */}
               <div className="w-3 h-3 bg-military-900 border-r border-b border-military-600 rotate-45 -translate-y-1.5 shadow" />
             </div>
           );
