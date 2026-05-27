@@ -27,8 +27,8 @@ import {
 import { decimalToDMS } from '../utils/coords';
 
 // --- DATABASE PERSISTENCE SYSTEM (IndexedDB) ---
-const DB_NAME = 'PresidentMapsDB_v1';
-const DB_VERSION = 1;
+const DB_NAME = 'PresidentMapsDB_v2';
+const DB_VERSION = 2;
 
 export interface ImportedMap {
   id: string;
@@ -52,7 +52,12 @@ export interface KmlData {
   }>;
 }
 
+let cachedDbConnection: IDBDatabase | null = null;
+
 function initDB(): Promise<IDBDatabase> {
+  if (cachedDbConnection) {
+    return Promise.resolve(cachedDbConnection);
+  }
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = (event) => {
@@ -63,9 +68,76 @@ function initDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('kmlLayers')) {
         db.createObjectStore('kmlLayers', { keyPath: 'id' });
       }
+      if (!db.objectStoreNames.contains('tiles_cache')) {
+        db.createObjectStore('tiles_cache', { keyPath: 'url' });
+      }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      cachedDbConnection = request.result;
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error);
+  });
+}
+
+function dbSaveTile(url: string, data: Blob | string): Promise<void> {
+  return initDB().then(db => {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('tiles_cache', 'readwrite');
+      tx.objectStore('tiles_cache').put({ url, dataUrl: data, createdAt: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  });
+}
+
+function dbGetTile(url: string): Promise<Blob | string | null> {
+  return initDB().then(db => {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('tiles_cache', 'readonly');
+      const req = tx.objectStore('tiles_cache').get(url);
+      req.onsuccess = () => {
+        if (req.result) {
+          resolve(req.result.dataUrl);
+        } else {
+          resolve(null);
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
+  });
+}
+
+function dbCleanupOldTiles(): Promise<void> {
+  return initDB().then(db => {
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction('tiles_cache', 'readwrite');
+        const store = tx.objectStore('tiles_cache');
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const req = store.openCursor();
+        let deletedCount = 0;
+        req.onsuccess = (event: any) => {
+          const cursor = event.target.result;
+          if (cursor) {
+            const value = cursor.value;
+            if (value.createdAt && value.createdAt < sevenDaysAgo) {
+              cursor.delete();
+              deletedCount++;
+            }
+            cursor.continue();
+          } else {
+            if (deletedCount > 0) {
+              console.log(`[BPA] Limpeza de cache: ${deletedCount} tiles antigas removidas.`);
+            }
+            resolve();
+          }
+        };
+        req.onerror = () => resolve();
+      } catch (e) {
+        resolve();
+      }
+    });
   });
 }
 
@@ -234,6 +306,20 @@ interface PresidentMapsProps {
 type TabType = 'camadas' | 'ferramentas' | 'pontos' | 'trajetos';
 type BaseMapType = 'satellite' | 'hybrid' | 'osm' | 'none';
 
+const convertImageToDataURL = (img: HTMLImageElement): string | null => {
+  try {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = img.naturalWidth || 256;
+    tempCanvas.height = img.naturalHeight || 256;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return null;
+    tempCtx.drawImage(img, 0, 0);
+    return tempCanvas.toDataURL('image/png');
+  } catch (e) {
+    return null;
+  }
+};
+
 export default function PresidentMaps({ onBack }: PresidentMapsProps) {
   const [activeTab, setActiveTab] = useState<TabType>('camadas');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -340,15 +426,36 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
   const [isVectorLayersOpen, setIsVectorLayersOpen] = useState(false);
 
   // Map state
-  const [center, setCenter] = useState({ lat: BASE_LAT, lng: BASE_LNG });
-  const [zoom, setZoom] = useState(16);
+  const [center, setCenter] = useState(() => {
+    const saved = localStorage.getItem('president_map_center');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return { lat: BASE_LAT, lng: BASE_LNG };
+  });
+  const [zoom, setZoom] = useState(() => {
+    const saved = localStorage.getItem('president_map_zoom');
+    if (saved) {
+      const z = parseInt(saved, 10);
+      if (!isNaN(z)) return z;
+    }
+    return 16;
+  });
   const [rotation, setRotation] = useState(0); // in radians
 
   // Lists of maps and layers
   const [importedMaps, setImportedMaps] = useState<ImportedMap[]>([]);
   const [activeMapId, setActiveMapId] = useState<string | null>(null);
   const [kmlLayers, setKmlLayers] = useState<KmlData[]>([]);
-  const [baseMap, setBaseMap] = useState<BaseMapType>('osm');
+  const [baseMap, setBaseMap] = useState<BaseMapType>(() => {
+    const saved = localStorage.getItem('president_base_map');
+    return (saved as BaseMapType) || 'satellite';
+  });
 
   // GPS real-world parameters
   const [gpsCoords, setGpsCoords] = useState<{ lat: number, lng: number, accuracy: number } | null>(null);
@@ -383,13 +490,52 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
   const [paintCount, setPaintCount] = useState(0);
   const triggerRedraw = () => setPaintCount(prev => prev + 1);
 
+  // Evict old DB tiles in the background when maps open, and clear raw memory on exit
+  useEffect(() => {
+    dbCleanupOldTiles().catch(err => console.warn("Failed to clean up old tiles:", err));
+
+    return () => {
+      // Cleanup all Blob URLs cached when exiting the Maps module to immediately free memory!
+      tileCache.current.forEach(img => {
+        if (img.src && img.src.startsWith('blob:')) {
+          URL.revokeObjectURL(img.src);
+        }
+      });
+      tileCache.current.clear();
+
+      mapImageCache.current.forEach(img => {
+        if (img.src && img.src.startsWith('blob:')) {
+          URL.revokeObjectURL(img.src);
+        }
+      });
+      mapImageCache.current.clear();
+      console.log("[BPA] Memória de texturas liberada com sucesso.");
+    };
+  }, []);
+
+  // Sync states with LocalStorage
+  useEffect(() => {
+    localStorage.setItem('president_map_center', JSON.stringify(center));
+  }, [center]);
+
+  useEffect(() => {
+    localStorage.setItem('president_map_zoom', zoom.toString());
+  }, [zoom]);
+
+  useEffect(() => {
+    localStorage.setItem('president_base_map', baseMap);
+  }, [baseMap]);
+
   // Initialize and load saved maps and layers
   useEffect(() => {
     dbGetMaps().then(maps => {
       setImportedMaps(maps);
       if (maps.length > 0) {
         setActiveMapId(maps[0].id);
-        setCenter({ lat: maps[0].topLeft.lat + (maps[0].bottomRight.lat - maps[0].topLeft.lat) / 2, lng: maps[0].topLeft.lng + (maps[0].bottomRight.lng - maps[0].topLeft.lng) / 2 });
+        const hasSavedLocation = localStorage.getItem('president_map_center');
+        if (!hasSavedLocation) {
+          setCenter({ lat: maps[0].topLeft.lat + (maps[0].bottomRight.lat - maps[0].topLeft.lat) / 2, lng: maps[0].topLeft.lng + (maps[0].bottomRight.lng - maps[0].topLeft.lng) / 2 });
+        }
       }
     });
 
@@ -431,9 +577,12 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  // Redraw whenever parameters adapt
+  // Redraw whenever parameters adapt (wrapped in requestAnimationFrame to prevent state lockups and drop frames on high interactions like pan/pinch)
   useEffect(() => {
-    triggerRedraw();
+    let frameId = requestAnimationFrame(() => {
+      triggerRedraw();
+    });
+    return () => cancelAnimationFrame(frameId);
   }, [center, zoom, rotation, activeMapId, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, dimensions, importedMaps]);
 
   // Handle drawing operation over HTML5 Canvas
@@ -492,13 +641,72 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               ctx.drawImage(cachedImg, screenX, screenY, TILE_SIZE, TILE_SIZE);
             }
           } else {
-            const img = new Image();
-            img.src = tileUrl;
-            img.crossOrigin = "anonymous";
-            img.onload = () => {
-              triggerRedraw();
-            };
-            tileCache.current.set(tileUrl, img);
+            // Register an empty loading Image object immediately to avoid duplicate database or network requests
+            const loadingImg = new Image();
+            
+            // Prevent cache memory overflow (Max 120 elements) on RAM-constrained devices
+            if (tileCache.current.size >= 120) {
+              const oldestKey = tileCache.current.keys().next().value;
+              if (oldestKey) {
+                const imgToEvict = tileCache.current.get(oldestKey);
+                if (imgToEvict && imgToEvict.src && imgToEvict.src.startsWith('blob:')) {
+                  URL.revokeObjectURL(imgToEvict.src);
+                }
+                tileCache.current.delete(oldestKey);
+              }
+            }
+            tileCache.current.set(tileUrl, loadingImg);
+
+            // Fetch persistently from IndexedDB for robust offline loading
+            dbGetTile(tileUrl).then(dataUrlOrBlob => {
+              if (dataUrlOrBlob) {
+                if (dataUrlOrBlob instanceof Blob) {
+                  const objectUrl = URL.createObjectURL(dataUrlOrBlob);
+                  loadingImg.src = objectUrl;
+                  loadingImg.onload = () => {
+                    triggerRedraw();
+                  };
+                } else {
+                  // Legacy support for string-based dataUrIs
+                  loadingImg.src = dataUrlOrBlob;
+                  loadingImg.onload = () => {
+                    triggerRedraw();
+                  };
+                }
+              } else {
+                // Not cached. Fetch online as a blob to save into DB, and set image src
+                fetch(tileUrl)
+                  .then(response => {
+                    if (!response.ok) throw new Error("HTTP error " + response.status);
+                    return response.blob();
+                  })
+                  .then(blob => {
+                    // Save to IndexedDB asynchronously in the background
+                    dbSaveTile(tileUrl, blob).catch(err => console.warn("Failed to save tile:", err));
+                    
+                    const objectUrl = URL.createObjectURL(blob);
+                    loadingImg.src = objectUrl;
+                    loadingImg.onload = () => {
+                      triggerRedraw();
+                    };
+                  })
+                  .catch(err => {
+                    // Fallback to setting src directly to tileUrl if fetch fails (e.g. CORS or offline preview mode)
+                    loadingImg.crossOrigin = "anonymous";
+                    loadingImg.src = tileUrl;
+                    loadingImg.onload = () => {
+                      triggerRedraw();
+                    };
+                  });
+              }
+            }).catch(e => {
+              // Offline/Database error fallback: attempt online load directly
+              loadingImg.crossOrigin = "anonymous";
+              loadingImg.src = tileUrl;
+              loadingImg.onload = () => {
+                triggerRedraw();
+              };
+            });
           }
         }
       }
@@ -1468,12 +1676,35 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
   // Center map on target coordinate
   const centerOnGps = () => {
-    const pos = simulatedGps ? simGpsCoords : gpsCoords;
-    if (pos) {
-      setCenter({ lat: pos.lat, lng: pos.lng });
-      setZoom(17);
+    showTemporaryStatus("Buscando localização real do smartphone...");
+    setSimulatedGps(false);
+    
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const accuracy = pos.coords.accuracy;
+          setGpsCoords({ lat, lng, accuracy });
+          setCenter({ lat, lng });
+          setZoom(17);
+          showTemporaryStatus(`Localizado com sucesso! (Precisão: ${accuracy.toFixed(1)}m)`);
+        },
+        (err) => {
+          console.error("Erro ao obter posição exata:", err);
+          // Fallback to active gpsCoords watch if we have it
+          if (gpsCoords) {
+            setCenter({ lat: gpsCoords.lat, lng: gpsCoords.lng });
+            setZoom(17);
+            showTemporaryStatus("Centralizado na última posição GPS obtida.");
+          } else {
+            showTemporaryStatus("Falha ao obter sinal de GPS. Verifique se o GPS e as permissões de localização estão ativos.");
+          }
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
     } else {
-      showTemporaryStatus("Aguardando sinal GPS...");
+      showTemporaryStatus("GPS não suportado neste aparelho.");
     }
   };
 

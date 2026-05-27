@@ -35,12 +35,14 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
 
   // Start/Stop Camera
   useEffect(() => {
+    let activeStream: MediaStream | null = null;
     if (mode === 'camera') {
       async function startCamera() {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ 
             video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } 
           });
+          activeStream = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play().catch(err => console.error("Video play error:", err));
@@ -53,8 +55,12 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
       }
       startCamera();
       return () => {
-        const stream = videoRef.current?.srcObject as MediaStream;
-        stream?.getTracks().forEach(track => track.stop());
+        if (activeStream) {
+          activeStream.getTracks().forEach(track => track.stop());
+        } else {
+          const stream = videoRef.current?.srcObject as MediaStream;
+          stream?.getTracks().forEach(track => track.stop());
+        }
       };
     }
   }, [mode]);
@@ -149,6 +155,17 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
         <div className="flex-1 relative">
           <video ref={videoRef} autoPlay playsInline className="w-full h-full object-contain" />
           
+          {/* Floating Back Button */}
+          <div className="absolute top-6 left-6 z-[110]">
+            <button 
+              onClick={() => setMode('selection')}
+              className="p-3 bg-black/40 backdrop-blur-md rounded-full text-white pointer-events-auto active:scale-95 transition-transform flex items-center gap-1.5 shadow"
+            >
+              <ChevronLeft className="w-6 h-6" />
+              <span className="text-xs font-mono font-bold tracking-wider pr-1">VOLTAR</span>
+            </button>
+          </div>
+
           {/* Focus Ring Mock */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-2 border-military-300 rounded-full opacity-30 animate-pulse pointer-events-none" />
           
@@ -167,8 +184,12 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
         </div>
 
         <div className="h-32 bg-military-950 flex items-center justify-around px-8">
-          <button onClick={() => setMode('selection')} className="p-4 text-white hover:bg-military-800 rounded-full">
-            <X size={28} />
+          <button 
+            onClick={() => setMode('selection')} 
+            className="p-4 text-white hover:bg-military-800 rounded-full flex items-center gap-1.5 transition-colors"
+            title="Voltar"
+          >
+            <ChevronLeft size={28} />
           </button>
           
           <button onClick={handleTakePhoto} className="w-20 h-20 bg-white rounded-full p-2">

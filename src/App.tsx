@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Camera, 
@@ -11,12 +11,24 @@ import {
 } from 'lucide-react';
 import { Map } from 'lucide-react';
 import Home from './views/Home';
-import CamStamp from './views/CamStamp';
-import CubagemBPA from './views/CubagemBPA';
-import FotoPDF from './views/FotoPDF';
-import BpaOperacional from './views/BpaOperacional';
-import PresidentMaps from './views/PresidentMaps';
 import brandLogo from './assets/images/batalhao_ambiental_logo_1779854041969.png';
+
+// Lazy load heavy components for high performance, especially on devices with limited processor or RAM
+const CamStamp = lazy(() => import('./views/CamStamp'));
+const CubagemBPA = lazy(() => import('./views/CubagemBPA'));
+const FotoPDF = lazy(() => import('./views/FotoPDF'));
+const BpaOperacional = lazy(() => import('./views/BpaOperacional'));
+const PresidentMaps = lazy(() => import('./views/PresidentMaps'));
+
+function LoadingView({ message = "Carregando módulo..." }: { message?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 bg-military-900 border border-military-850 rounded-3xl m-4">
+      <div className="w-12 h-12 border-4 border-military-800 border-t-military-300 rounded-full animate-spin mb-4" />
+      <h2 className="text-lg font-bold uppercase tracking-wider text-military-100">{message}</h2>
+      <p className="text-[10px] text-military-450 uppercase tracking-widest font-mono mt-1">Sistemas BPA • Otimizado</p>
+    </div>
+  );
+}
 
 export type View = 'home' | 'camstamp' | 'cubagem' | 'identificacao' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar';
 
@@ -28,9 +40,17 @@ export default function App() {
       case 'home':
         return <Home onNavigate={setCurrentView} />;
       case 'camstamp':
-        return <CamStamp onBack={() => setCurrentView('home')} />;
+        return (
+          <Suspense fallback={<LoadingView message="Iniciando Câmera..." />}>
+            <CamStamp onBack={() => setCurrentView('home')} />
+          </Suspense>
+        );
       case 'cubagem':
-        return <CubagemBPA onBack={() => setCurrentView('home')} />;
+        return (
+          <Suspense fallback={<LoadingView message="Abrindo Cubagem..." />}>
+            <CubagemBPA onBack={() => setCurrentView('home')} />
+          </Suspense>
+        );
       case 'identificacao':
         return (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
@@ -73,11 +93,23 @@ export default function App() {
           </div>
         );
       case 'fotopdf':
-        return <FotoPDF onBack={() => setCurrentView('home')} />;
+        return (
+          <Suspense fallback={<LoadingView message="Iniciando Foto em PDF..." />}>
+            <FotoPDF onBack={() => setCurrentView('home')} />
+          </Suspense>
+        );
       case 'mapas':
-        return <PresidentMaps onBack={() => setCurrentView('home')} />;
+        return (
+          <Suspense fallback={<LoadingView message="Carregando Mapas..." />}>
+            <PresidentMaps onBack={() => setCurrentView('home')} />
+          </Suspense>
+        );
       case 'bpaoperacional':
-        return <BpaOperacional onBack={() => setCurrentView('home')} />;
+        return (
+          <Suspense fallback={<LoadingView message="Buscando no CAR..." />}>
+            <BpaOperacional onBack={() => setCurrentView('home')} />
+          </Suspense>
+        );
       default:
         return <Home onNavigate={setCurrentView} />;
     }
