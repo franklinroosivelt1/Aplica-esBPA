@@ -18,7 +18,8 @@ import {
   Trash2,
   Lock,
   SearchIcon,
-  ExternalLink
+  ExternalLink,
+  ChevronLeft
 } from 'lucide-react';
 
 interface Mandado {
@@ -29,6 +30,9 @@ interface Mandado {
   rg?: string;
   dataNascimento?: string;
   nomeMae?: string;
+  nomePai?: string;
+  dataExpedicao?: string;
+  situacao?: string;
   numeroMandado: string;
   naturezaInfracao: string;
   artigoLei: string;
@@ -41,6 +45,59 @@ interface Mandado {
 
 // Realistic pre-seeded general & environmental warrants in Acre state (all simulated data)
 const PRE_SEEDED_MANDADOS: Mandado[] = [];
+
+function removeAccents(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function normalizeNameForSearch(text: string | undefined): string {
+  if (!text) return '';
+  let clean = removeAccents(text);
+  
+  // Replace double letters, common phonetics, or writing inconsistencies like ss/sc/xc/ç/z/y/ph/ch
+  clean = clean
+    .replace(/sc/g, 's')
+    .replace(/xc/g, 's')
+    .replace(/ss/g, 's')
+    .replace(/z/g, 's')
+    .replace(/ç/g, 's')
+    .replace(/y/g, 'i')
+    .replace(/ph/g, 'f')
+    .replace(/ch/g, 'x')
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  return clean;
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <span>{text}</span>;
+  
+  const accentsRemovedQuery = normalizeNameForSearch(query);
+  if (!accentsRemovedQuery) return <span>{text}</span>;
+  
+  try {
+    const escapedQuery = query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'));
+    return (
+      <span>
+        {parts.map((part, i) => 
+          part.toLowerCase() === query.toLowerCase() ? (
+            <mark key={i} className="bg-yellow-500/90 text-black px-1 rounded font-bold">{part}</mark>
+          ) : (
+            part
+          )
+        )}
+      </span>
+    );
+  } catch (e) {
+    return <span>{text}</span>;
+  }
+}
 
 interface BuscarMandadosProps {
   onBack: () => void;
@@ -64,6 +121,25 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Multiple PDF attachments types & state
+  const [attachedFiles, setAttachedFiles] = useState<any[]>(() => {
+    const saved = localStorage.getItem('bpa_attached_files');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('bpa_attached_files', JSON.stringify(attachedFiles));
+  }, [attachedFiles]);
+
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
   
   // PDF.js active parsing states
   const [isParsingPdf, setIsParsingPdf] = useState(false);
@@ -138,146 +214,252 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     return match ? match[0] : null;
   };
 
-  const handleCustomPdfUpload = async (file: File) => {
+  const handleMultipleCustomPdfUploads = async (files: FileList | File[]) => {
     setIsParsingPdf(true);
-    setParsedWarrants([]);
     setParseProgress("Preparando motor PDF.js decodificador...");
+    
+    let totalExtracted = 0;
+    const newAttachedFiles = [...attachedFiles];
+    let pdfjsLib;
     try {
-      const pdfjsLib = await loadPdfJs();
-      const arrayBuffer = await file.arrayBuffer();
-      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-      const pdfDoc = await loadingTask.promise;
-      
-      let fullText = "";
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        setParseProgress(`Lendo páginas do BNMP - cargamento página ${i} de ${pdfDoc.numPages}...`);
-        const page = await pdfDoc.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(' ');
-        fullText += pageText + "\n---PAGE_BREAK---\n";
+      pdfjsLib = await loadPdfJs();
+    } catch (e: any) {
+      showToast("Falha ao carregar motor PDF.js.");
+      setIsParsingPdf(false);
+      return;
+    }
+
+    const currentMap = new Map(mandados.map(w => [w.numeroMandado, w]));
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      // Check if file with same name is already loaded to avoid duplicates
+      if (newAttachedFiles.some(f => f.name === file.name)) {
+        continue;
       }
       
-      setParseProgress("Buscando padrões de mandados (CNJ BNMP)...");
+      setParseProgress(`Lendo arquivo ${i + 1} de ${files.length}: ${file.name}...`);
       
-      const extracted: Mandado[] = [];
-      const cnjRegex = /\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b/g;
-      const warrantNumbers = Array.from(new Set(fullText.match(cnjRegex) || []));
-      
-      if (warrantNumbers.length > 0) {
-        for (let i = 0; i < warrantNumbers.length; i++) {
-          const currentWarrant = warrantNumbers[i];
-          const nextWarrant = warrantNumbers[i + 1];
-          const startIdx = fullText.indexOf(currentWarrant);
-          const endIdx = nextWarrant ? fullText.indexOf(nextWarrant) : fullText.length;
-          const segment = fullText.substring(startIdx, endIdx);
-          
-          const nome = extractField(segment, [
-            'NOME DO INDIVÍDUO:',
-            'NOME DO INDIVIDUO:',
-            'NOME DO RÉU:',
-            'NOME DO REU:',
-            'NOME DA PESSOA:',
-            'PESSOA PROCURADA:',
-            'QUALIFICAÇÃO:',
-            'PROCURADO:',
-            'REU:',
-            'NOME:'
-          ]);
-          const cpf = extractCPF(segment);
-          const rg = extractRG(segment);
-          const mae = extractField(segment, ['NOME DA MÃE:', 'NOME DA MAE:', 'MÃE DE:', 'MAE:', 'FILIAÇÃO:', 'FILIACAO:', 'GENITORA:']);
-          const nasc = extractDate(segment);
-          const artigo = extractField(segment, ['ARTIGO DO ENQUADRAMENTO:', 'ARTIGO DE LEI:', 'TIPIFICAÇÃO PENAL:', 'TIPIFICACAO:', 'ARTIGO:', 'ART.', 'ENQUADRAMENTO:']) || "Art. da Lei 9.605/98 (Crime Ambiental)";
-          const orgao = extractField(segment, ['ÓRGÃO EXPEDIDOR:', 'ORGAO EXPEDIDOR:', 'EXPEDIDOR:', 'VARA:', 'EMITIDO POR:']) || "Vara Criminal - Tribunal de Justiça";
-          const infracao = extractField(segment, ['NATUREZA DA INFRAÇÃO:', 'NATUREZA DA INFRACAO:', 'DELITO:', 'CRIME:', 'ASSUNTO:']) || "Mandado de Busca / Prisão";
-          
-          if (nome && nome.length > 3) {
-            extracted.push({
-              id: `extracted-${currentWarrant}-${i}-${Date.now()}`,
-              nome: nome.toUpperCase().trim(),
-              numeroMandado: currentWarrant,
-              cpf: cpf || undefined,
-              rg: rg || undefined,
-              nomeMae: mae || undefined,
-              dataNascimento: nasc || undefined,
-              artigoLei: artigo,
-              naturezaInfracao: infracao,
-              orgaoEmissor: orgao,
-              tipoPrisao: segment.toLowerCase().includes('condenação') ? 'Condenação Definitiva' : segment.toLowerCase().includes('temporária') ? 'Temporária' : 'Preventiva',
-              status: 'Ativo',
-              gravidade: segment.toLowerCase().includes('homicídio') || segment.toLowerCase().includes('tráfico') || segment.toLowerCase().includes('desmatamento grave') ? 'Alta' : 'Média'
-            });
-          }
-        }
-      } else {
-        // Find people by CPF as a backup
-        const cpfRegex = /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g;
-        const cpfs = Array.from(new Set(fullText.match(cpfRegex) || []));
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdfDoc = await loadingTask.promise;
         
-        if (cpfs.length > 0) {
-          for (let i = 0; i < cpfs.length; i++) {
-            const currentCpf = cpfs[i];
-            const nextCpf = cpfs[i + 1];
-            const startIdx = fullText.indexOf(currentCpf);
-            const endIdx = nextCpf ? fullText.indexOf(nextCpf) : fullText.length;
-            const segment = fullText.substring(Math.max(0, startIdx - 150), Math.min(fullText.length, endIdx));
-            
-            const nome = extractField(segment, [
-              'NOME COMPLETO:',
-              'NOME DO INDIVIDUO:',
-              'NOME DO REU:',
-              'REU:',
-              'PROCURADO:',
-              'NOME DA PESSOA:',
-              'PESSOA PROCURADA:',
-              'QUALIFICAÇÃO:',
-              'NOME:'
-            ]);
-            if (nome && nome.length > 3) {
-              const randWarrant = `BNMP-${Math.floor(100000 + Math.random() * 900000)}-${Date.now().toString().slice(-4)}`;
-              extracted.push({
-                id: `extracted-cpf-${i}-${Date.now()}`,
-                nome: nome.toUpperCase().trim(),
-                numeroMandado: randWarrant,
-                cpf: currentCpf,
-                artigoLei: "Art. da Lei 9.605/98",
-                naturezaInfracao: "Importado via Lista PDF (BNMP)",
-                orgaoEmissor: "Base Operacional BNMP Offline",
-                tipoPrisao: "Preventiva",
-                status: 'Ativo',
-                gravidade: 'Média'
+        const extractedWarrants: Mandado[] = [];
+        const pagesData: any[] = [];
+
+        for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+          setParseProgress(`Processando pág. ${pageNum}/${pdfDoc.numPages} de ${file.name}...`);
+          const page = await pdfDoc.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          
+          const items = textContent.items.map((item: any) => ({
+            str: item.str,
+            x: item.transform[4],
+            y: item.transform[5]
+          }));
+
+          if (items.length === 0) continue;
+
+          // Assemble raw page lines
+          const lineGroups: { [key: number]: any[] } = {};
+          items.forEach(item => {
+            let foundY = Object.keys(lineGroups).find(y => Math.abs(Number(y) - item.y) < 5.0);
+            if (foundY) {
+              lineGroups[Number(foundY)].push(item);
+            } else {
+              lineGroups[item.y] = [item];
+            }
+          });
+
+          const sortedYs = Object.keys(lineGroups).map(Number).sort((a, b) => b - a);
+          const pageLines: string[] = [];
+
+          sortedYs.forEach((y, lineIdx) => {
+            const rowItems = lineGroups[y];
+            rowItems.sort((a, b) => a.x - b.x);
+
+            const lineText = rowItems.map(item => item.str).join(' ').replace(/\s+/g, ' ').trim();
+            if (lineText) {
+              pageLines.push(lineText);
+            }
+
+            // Group cells analyzed by horizontal spaces
+            const cells: string[] = [];
+            if (rowItems.length > 0) {
+              let currentCellText = rowItems[0].str;
+              for (let k = 1; k < rowItems.length; k++) {
+                const prev = rowItems[k - 1];
+                const cur = rowItems[k];
+                const prevWidthEst = prev.str.length * 5.2;
+                const gap = cur.x - (prev.x + prevWidthEst);
+                
+                if (gap > 11) {
+                  if (currentCellText.trim()) {
+                    cells.push(currentCellText.trim());
+                  }
+                  currentCellText = cur.str;
+                } else {
+                  currentCellText += " " + cur.str;
+                }
+              }
+              if (currentCellText.trim()) {
+                cells.push(currentCellText.trim());
+              }
+            }
+
+            if (cells.length >= 2) {
+              const procCellIdx = cells.findIndex(c => /\d{3,10}-\d{2}/.test(c) || /^\d{5,10}$/.test(c));
+              if (procCellIdx !== -1) {
+                const numero = cells[procCellIdx].replace(/\s+/g, '');
+                let nome = "";
+                if (procCellIdx + 1 < cells.length) {
+                  nome = cells[procCellIdx + 1].toUpperCase().trim();
+                }
+
+                if (nome && nome.length > 2 && !nome.includes("PROCESSO") && !nome.includes("NOME") && !nome.includes("PESSOAL")) {
+                  const dates = cells.filter(c => /\d{2}\/\d{2}\/\d{4}/.test(c));
+                  const nascimento = dates[0] || undefined;
+                  const dataExpedicao = dates[1] || undefined;
+
+                  const textCells = cells.slice(procCellIdx + 2).filter(c => 
+                    !/\d{2}\/\d{2}\/\d{4}/.test(c) && 
+                    !/\d{3,10}-\d{2}/.test(c) &&
+                    c.toUpperCase() !== "NÃO INFORMADO" && 
+                    c.toUpperCase() !== "NÃO INFORMADA" &&
+                    c.toUpperCase() !== "NÃO CONSTA" &&
+                    c.toUpperCase() !== "N/C"
+                  );
+
+                  let alcunha = undefined;
+                  let nomeMae = undefined;
+                  let nomePai = undefined;
+                  let situacao = "Pendente de Cumprimento";
+                  let expedidor = "Conselho Nacional de Justiça";
+                  let peca = "Mandado de Prisão";
+
+                  if (textCells.length > 0) alcunha = textCells[0];
+                  if (textCells.length > 1) nomeMae = textCells[1];
+                  if (textCells.length > 2) nomePai = textCells[2];
+
+                  cells.forEach(c => {
+                    const upperC = c.toUpperCase();
+                    if (upperC.includes("PENDENTE") || upperC.includes("CUMPRIDO") || upperC.includes("REVOGADO") || upperC.includes("ATIVO")) {
+                      situacao = c;
+                    }
+                    if (upperC.includes("VARA") || upperC.includes("COMARCA") || upperC.includes("TRIBUNAL") || upperC.includes("CRIMINAL")) {
+                      expedidor = c;
+                    }
+                    if (upperC.includes("MANDADO") || upperC.includes("CONDENAÇÃO") || upperC.includes("PEÇA")) {
+                      peca = c;
+                    }
+                  });
+
+                  extractedWarrants.push({
+                    id: `extracted-${numero}-${lineIdx}-${pageNum}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                    nome: nome,
+                    alcunha: alcunha !== "Não Informado" && alcunha !== "Não informado" && alcunha !== "NÃO INFORMADO" ? alcunha : undefined,
+                    nomeMae: nomeMae,
+                    nomePai: nomePai,
+                    dataNascimento: nascimento,
+                    situacao: situacao,
+                    dataExpedicao: dataExpedicao,
+                    numeroMandado: numero,
+                    naturezaInfracao: peca,
+                    artigoLei: "Art. da Lei 9.605/98 (Crime Ambiental)",
+                    orgaoEmissor: expedidor,
+                    tipoPrisao: peca.toLowerCase().includes('condenação') ? 'Condenação Definitiva' : peca.toLowerCase().includes('temporária') ? 'Temporária' : 'Preventiva',
+                    status: 'Ativo',
+                    gravidade: 'Média'
+                  });
+                }
+              }
+            }
+          });
+
+          // Fallback parsing for certificates on page level
+          const pageRawText = pageLines.join(' ');
+          const generalWords = pageRawText.toUpperCase();
+          if (generalWords.includes("MANDADO") || generalWords.includes("PRISÃO") || generalWords.includes("EUZENITA")) {
+            const euzenMatch = pageRawText.match(/([A-ZÀ-Ú]{3,}\s+[A-ZÀ-Ú\s]{4,45})/g);
+            if (euzenMatch) {
+              euzenMatch.forEach(nameCandidate => {
+                const cleanCandidate = nameCandidate.trim();
+                const upperCand = cleanCandidate.toUpperCase();
+                if (
+                  cleanCandidate.length > 8 && 
+                  !upperCand.includes("TRIBUNAL") && 
+                  !upperCand.includes("CONSELHO") && 
+                  !upperCand.includes("JUSTIÇA") && 
+                  !upperCand.includes("DOCUMENTO") && 
+                  !upperCand.includes("MANDADO") &&
+                  !upperCand.includes("NACIONAL") &&
+                  !upperCand.includes("PODER") &&
+                  !upperCand.includes("REPÚBLICA") &&
+                  !upperCand.includes("DE POVO") &&
+                  !upperCand.includes("ESTADO DO")
+                ) {
+                  const exists = extractedWarrants.some(w => w.nome.toUpperCase() === upperCand);
+                  if (!exists) {
+                    const processMatch = pageRawText.match(/\b\d{3,7}-\d{2}\.\d{4}\b/) || pageRawText.match(/\b\d{7,10}-\d{2}\b/);
+                    const numero = processMatch ? processMatch[0] : "BNMP-FALL-" + Date.now().toString().slice(-4) + Math.floor(Math.random() * 10).toString();
+                    
+                    extractedWarrants.push({
+                      id: `fall-${numero}-${pageNum}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                      nome: cleanCandidate.toUpperCase(),
+                      numeroMandado: numero,
+                      status: 'Ativo',
+                      gravidade: 'Média',
+                      artigoLei: "Art. da Lei 9.605/98 (Crime Ambiental)",
+                      naturezaInfracao: "Mandado de Prisão",
+                      orgaoEmissor: "Conselho Nacional de Justiça",
+                      tipoPrisao: "Preventiva",
+                      situacao: "PENDENTE DE CUMPRIMENTO"
+                    });
+                  }
+                }
               });
             }
           }
-        }
-      }
-      
-      if (extracted.length === 0) {
-        showToast("Nenhum padrão compatível de mandado ou CPF foi encontrado no PDF.");
-      } else {
-        // Automatically insert into local dataset to make them immediately searchable
-        setMandados(prev => {
-          const currentMap = new Map(prev.map(w => [w.numeroMandado, w]));
-          let insertedCount = 0;
-          extracted.forEach(w => {
-            if (!currentMap.has(w.numeroMandado)) {
-              currentMap.set(w.numeroMandado, w);
-              insertedCount++;
-            }
+
+          pagesData.push({
+            pageNum,
+            text: pageRawText,
+            lines: pageLines
           });
-          const updatedList = Array.from(currentMap.values());
-          localStorage.setItem('bpa_mandados_db', JSON.stringify(updatedList));
-          return updatedList;
+        }
+
+        const newFileObj = {
+          id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          name: file.name,
+          pages: pagesData,
+          extractedWarrants
+        };
+
+        newAttachedFiles.push(newFileObj);
+        totalExtracted += extractedWarrants.length;
+
+        // Auto-merge to the loaded database
+        extractedWarrants.forEach(w => {
+          if (!currentMap.has(w.numeroMandado)) {
+            currentMap.set(w.numeroMandado, w);
+          }
         });
-        setParsedWarrants(extracted);
-        showToast(`Identificado e importado ${extracted.length} mandado(s) com sucesso na base off-line!`);
+
+      } catch (err: any) {
+        console.error("Error parsing file", file.name, err);
+        showToast(`Erro ao carregar o arquivo PDF: ${file.name}`);
       }
-    } catch (error: any) {
-      console.error(error);
-      showToast("Falha técnica ao extrair textos do arquivo PDF.");
-    } finally {
-      setIsParsingPdf(false);
     }
+
+    setAttachedFiles(newAttachedFiles);
+    
+    const mergedList = Array.from(currentMap.values());
+    localStorage.setItem('bpa_mandados_db', JSON.stringify(mergedList));
+    setMandados(mergedList);
+
+    setIsParsingPdf(false);
+    showToast(`Concluído! ${files.length} arquivo(s) carregados com ${totalExtracted} mandados encontrados.`);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -292,19 +474,39 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type === "application/pdf") {
-      handleCustomPdfUpload(file);
-    } else {
-      showToast("Arraste apenas arquivos em formato .PDF!");
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const pdfs = Array.from(files).filter((file: File) => file.type === "application/pdf") as File[];
+      if (pdfs.length > 0) {
+        handleMultipleCustomPdfUploads(pdfs);
+      } else {
+        showToast("Arraste apenas arquivos em formato .PDF!");
+      }
     }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleCustomPdfUpload(file);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      handleMultipleCustomPdfUploads(files);
     }
+  };
+
+  const handleDeleteAttachedFile = (fileId: string) => {
+    const fileToDelete = attachedFiles.find(f => f.id === fileId);
+    if (!fileToDelete) return;
+    
+    const updatedFiles = attachedFiles.filter(f => f.id !== fileId);
+    setAttachedFiles(updatedFiles);
+    
+    // Also remove warrants parsed from that file if they are in public state and local storage
+    const warrantsToKeep = mandados.filter(m => 
+      !fileToDelete.extractedWarrants.some((del: Mandado) => del.numeroMandado === m.numeroMandado)
+    );
+    setMandados(warrantsToKeep);
+    localStorage.setItem('bpa_mandados_db', JSON.stringify(warrantsToKeep));
+    
+    showToast(`Arquivo "${fileToDelete.name}" e seus registros foram excluídos!`);
   };
 
   const confirmImportWarrants = () => {
@@ -450,19 +652,108 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     }
   };
 
+  const handleSearchClick = () => {
+    if (attachedFiles.length === 0) {
+      showToast("Por favor, selecione ao menos um arquivo .PDF primeiro!");
+      return;
+    }
+    if (!searchQuery.trim()) {
+      showToast("Digite o termo de pesquisa!");
+      return;
+    }
+    setActiveSearchQuery(searchQuery);
+  };
+
+  interface FileLineMatch {
+    fileName: string;
+    pageNum: number;
+    lineText: string;
+  }
+
+  // Calculate matching lines directly from PDFs
+  const fileLinesMatched: FileLineMatch[] = [];
+  const activeQuery = (searchQuery || activeSearchQuery || '').toLowerCase().trim();
+
+  if (activeQuery.length >= 2) {
+    const normalizedQ = normalizeNameForSearch(activeQuery);
+    
+    attachedFiles.forEach(file => {
+      if (file.pages && Array.isArray(file.pages)) {
+        file.pages.forEach((page: any) => {
+          if (page.lines && Array.isArray(page.lines)) {
+            page.lines.forEach((lineText: string) => {
+              const normLine = normalizeNameForSearch(lineText);
+              const simpleLine = lineText.toLowerCase();
+              
+              if (normLine.includes(normalizedQ) || simpleLine.includes(activeQuery)) {
+                const alreadyAdded = fileLinesMatched.some(m => 
+                  m.fileName === file.name && m.pageNum === page.pageNum && m.lineText === lineText
+                );
+                if (!alreadyAdded) {
+                  fileLinesMatched.push({
+                    fileName: file.name,
+                    pageNum: page.pageNum,
+                    lineText: lineText
+                  });
+                }
+              }
+            });
+          }
+        });
+      }
+    });
+  }
+
   // Safe search and match - only active when user searches (transient history)
   const filteredMandados = mandados.filter(item => {
-    const query = searchQuery.toLowerCase().trim();
+    const query = (searchQuery || activeSearchQuery || '').toLowerCase().trim();
     if (!query) {
-      return false;
+      // Se tiver arquivo carregado e nenhuma pesquisa, mostra todos os mandados para confirmação visual
+      return attachedFiles.length > 0 ? true : false;
     }
-    const matchNome = item.nome?.toLowerCase().includes(query);
-    const matchAlcunha = item.alcunha?.toLowerCase().includes(query);
-    const matchCPF = item.cpf?.replace(/[.\-\s]/g, '').includes(query.replace(/[.\-\s]/g, ''));
-    const matchRG = item.rg?.toLowerCase().includes(query);
-    const matchNum = item.numeroMandado?.replace(/[.\-/]/g, '').includes(query.replace(/[.\-/]/g, ''));
 
-    return !!(matchNome || matchAlcunha || matchCPF || matchRG || matchNum);
+    // Busca estruturada por Nome, Nome da Mãe, Nome do Pai, Alcunha, Órgão e Tipo com normalização ortográfica complementar
+    const normalizedQuery = normalizeNameForSearch(query);
+    const normalizedNome = normalizeNameForSearch(item.nome);
+    const normalizedAlcunha = normalizeNameForSearch(item.alcunha);
+    const normalizedMae = normalizeNameForSearch(item.nomeMae);
+    const normalizedPai = normalizeNameForSearch(item.nomePai);
+    const normalizedOrgao = normalizeNameForSearch(item.orgaoEmissor);
+    const normalizedInfracao = normalizeNameForSearch(item.naturezaInfracao);
+    const normalizedArtigo = normalizeNameForSearch(item.artigoLei);
+
+    const matchNome = normalizedNome.includes(normalizedQuery);
+    const matchAlcunha = normalizedAlcunha.includes(normalizedQuery);
+    const matchMae = normalizedMae.includes(normalizedQuery);
+    const matchPai = normalizedPai.includes(normalizedQuery);
+    const matchOrgao = normalizedOrgao.includes(normalizedQuery);
+    const matchInfracao = normalizedInfracao.includes(normalizedQuery);
+    const matchArtigo = normalizedArtigo.includes(normalizedQuery);
+
+    // Comparações simples de texto para RG, CPF, Número do Mandado, Nascimento e Situação processual
+    const querySimple = query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const matchCPF = item.cpf?.replace(/[.\-\s]/g, '').includes(query.replace(/[.\-\s]/g, ''));
+    const matchRG = item.rg?.toLowerCase().includes(querySimple);
+    const matchNum = item.numeroMandado?.replace(/[.\-/]/g, '').includes(query.replace(/[.\-/]/g, ''));
+    const matchNasc = item.dataNascimento?.replace(/\//g, '').includes(query.replace(/\//g, ''));
+    const matchSituacao = item.situacao?.toLowerCase().includes(querySimple);
+    const matchDataExp = item.dataExpedicao?.replace(/\//g, '').includes(query.replace(/\//g, ''));
+
+    return !!(
+      matchNome || 
+      matchAlcunha || 
+      matchMae || 
+      matchPai || 
+      matchOrgao || 
+      matchInfracao || 
+      matchArtigo || 
+      matchCPF || 
+      matchRG || 
+      matchNum || 
+      matchNasc || 
+      matchSituacao ||
+      matchDataExp
+    );
   });
 
   const handleAbrirPortal = () => {
@@ -485,6 +776,17 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Header bar back button */}
+      <div className="flex items-center justify-between pb-4">
+        <button 
+          onClick={onBack}
+          className="px-3 py-1.5 bg-military-950/70 hover:bg-military-900 border border-military-850 hover:border-military-750 rounded-xl flex items-center gap-2 group transition-all text-white cursor-pointer shadow"
+        >
+          <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform text-emerald-400" />
+          <span className="font-bold text-xs uppercase tracking-wider">Voltar</span>
+        </button>
+      </div>
 
       {/* Military Plate Header */}
       <div className="w-full relative bg-gradient-to-b from-[#1b2518] to-[#121a11] border border-military-750 p-5 rounded-2xl mb-5 shadow-lg">
@@ -572,55 +874,69 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
           Carregue o arquivo PDF com as Certidões de Mandados de Prisão oficiais do BNMP. O App realizará a extração e inserção dos dados de forma local.
         </p>
 
-        {/* Horizontal Row for Both Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Main button: SELECIONAR ARQUIVO.PDF PARA BUSCAR OFF LINE */}
+        {/* Hidden input field for the PDF file picker */}
+        <input 
+          id="bnmp-pdf-picker"
+          type="file" 
+          accept=".pdf" 
+          multiple
+          className="hidden" 
+          onChange={handleFileInputChange}
+        />
+
+        {attachedFiles.length === 0 ? (
           <button
             type="button"
             onClick={() => document.getElementById('bnmp-pdf-picker')?.click()}
-            className="w-full bg-[#1b2518] hover:bg-[#253321] text-emerald-300 active:scale-[0.98] border border-military-750 transition-all font-black text-[9.5px] py-3.5 px-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-md text-center leading-tight hover:border-emerald-500/40"
+            className="w-full bg-[#1b2518] hover:bg-[#253321] text-emerald-300 active:scale-[0.98] border border-military-750 transition-all font-black text-[10px] py-3.5 px-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-md text-center leading-tight hover:border-emerald-500/40"
           >
             <Database size={13} className="text-emerald-400 flex-shrink-0" />
             <span>SELECIONAR ARQUIVO.PDF PARA BUSCAR OFF LINE</span>
           </button>
+        ) : (
+          <div className="space-y-2 mt-2">
+            <span className="text-[9px] font-mono font-bold text-military-450 uppercase tracking-widest block">
+              Documentos Anexados:
+            </span>
+            <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+              {attachedFiles.map((f) => (
+                <div key={f.id} className="flex items-center justify-between px-3 py-2 bg-[#0e160d] border border-emerald-950/70 rounded-xl gap-3">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <FileText className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                    <span className="text-xs font-mono font-bold text-emerald-300 uppercase truncate" title={f.name}>
+                      {f.name}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteAttachedFile(f.id)}
+                    className="p-1 px-1.5 text-red-400 hover:text-red-300 hover:bg-red-950/45 rounded transition-all flex items-center justify-center cursor-pointer"
+                    title="Excluir arquivo"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
 
-          {/* Small button format container with drag & drop */}
-          <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById('bnmp-pdf-picker')?.click()}
-            className={`border border-dashed rounded-xl px-4 py-2 flex items-center justify-center text-center transition-all cursor-pointer ${
-              dragOver 
-                ? 'border-emerald-400 bg-emerald-950/40 text-emerald-300' 
-                : 'border-military-850 bg-[#0a0d0a] hover:border-military-700/60 text-military-450 hover:text-white'
-            }`}
-          >
-            <input 
-              id="bnmp-pdf-picker"
-              type="file" 
-              accept=".pdf" 
-              className="hidden" 
-              onChange={handleFileInputChange}
-            />
-            
-            {isParsingPdf ? (
-              <div className="flex items-center gap-2">
-                <div className="w-3.5 h-3.5 border border-emerald-500 border-t-transparent rounded-full animate-spin" />
-                <span className="text-[9px] text-emerald-400 font-mono font-bold uppercase tracking-wider">
-                  Lendo...
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center gap-1.5 py-1">
-                <Upload className="w-3.5 h-3.5 text-military-500 animate-pulse flex-shrink-0" />
-                <span className="text-[9.5px] font-bold uppercase select-none leading-none">
-                  Arraste o PDF ou toque para selecionar
-                </span>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => document.getElementById('bnmp-pdf-picker')?.click()}
+              className="mt-2 text-center w-full block text-[9px] font-black text-emerald-400 hover:text-emerald-300 cursor-pointer uppercase tracking-wider py-1 hover:underline"
+            >
+              + Anexar outro arquivo PDF
+            </button>
           </div>
-        </div>
+        )}
+
+        {isParsingPdf && (
+          <div className="flex items-center justify-center gap-2 py-3 bg-[#0a100a]/50 border border-emerald-900/30 rounded-xl mt-3 animate-pulse">
+            <div className="w-3.5 h-3.5 border border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-[10px] text-emerald-400 font-mono font-bold uppercase tracking-wider">
+              {parseProgress || "Lendo..."}
+            </span>
+          </div>
+        )}
 
         {/* Real-time Field Search (Caixa de digitação) integrated in the same area */}
         <div className="relative mt-4">
@@ -634,7 +950,10 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
           <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-military-400" />
           {searchQuery && (
             <button 
-              onClick={() => setSearchQuery('')}
+              onClick={() => {
+                setSearchQuery('');
+                setActiveSearchQuery('');
+              }}
               className="absolute right-3.5 top-3.5 hover:text-white text-military-400 whitespace-nowrap"
             >
               <X size={14} className="hover:scale-110 transition-transform" />
@@ -645,7 +964,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
         {/* Button to search on local PDF/Warrants database */}
         <button
           type="button"
-          onClick={() => document.getElementById('bnmp-pdf-picker')?.click()}
+          onClick={handleSearchClick}
           className="w-full bg-emerald-700 hover:bg-emerald-600 active:scale-[0.99] transition-all text-white font-black text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm border border-emerald-500/30 mt-3"
         >
           <FileText size={14} className="text-emerald-300" />
@@ -808,17 +1127,34 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <span className="text-[7.5px] font-mono text-military-450 uppercase block">DT. NASCIMENTO:</span>
-                                <span className="font-bold text-military-200">{item.dataNascimento || 'NÃO CONFIGURADO'}</span>
+                                <span className="font-bold text-military-200">{item.dataNascimento || 'NÃO INFORMADO'}</span>
                               </div>
                               <div>
-                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">GENITORA:</span>
-                                <span className="font-bold text-military-200 uppercase">{item.nomeMae || 'NÃO CONFIGURADO'}</span>
+                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">SITUAÇÃO:</span>
+                                <span className="font-bold text-military-200 uppercase">{item.situacao || 'PENDENTE'}</span>
                               </div>
                             </div>
 
-                            <div>
-                              <span className="text-[7.5px] font-mono text-military-450 uppercase block">JUÍZO EXPEDIDOR:</span>
-                              <span className="font-bold text-military-200 uppercase">{item.orgaoEmissor}</span>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">GENITORA (MÃE):</span>
+                                <span className="font-bold text-military-200 uppercase">{item.nomeMae || 'NÃO INFORMADO'}</span>
+                              </div>
+                              <div>
+                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">GENITOR (PAI):</span>
+                                <span className="font-bold text-military-200 uppercase">{item.nomePai || 'NÃO INFORMADO'}</span>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">JUÍZO EXPEDIDOR:</span>
+                                <span className="font-bold text-military-200 uppercase">{item.orgaoEmissor}</span>
+                              </div>
+                              <div>
+                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">DATA DE EXPEDIÇÃO:</span>
+                                <span className="font-bold text-military-200">{item.dataExpedicao || 'NÃO INFORMADO'}</span>
+                              </div>
                             </div>
 
                             {item.observacoes && (
@@ -856,8 +1192,37 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
           </div>
         )}
 
+        {/* Dynamic occurrence listing for matching general words */}
+        {activeSearchQuery && fileLinesMatched.length > 0 && (
+          <div className="mt-5 pt-4 border-t border-military-800 space-y-3">
+            <div className="flex items-center justify-between text-[10px] font-mono text-military-450 px-0.5 pb-1 font-bold">
+              <span className="uppercase tracking-widest flex items-center gap-1">
+                <SearchIcon className="w-3.5 h-3.5 text-[#e1b12c]" />
+                Ocorrências de texto nos documentos:
+              </span>
+              <span className="bg-yellow-950/80 border border-yellow-800/30 text-yellow-500 px-2 py-0.5 rounded font-black">
+                {fileLinesMatched.length} Trechos
+              </span>
+            </div>
+
+            <div className="space-y-2 max-h-[254px] overflow-y-auto pr-1">
+              {fileLinesMatched.map((match, idx) => (
+                <div key={idx} className="bg-[#17150c]/90 border border-yellow-900/30 p-3 rounded-xl space-y-1">
+                  <div className="flex items-center justify-between text-[8px] font-mono text-military-450">
+                    <span className="truncate max-w-[70%]">{match.fileName}</span>
+                    <span>Pág. {match.pageNum}</span>
+                  </div>
+                  <p className="text-[11px] text-yellow-100 font-sans leading-relaxed selection:bg-yellow-500/40">
+                    <HighlightedText text={match.lineText} query={activeSearchQuery} />
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Empty search matches integrated in the same area */}
-        {searchQuery && filteredMandados.length === 0 && (
+        {activeSearchQuery && filteredMandados.length === 0 && fileLinesMatched.length === 0 && (
           <div className="mt-5 pt-4 border-t border-military-850 text-center py-8 px-4 bg-[#121911]/20 rounded-xl">
             <UserCheck className="w-8 h-8 text-military-600/40 mx-auto mb-2" />
             <p className="text-[11px] text-military-400 font-bold uppercase tracking-wider mb-0.5">Nenhum registro encontrado</p>
@@ -866,17 +1231,6 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
             </p>
           </div>
         )}
-      </div>
-
-      {/* Persistent Floating Back Button */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-xs px-4">
-        <button
-          onClick={onBack}
-          className="w-full bg-[#1b2518] hover:bg-[#253321] border-2 border-military-500 text-white font-black py-3 rounded-full uppercase tracking-widest shadow-2xl transition-all duration-200 active:scale-95 flex items-center justify-center gap-2 text-xs cursor-pointer bg-gradient-to-t from-[#121911] to-[#1d2719]"
-        >
-          <X className="w-4 h-4 text-military-300" />
-          Voltar ao Menu Principal
-        </button>
       </div>
     </div>
   );

@@ -52,20 +52,20 @@ export default function Home({ onNavigate }: HomeProps) {
       badge: 'Consulta'
     },
     { 
-      id: 'fotopdf', 
-      label: 'Foto em PDF', 
-      icon: FileImage,
-      subtitle: 'Geração de Laudos e Relatórios',
-      description: 'Conversão rápida de registros fotográficos de campo em relatórios PDF padronizados.',
-      badge: 'PDF'
-    },
-    { 
       id: 'mandados', 
       label: 'Buscar Mandado de Prisão', 
       icon: Shield,
       subtitle: 'Consulta de Foragidos Offline',
       description: 'Pesquisa tática e offline de mandados de prisão ativos ou foragidos da justiça de Acre.',
       badge: 'Mandados'
+    },
+    { 
+      id: 'fotopdf', 
+      label: 'Foto em PDF', 
+      icon: FileImage,
+      subtitle: 'Geração de Laudos e Relatórios',
+      description: 'Conversão rápida de registros fotográficos de campo em relatórios PDF padronizados.',
+      badge: 'PDF'
     }
   ];
 
