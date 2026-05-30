@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { decimalToDMS, decimalToUTM } from '../utils/coords';
 import { jsPDF } from 'jspdf';
+import brandLogo from '../assets/images/batalhao_ambiental_logo_1779854041969.png';
 
 // --- ACRE CAR PROPERTIES DATABASE PRESET ---
 const ACRE_PRESETS = [
@@ -853,7 +854,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(255, 215, 0); // Yellow gold
-    doc.text("RELATÓRIO DE CONSTATAÇÃO AMBIENTAL - ACREGEO-FISCAL IA", 105, 33, { align: "center" });
+    doc.text("RELATÓRIO DE CONSTATAÇÃO AMBIENTAL - APLICAÇÕES BPA", 105, 33, { align: "center" });
 
     // Section 1: Property Identification
     doc.setTextColor(31, 46, 32);
@@ -926,7 +927,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.5);
     const textConclusion = `Fica autuado e documentado o imóvel rural denominado ${currentProp.name}. ` +
-      `Os dados geoespaciais foram consultados em tempo real através do algoritmo inteligente de fatiamento do AcreGeo-Fiscal IA, ` +
+      `Os dados geoespaciais foram consultados em tempo real através do algoritmo inteligente de fatiamento do modulo de Aplicações BPA, ` +
       `identificando grau de conformidade e passivos ambientais classificados como RISCO ${currentProp.riskLevel}. ` +
       `${currentProp.history} Este laudo constitui peça informativa para averiguação fotográfica georreferenciada em campo, para devida lavratura de multas ou regularização (PRA) se aplicável.`;
 
@@ -945,7 +946,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     doc.line(120, 272, 170, 272);
     doc.text("Coordenador de Monitoramento Geográfico", 145, 277, { align: "center" });
 
-    doc.save(`LAUDO-ACREGEO-CAR-${currentProp.carCode}.pdf`);
+    doc.save(`LAUDO-BPA-CAR-${currentProp.carCode}.pdf`);
   };
 
   return (
@@ -962,12 +963,17 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
         </button>
 
         <div className="flex flex-col items-center">
-          <span className="text-sm font-black text-white tracking-widest uppercase">ACREGEO-FISCAL IA</span>
+          <span className="text-sm font-black text-white tracking-widest uppercase text-center">APLICAÇÕES BPA</span>
           <span className="text-[7.5px] font-mono text-yellow-500 font-bold uppercase tracking-widest leading-none mt-0.5">Módulo Geral de Busca CAR</span>
         </div>
 
-        <div className="flex items-center p-2 rounded-xl bg-military-800 border border-military-700/60 text-military-300">
-          <Shield className="w-4 h-4 animate-pulse text-yellow-500" />
+        <div className="flex items-center w-10 h-10 rounded-xl overflow-hidden bg-military-950 border border-military-700/60 shadow-md">
+          <img 
+            src={brandLogo} 
+            alt="BPA Logo" 
+            className="w-full h-full object-cover" 
+            referrerPolicy="no-referrer"
+          />
         </div>
       </header>
 
@@ -1081,7 +1087,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                 )}
               </div>
               <p className="text-[8px] text-military-450 uppercase font-mono tracking-wider leading-relaxed">
-                * O AcreGeo-Fiscal IA detectará automaticamente o formato e preencherá os campos acima.
+                * O Módulo Aplicações BPA detectará automaticamente o formato e preencherá os campos acima.
               </p>
             </div>
 
@@ -1178,22 +1184,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                   </button>
                 </div>
 
-                {/* GPS Trigger */}
-                <div className="pt-3 border-t border-military-850 flex flex-col items-center justify-center gap-1.5">
-                  <button 
-                    onClick={handleGetGps}
-                    disabled={gpsLoading}
-                    className="w-full bg-[#1c2419] hover:bg-[#253021] border border-military-700 active:scale-[0.98] transition-all text-[#abc3a6] text-[10px] font-black tracking-widest py-2.5 rounded-xl flex items-center justify-center gap-2 uppercase shadow-md"
-                  >
-                    <MapPin className={`w-3.5 h-3.5 text-yellow-500 ${gpsLoading ? 'animate-bounce' : ''}`} />
-                    {gpsLoading ? 'Sincronizando Satélites...' : 'Capturar via GPS de Campo'}
-                  </button>
-                  {gpsAccuracy !== null && (
-                    <span className="text-[8px] text-yellow-500 uppercase tracking-widest font-mono">
-                      Precisão estimada: ±{gpsAccuracy} metros
-                    </span>
-                  )}
-                </div>
+
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3.5 bg-[#0f140e] p-5 border-2 border-military-800 rounded-2xl">
@@ -1220,22 +1211,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                   />
                 </div>
 
-                {/* Convert Indicator */}
-                <div className="col-span-2 pt-3 border-t border-military-850 flex flex-col items-center justify-center gap-1.5">
-                  <button 
-                    onClick={handleGetGps}
-                    disabled={gpsLoading}
-                    className="w-full bg-[#1c2419] hover:bg-[#253021] border border-military-700 active:scale-[0.98] transition-all text-[#abc3a6] text-[10px] font-black tracking-widest py-2.5 rounded-xl flex items-center justify-center gap-2 uppercase"
-                  >
-                    <MapPin className={`w-3.5 h-3.5 text-yellow-500 ${gpsLoading ? 'animate-bounce' : ''}`} />
-                    {gpsLoading ? 'Sincronizando Satélites...' : 'Capturar via GPS de Campo'}
-                  </button>
-                  {gpsAccuracy !== null && (
-                    <span className="text-[8px] text-yellow-500 uppercase tracking-widest font-mono">
-                      Precisão estimada: ±{gpsAccuracy} metros
-                    </span>
-                  )}
-                </div>
+
               </div>
             )}
 

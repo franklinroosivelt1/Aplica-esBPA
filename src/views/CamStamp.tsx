@@ -41,6 +41,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
   });
   const [isCapturing, setIsCapturing] = useState(false);
   const [isSimulated, setIsSimulated] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -291,7 +292,11 @@ export default function CamStamp({ onBack }: CamStampProps) {
       link.click();
     }
 
-    setTimeout(() => setIsCapturing(false), 500);
+    setToastMsg("Foto salva!");
+    setTimeout(() => {
+      setIsCapturing(false);
+    }, 500);
+    setTimeout(() => setToastMsg(null), 2000);
   }, [coords, settings, timestamp]);
 
   const handleSharePhoto = async (photoUrl: string, e?: React.MouseEvent) => {
@@ -461,6 +466,13 @@ export default function CamStamp({ onBack }: CamStampProps) {
 
         {isCapturing && (
           <div className="absolute inset-0 bg-white/20 animate-pulse pointer-events-none" />
+        )}
+
+        {toastMsg && (
+          <div className="absolute top-28 left-1/2 -translate-x-1/2 z-[100] bg-emerald-800/90 backdrop-blur-md text-white border border-emerald-500/50 px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 font-sans text-xs font-bold uppercase tracking-wider animate-bounce">
+            <Check size={14} className="text-white animate-pulse" />
+            <span>{toastMsg}</span>
+          </div>
         )}
       </div>
 

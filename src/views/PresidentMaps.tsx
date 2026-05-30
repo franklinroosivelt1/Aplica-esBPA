@@ -25,6 +25,7 @@ import {
   Pencil
 } from 'lucide-react';
 import { decimalToDMS } from '../utils/coords';
+import brandLogo from '../assets/images/batalhao_ambiental_logo_1779854041969.png';
 
 // --- DATABASE PERSISTENCE SYSTEM (IndexedDB) ---
 const DB_NAME = 'PresidentMapsDB_v2';
@@ -444,7 +445,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       const z = parseInt(saved, 10);
       if (!isNaN(z)) return z;
     }
-    return 16;
+    return 13;
   });
   const [rotation, setRotation] = useState(0); // in radians
 
@@ -605,108 +606,126 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
     // 1. CHOOSE BASE MAP TILES
     if (baseMap !== 'none') {
-      const centerTileX = Math.floor(centerPixel.x / TILE_SIZE);
-      const centerTileY = Math.floor(centerPixel.y / TILE_SIZE);
+      const tileZoom = Math.floor(zoom);
+      const centerPixelAtTileZoom = latLngToWorldPixel(center.lat, center.lng, tileZoom);
+      const centerTileX = Math.floor(centerPixelAtTileZoom.x / TILE_SIZE);
+      const centerTileY = Math.floor(centerPixelAtTileZoom.y / TILE_SIZE);
       const gridExtent = 3; // Render a 7x7 grid to cover rotational corners
 
-      const numTiles = Math.pow(2, zoom);
+      const numTiles = Math.pow(2, tileZoom);
 
       for (let dx = -gridExtent; dx <= gridExtent; dx++) {
         for (let dy = -gridExtent; dy <= gridExtent; dy++) {
           const tx = centerTileX + dx;
           const ty = centerTileY + dy;
 
-          // Wrap mercator bounds
+          // Wrap mercator bounds at tileZoom
           if (tx < 0 || tx >= numTiles || ty < 0 || ty >= numTiles) continue;
 
           const tileX = tx * TILE_SIZE;
           const tileY = ty * TILE_SIZE;
 
-          const screenX = tileX - centerPixel.x;
-          const screenY = tileY - centerPixel.y;
+          const dxFromCenter = tileX - centerPixelAtTileZoom.x;
+          const dyFromCenter = tileY - centerPixelAtTileZoom.y;
+
+          const scale = Math.pow(2, zoom - tileZoom);
+          const screenX = dxFromCenter * scale;
+          const screenY = dyFromCenter * scale;
+          const drawSize = TILE_SIZE * scale;
 
           // Resolve tile image
           let tileUrl = '';
           if (baseMap === 'osm') {
-            tileUrl = `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`;
+            tileUrl = `https://tile.openstreetmap.org/${tileZoom}/${tx}/${ty}.png`;
           } else if (baseMap === 'satellite') {
-            tileUrl = `https://mt1.google.com/vt/lyrs=s&x=${tx}&y=${ty}&z=${zoom}`;
+            tileUrl = `https://mt1.google.com/vt/lyrs=s&x=${tx}&y=${ty}&z=${tileZoom}`;
           } else if (baseMap === 'hybrid') {
-            tileUrl = `https://mt1.google.com/vt/lyrs=y&x=${tx}&y=${ty}&z=${zoom}`;
+            tileUrl = `https://mt1.google.com/vt/lyrs=y&x=${tx}&y=${ty}&z=${tileZoom}`;
           }
 
-          const cachedImg = tileCache.current.get(tileUrl);
-          if (cachedImg) {
-            if (cachedImg.complete && cachedImg.naturalWidth !== 0) {
-              ctx.drawImage(cachedImg, screenX, screenY, TILE_SIZE, TILE_SIZE);
-            }
-          } else {
-            // Register an empty loading Image object immediately to avoid duplicate database or network requests
-            const loadingImg = new Image();
-            
-            // Prevent cache memory overflow (Max 120 elements) on RAM-constrained devices
-            if (tileCache.current.size >= 120) {
-              const oldestKey = tileCache.current.keys().next().value;
-              if (oldestKey) {
-                const imgToEvict = tileCache.current.get(oldestKey);
-                if (imgToEvict && imgToEvict.src && imgToEvict.src.startsWith('blob:')) {
-                  URL.revokeObjectURL(imgToEvict.src);
-                }
-                tileCache.current.delete(oldestKey);
+          if (tileUrl) {
+            const cachedImg = tileCache.current.get(tileUrl);
+            if (cachedImg) {
+              if (cachedImg.complete && cachedImg.naturalWidth !== 0) {
+                ctx.drawImage(cachedImg, screenX, screenY, drawSize, drawSize);
               }
-            }
-            tileCache.current.set(tileUrl, loadingImg);
+            } else {
+              // Register an empty loading Image object immediately to avoid duplicate database or network requests
+              const loadingImg = new Image();
+              
+              // Prevent cache memory overflow (Max 600 elements) on RAM-constrained devices
+              if (tileCache.current.size >= 600) {
+                const oldestKey = tileCache.current.keys().next().value;
+                if (oldestKey) {
+                  const imgToEvict = tileCache.current.get(oldestKey);
+                  if (imgToEvict && imgToEvict.src && imgToEvict.src.startsWith('blob:')) {
+                    URL.revokeObjectURL(imgToEvict.src);
+                  }
+                  tileCache.current.delete(oldestKey);
+                }
+              }
+              tileCache.current.set(tileUrl, loadingImg);
 
-            // Fetch persistently from IndexedDB for robust offline loading
-            dbGetTile(tileUrl).then(dataUrlOrBlob => {
-              if (dataUrlOrBlob) {
-                if (dataUrlOrBlob instanceof Blob) {
-                  const objectUrl = URL.createObjectURL(dataUrlOrBlob);
-                  loadingImg.src = objectUrl;
-                  loadingImg.onload = () => {
-                    triggerRedraw();
-                  };
-                } else {
-                  // Legacy support for string-based dataUrIs
-                  loadingImg.src = dataUrlOrBlob;
-                  loadingImg.onload = () => {
-                    triggerRedraw();
-                  };
-                }
+              // Handle non-CORS Google Satellite and Hybrid tiles directly!
+              const isGoogleTile = tileUrl.includes('google.com');
+              if (isGoogleTile) {
+                loadingImg.src = tileUrl;
+                loadingImg.onload = () => {
+                  triggerRedraw();
+                };
               } else {
-                // Not cached. Fetch online as a blob to save into DB, and set image src
-                fetch(tileUrl)
-                  .then(response => {
-                    if (!response.ok) throw new Error("HTTP error " + response.status);
-                    return response.blob();
-                  })
-                  .then(blob => {
-                    // Save to IndexedDB asynchronously in the background
-                    dbSaveTile(tileUrl, blob).catch(err => console.warn("Failed to save tile:", err));
-                    
-                    const objectUrl = URL.createObjectURL(blob);
-                    loadingImg.src = objectUrl;
-                    loadingImg.onload = () => {
-                      triggerRedraw();
-                    };
-                  })
-                  .catch(err => {
-                    // Fallback to setting src directly to tileUrl if fetch fails (e.g. CORS or offline preview mode)
-                    loadingImg.crossOrigin = "anonymous";
-                    loadingImg.src = tileUrl;
-                    loadingImg.onload = () => {
-                      triggerRedraw();
-                    };
-                  });
+                // Fetch persistently from IndexedDB for robust offline loading (OSM or other CORS-enabled tiles)
+                dbGetTile(tileUrl).then(dataUrlOrBlob => {
+                  if (dataUrlOrBlob) {
+                    if (dataUrlOrBlob instanceof Blob) {
+                      const objectUrl = URL.createObjectURL(dataUrlOrBlob);
+                      loadingImg.src = objectUrl;
+                      loadingImg.onload = () => {
+                        triggerRedraw();
+                      };
+                    } else {
+                      // Legacy support for string-based dataUrIs
+                      loadingImg.src = dataUrlOrBlob;
+                      loadingImg.onload = () => {
+                        triggerRedraw();
+                      };
+                    }
+                  } else {
+                    // Not cached. Fetch online as a blob to save into DB, and set image src
+                    fetch(tileUrl)
+                      .then(response => {
+                        if (!response.ok) throw new Error("HTTP error " + response.status);
+                        return response.blob();
+                      })
+                      .then(blob => {
+                        // Save to IndexedDB asynchronously in the background
+                        dbSaveTile(tileUrl, blob).catch(err => console.warn("Failed to save tile:", err));
+                        
+                        const objectUrl = URL.createObjectURL(blob);
+                        loadingImg.src = objectUrl;
+                        loadingImg.onload = () => {
+                          triggerRedraw();
+                        };
+                      })
+                      .catch(err => {
+                        // Fallback to setting src directly to tileUrl if fetch fails (e.g. CORS or offline preview mode)
+                        loadingImg.crossOrigin = "anonymous";
+                        loadingImg.src = tileUrl;
+                        loadingImg.onload = () => {
+                          triggerRedraw();
+                        };
+                      });
+                  }
+                }).catch(e => {
+                  // Offline/Database error fallback: attempt online load directly
+                  loadingImg.crossOrigin = "anonymous";
+                  loadingImg.src = tileUrl;
+                  loadingImg.onload = () => {
+                    triggerRedraw();
+                  };
+                });
               }
-            }).catch(e => {
-              // Offline/Database error fallback: attempt online load directly
-              loadingImg.crossOrigin = "anonymous";
-              loadingImg.src = tileUrl;
-              loadingImg.onload = () => {
-                triggerRedraw();
-              };
-            });
+            }
           }
         }
       }
@@ -1390,7 +1409,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       const scale = dist / touchState.current.initialDist;
       const zoomDiff = Math.log2(scale);
       const nextZoom = Math.min(Math.max(touchState.current.initialZoom + zoomDiff, 10), 22);
-      setZoom(Math.round(nextZoom * 10) / 10);
+      setZoom(nextZoom);
 
       // Calculate Two-Finger Rotation
       const angle = Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
@@ -1536,8 +1555,8 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     }
     
     // Generate valid KML string for download
-    const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>PresidentMaps Saved Points</name>\n`;
-    const kmlBody = savedPoints.map(pt => `    <Placemark>\n      <name>${pt.name}</name>\n      <description>Salvo via PresidentMaps\nLatitude: ${decimalToDMS(pt.lat, 'lat')}\nLongitude: ${decimalToDMS(pt.lng, 'lng')}</description>\n      <Point>\n        <coordinates>${pt.lng},${pt.lat},0</coordinates>\n      </Point>\n    </Placemark>\n`).join('');
+    const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>BPA Saved Points</name>\n`;
+    const kmlBody = savedPoints.map(pt => `    <Placemark>\n      <name>${pt.name}</name>\n      <description>Salvo via Aplicações BPA\nLatitude: ${decimalToDMS(pt.lat, 'lat')}\nLongitude: ${decimalToDMS(pt.lng, 'lng')}</description>\n      <Point>\n        <coordinates>${pt.lng},${pt.lat},0</coordinates>\n      </Point>\n    </Placemark>\n`).join('');
     const kmlFooter = `  </Document>\n</kml>`;
     const fullKml = kmlHeader + kmlBody + kmlFooter;
     
@@ -1545,7 +1564,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `presidentmaps_pontos_${Date.now()}.kml`;
+    a.download = `bpa_pontos_${Date.now()}.kml`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1560,7 +1579,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     <name>${sd.name}</name>
     <Placemark>
       <name>${sd.name}</name>
-      <description>Trajeto medido via PresidentMaps\nDistância Total: ${sd.distance.toFixed(2)} km</description>
+      <description>Trajeto medido via Aplicações BPA\nDistância Total: ${sd.distance.toFixed(2)} km</description>
       <LineString>
         <tessellate>1</tessellate>
         <coordinates>${sd.points.map(p => `${p.lng},${p.lat},0`).join(' ')}</coordinates>
@@ -1584,7 +1603,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     <name>${sa.name}</name>
     <Placemark>
       <name>${sa.name}</name>
-      <description>Área de terra medida via PresidentMaps\nTamanho Total: ${sa.area.toFixed(2)} há</description>
+      <description>Área de terra medida via Aplicações BPA\nTamanho Total: ${sa.area.toFixed(2)} há</description>
       <Polygon>
         <outerBoundaryIs>
           <LinearRing>
@@ -1687,7 +1706,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           const accuracy = pos.coords.accuracy;
           setGpsCoords({ lat, lng, accuracy });
           setCenter({ lat, lng });
-          setZoom(17);
+          setZoom(14);
           showTemporaryStatus(`Localizado com sucesso! (Precisão: ${accuracy.toFixed(1)}m)`);
         },
         (err) => {
@@ -1695,7 +1714,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           // Fallback to active gpsCoords watch if we have it
           if (gpsCoords) {
             setCenter({ lat: gpsCoords.lat, lng: gpsCoords.lng });
-            setZoom(17);
+            setZoom(14);
             showTemporaryStatus("Centralizado na última posição GPS obtida.");
           } else {
             showTemporaryStatus("Falha ao obter sinal de GPS. Verifique se o GPS e as permissões de localização estão ativos.");
@@ -1732,12 +1751,12 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
   // Share georeferenced map
   const handleShareMap = async (map: ImportedMap) => {
-    const shareText = `PresidentMaps - Mapa Georreferenciado\n\nNome: ${map.name}\nCoordenada Top-Left: ${map.topLeft.lat}, ${map.topLeft.lng}\nCoordenada Bottom-Right: ${map.bottomRight.lat}, ${map.bottomRight.lng}\n\nAbra no aplicativo para navegar georreferenciado!`;
+    const shareText = `Aplicações BPA - Mapa Georreferenciado\n\nNome: ${map.name}\nCoordenada Top-Left: ${map.topLeft.lat}, ${map.topLeft.lng}\nCoordenada Bottom-Right: ${map.bottomRight.lat}, ${map.bottomRight.lng}\n\nAbra no aplicativo para navegar georreferenciado!`;
     
     try {
       if (navigator.share) {
         await navigator.share({
-          title: `PresidentMaps - ${map.name}`,
+          title: `Aplicações BPA - ${map.name}`,
           text: shareText
         });
         showTemporaryStatus("Opções de compartilhamento abertas!");
@@ -2907,8 +2926,8 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         {/* Drawer Header */}
         <div className="p-4 border-b border-military-700 flex items-center justify-between bg-military-800">
           <div className="flex items-center gap-2">
-            <Compass className="w-5 h-5 text-military-300" />
-            <h1 className="text-sm font-black tracking-wider uppercase text-military-100 font-mono">PRESIDENTMAPS</h1>
+            <Compass className="w-5 h-5 text-military-300 animate-spin-slow" />
+            <h1 className="text-sm font-black tracking-wider uppercase text-military-100 font-mono">APLICAÇÕES BPA</h1>
           </div>
           <button 
             onClick={() => setIsMenuOpen(false)}
@@ -2921,44 +2940,44 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         {/* Sliding Tabs Selection Matrix */}
         <div className="grid grid-cols-4 border-b border-military-700 bg-military-800 text-center font-mono">
           <button
-            onClick={() => setActiveTab('camadas')}
-            className={`py-3 text-[10px] font-extrabold uppercase transition-all flex flex-col items-center gap-1.5 ${activeTab === 'camadas' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
-          >
-            <Layers className="w-4 h-4" />
-            Camadas
-          </button>
-          
-          <button
             onClick={() => {
               setActiveTab('ferramentas');
-              showTemporaryStatus("Painel 'Ferramentas' reservado para futura atualização militar.");
+              showTemporaryStatus("Painel 'Recursos' reservado para futura atualização militar.");
             }}
-            className={`py-3 text-[10px] font-extrabold uppercase transition-all flex flex-col items-center gap-1.5 ${activeTab === 'ferramentas' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
+            className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-1 h-14 ${activeTab === 'ferramentas' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
-            <Wrench className="w-4 h-4 animate-pulse" />
-            Recursos
+            <Wrench className="w-4 h-4" />
+            <span>Recursos</span>
           </button>
-          
+
           <button
             onClick={() => {
               setActiveTab('pontos');
-              showTemporaryStatus("Painel 'Pontos de Combate' reservado para futura atualização.");
+              showTemporaryStatus("Painel 'Pontos Salvos' reservado para futura atualização.");
             }}
-            className={`py-3 text-[10px] font-extrabold uppercase transition-all flex flex-col items-center gap-1.5 ${activeTab === 'pontos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-400'}`}
+            className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'pontos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
             <MapPin className="w-4 h-4" />
-            Pontos
+            <span className="leading-tight">Pontos<br />Salvos</span>
+          </button>
+          
+          <button
+            onClick={() => setActiveTab('camadas')}
+            className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'camadas' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
+          >
+            <Layers className="w-4 h-4" />
+            <span className="leading-tight">Camadas/<br />Mapas</span>
           </button>
           
           <button
             onClick={() => {
               setActiveTab('trajetos');
-              showTemporaryStatus("Painel 'Meus Trajetos' reservado para futura atualização militar.");
+              showTemporaryStatus("Painel 'Rotas Gravadas' reservado para futura atualização militar.");
             }}
-            className={`py-3 text-[10px] font-extrabold uppercase transition-all flex flex-col items-center gap-1.5 ${activeTab === 'trajetos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
+            className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'trajetos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
             <Route className="w-4 h-4" />
-            Rotas
+            <span className="leading-tight">Rotas<br />Gravadas</span>
           </button>
         </div>
 
@@ -3653,7 +3672,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           <button
                             onClick={() => {
                               setCenter({ lat: pt.lat, lng: pt.lng });
-                              setZoom(17);
+                              setZoom(14);
                               setIsMenuOpen(false); // Close slider to let user view
                               showTemporaryStatus(`Centrado em: ${pt.name}`);
                             }}
@@ -3681,7 +3700,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           <button
                             onClick={() => {
                               setCenter({ lat: pt.lat, lng: pt.lng });
-                              setZoom(17);
+                              setZoom(14);
                               setIsMenuOpen(false);
                             }}
                             className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white"
@@ -3760,15 +3779,20 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         <div className="p-4 border-t border-military-800 bg-military-900/40">
           <div className="flex items-center justify-between p-3.5 bg-military-850 border border-military-750/50 rounded-xl">
             <div className="flex items-center gap-3">
-              <div id="pm-avatar" className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white tracking-wider text-sm shadow-md font-sans">
-                PM
+              <div id="pm-avatar" className="w-10 h-10 rounded-full overflow-hidden bg-military-950 flex items-center justify-center shadow-md border border-military-700">
+                <img 
+                  src={brandLogo} 
+                  alt="Aplicações BPA Logo" 
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer" 
+                />
               </div>
               <div className="flex flex-col">
                 <span className="font-sans text-[11px] font-bold text-military-100 uppercase tracking-wide">
-                  PresidentMaps v1.0
+                  Aplicações BPA
                 </span>
-                <span className="font-sans text-[9px] text-military-450 uppercase tracking-widest font-semibold text-military-400">
-                  Professional Edition
+                <span className="font-sans text-[9px] text-military-400 uppercase tracking-widest font-bold">
+                  Sistema Militar
                 </span>
               </div>
             </div>

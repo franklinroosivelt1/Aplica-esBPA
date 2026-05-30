@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Camera, 
@@ -13,12 +13,12 @@ import { Map } from 'lucide-react';
 import Home from './views/Home';
 import brandLogo from './assets/images/batalhao_ambiental_logo_1779854041969.png';
 
-// Lazy load heavy components for high performance, especially on devices with limited processor or RAM
-const CamStamp = lazy(() => import('./views/CamStamp'));
-const CubagemBPA = lazy(() => import('./views/CubagemBPA'));
-const FotoPDF = lazy(() => import('./views/FotoPDF'));
-const BpaOperacional = lazy(() => import('./views/BpaOperacional'));
-const PresidentMaps = lazy(() => import('./views/PresidentMaps'));
+import CamStamp from './views/CamStamp';
+import CubagemBPA from './views/CubagemBPA';
+import FotoPDF from './views/FotoPDF';
+import BpaOperacional from './views/BpaOperacional';
+import PresidentMaps from './views/PresidentMaps';
+import BuscarMandados from './views/BuscarMandados';
 
 function LoadingView({ message = "Carregando módulo..." }: { message?: string }) {
   return (
@@ -30,7 +30,8 @@ function LoadingView({ message = "Carregando módulo..." }: { message?: string }
   );
 }
 
-export type View = 'home' | 'camstamp' | 'cubagem' | 'identificacao' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar';
+
+export type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
@@ -40,31 +41,11 @@ export default function App() {
       case 'home':
         return <Home onNavigate={setCurrentView} />;
       case 'camstamp':
-        return (
-          <Suspense fallback={<LoadingView message="Iniciando Câmera..." />}>
-            <CamStamp onBack={() => setCurrentView('home')} />
-          </Suspense>
-        );
+        return <CamStamp onBack={() => setCurrentView('home')} />;
       case 'cubagem':
-        return (
-          <Suspense fallback={<LoadingView message="Abrindo Cubagem..." />}>
-            <CubagemBPA onBack={() => setCurrentView('home')} />
-          </Suspense>
-        );
-      case 'identificacao':
-        return (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8">
-            <Trees className="w-16 h-16 text-military-500 mb-4" />
-            <h2 className="text-xl font-bold uppercase tracking-tighter mb-2">Identificação de Madeiras</h2>
-            <p className="text-sm text-military-400 uppercase tracking-widest font-mono">Em desenvolvimento</p>
-            <button 
-              onClick={() => setCurrentView('home')}
-              className="mt-8 px-6 py-2 bg-military-800 rounded-lg text-military-300 font-bold uppercase text-xs tracking-widest"
-            >
-              Voltar
-            </button>
-          </div>
-        );
+        return <CubagemBPA onBack={() => setCurrentView('home')} />;
+      case 'mandados':
+        return <BuscarMandados onBack={() => setCurrentView('home')} />;
       case 'verificarcar':
         return (
           <div className="flex flex-col items-center justify-center min-h-[70vh] text-center p-6 bg-military-900 border border-military-850 rounded-3xl m-4">
@@ -93,23 +74,11 @@ export default function App() {
           </div>
         );
       case 'fotopdf':
-        return (
-          <Suspense fallback={<LoadingView message="Iniciando Foto em PDF..." />}>
-            <FotoPDF onBack={() => setCurrentView('home')} />
-          </Suspense>
-        );
+        return <FotoPDF onBack={() => setCurrentView('home')} />;
       case 'mapas':
-        return (
-          <Suspense fallback={<LoadingView message="Carregando Mapas..." />}>
-            <PresidentMaps onBack={() => setCurrentView('home')} />
-          </Suspense>
-        );
+        return <PresidentMaps onBack={() => setCurrentView('home')} />;
       case 'bpaoperacional':
-        return (
-          <Suspense fallback={<LoadingView message="Buscando no CAR..." />}>
-            <BpaOperacional onBack={() => setCurrentView('home')} />
-          </Suspense>
-        );
+        return <BpaOperacional onBack={() => setCurrentView('home')} />;
       default:
         return <Home onNavigate={setCurrentView} />;
     }
@@ -118,7 +87,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-military-900 text-military-100 font-sans selection:bg-military-500 selection:text-white">
       {/* App Header (Sticky when not in home, camstamp, view maps, fotopdf, cubagem, or bpaoperacional) */}
-      {currentView !== 'home' && currentView !== 'camstamp' && currentView !== 'mapas' && currentView !== 'fotopdf' && currentView !== 'cubagem' && currentView !== 'bpaoperacional' && (
+      {currentView !== 'home' && currentView !== 'camstamp' && currentView !== 'mapas' && currentView !== 'fotopdf' && currentView !== 'cubagem' && currentView !== 'bpaoperacional' && currentView !== 'mandados' && (
         <header className="sticky top-0 z-50 bg-military-800/80 backdrop-blur-md border-b border-military-700 px-4 py-3 flex items-center justify-between">
           <button 
             onClick={() => setCurrentView('home')}
@@ -144,7 +113,7 @@ export default function App() {
         </header>
       )}
 
-      <main className={`${currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' ? 'w-full' : 'max-w-md mx-auto'} min-h-screen`}>
+      <main className={`${currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' || currentView === 'mandados' ? 'w-full' : 'max-w-md mx-auto'} min-h-screen`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={currentView}
@@ -152,7 +121,7 @@ export default function App() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
-            className={currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' ? '' : 'p-4 pt-6'}
+            className={currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' || currentView === 'mandados' ? '' : 'p-4 pt-6'}
           >
             {renderView()}
           </motion.div>
