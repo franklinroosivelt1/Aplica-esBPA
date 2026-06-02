@@ -75,28 +75,54 @@ function normalizeNameForSearch(text: string | undefined): string {
 }
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
-  if (!query.trim()) return <span>{text}</span>;
+  if (!text) return <span></span>;
+  if (!query || !query.trim()) return <span>{text}</span>;
   
-  const accentsRemovedQuery = normalizeNameForSearch(query);
-  if (!accentsRemovedQuery) return <span>{text}</span>;
+  const cleanQuery = removeAccents(query).trim();
+  if (!cleanQuery) return <span>{text}</span>;
   
-  try {
-    const escapedQuery = query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-    const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'));
-    return (
-      <span>
-        {parts.map((part, i) => 
-          part.toLowerCase() === query.toLowerCase() ? (
-            <mark key={i} className="bg-yellow-500/90 text-black px-1 rounded font-bold">{part}</mark>
-          ) : (
-            part
-          )
-        )}
-      </span>
-    );
-  } catch (e) {
+  const cleanText = removeAccents(text);
+  const index = cleanText.indexOf(cleanQuery);
+  
+  if (index === -1) {
+    const normQ = normalizeNameForSearch(query);
+    const normT = normalizeNameForSearch(text);
+    if (normQ && normT && normT.includes(normQ)) {
+      const textWords = text.split(/\s+/);
+      return (
+        <span>
+          {textWords.map((word, i) => {
+            const isMatch = normalizeNameForSearch(word).includes(normQ) || normQ.includes(normalizeNameForSearch(word));
+            return (
+              <React.Fragment key={i}>
+                {isMatch ? (
+                  <mark className="bg-amber-500/20 text-amber-300 border border-amber-500/35 px-1 rounded font-extrabold">{word}</mark>
+                ) : (
+                  <span>{word}</span>
+                )}
+                {i < textWords.length - 1 ? ' ' : ''}
+              </React.Fragment>
+            );
+          })}
+        </span>
+      );
+    }
     return <span>{text}</span>;
   }
+  
+  const before = text.substring(0, index);
+  const match = text.substring(index, index + cleanQuery.length);
+  const after = text.substring(index + cleanQuery.length);
+  
+  return (
+    <span>
+      {before}
+      <mark className="bg-amber-500/20 text-amber-300 border border-amber-500/35 px-1 rounded font-extrabold">
+        {match}
+      </mark>
+      <HighlightedText text={after} query={query} />
+    </span>
+  );
 }
 
 interface BuscarMandadosProps {
@@ -757,7 +783,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
   });
 
   const handleAbrirPortal = () => {
-    window.open('https://portalbnmp.cnj.jus.br/#/captcha/', '_blank', 'noopener,noreferrer');
+    window.open('https://portalbnmp.cnj.jus.br/#/pesquisa-peca', '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -790,62 +816,49 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
       {/* Military Plate Header */}
       <div className="w-full relative bg-gradient-to-b from-[#1b2518] to-[#121a11] border border-military-750 p-5 rounded-2xl mb-5 shadow-lg">
-        <div className="absolute top-3 right-3 flex items-center gap-1">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-          <span className="text-[7.5px] font-mono text-emerald-400 font-bold tracking-widest uppercase">
-            BANCO OFFLINE ATIVO
-          </span>
-        </div>
-
-        <span className="text-[8.5px] font-mono font-bold text-military-300 uppercase tracking-widest block mb-0.5">
-          POLÍCIA MILITAR DO ACRE • BPA
-        </span>
         <h1 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2 font-sans">
           <ShieldAlert className="w-5 h-5 text-yellow-500 flex-shrink-0" />
           MANDADOS DE PRISÃO
         </h1>
-        <p className="text-[10px] text-military-400/90 leading-relaxed font-medium mt-1 uppercase font-sans">
-          Módulo Operacional BNMP Offline de Campo
-        </p>
       </div>
 
       {/* Portal Nacional BNMP – Consulta de CPF Online no CNJ */}
-      <div className="bg-[#1c1313] border border-red-900/60 p-5 rounded-2xl mb-5 shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 bg-red-950 text-red-400 border-l border-b border-red-900/50 px-2.5 py-1 rounded-bl-xl text-[8px] font-mono font-black uppercase tracking-wider animate-pulse flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+      <div className="bg-[#141010]/95 border border-red-950/80 p-5 rounded-2xl mb-5 shadow relative overflow-hidden">
+        <div className="absolute top-0 right-0 bg-red-950/30 text-red-400/80 border-l border-b border-red-950/40 px-2.5 py-1 rounded-bl-xl text-[8px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+          <span className="w-1.5 h-1.5 bg-red-800/60 rounded-full" />
           Conexão Externa
         </div>
 
         <div className="flex items-start gap-3 mb-3">
-          <div className="p-2 bg-red-950/80 border border-red-800/60 rounded-xl text-red-400">
+          <div className="p-2 bg-red-950/20 border border-red-950/40 rounded-xl text-red-300">
             <ShieldAlert size={18} />
           </div>
           <div>
-            <h2 className="text-xs font-extrabold text-white uppercase tracking-wider">
+            <h2 className="text-xs font-extrabold text-white/90 uppercase tracking-wider">
               CONSULTAR PORTAL BNMP ONLINE (CNJ)
             </h2>
-            <p className="text-[9px] text-[#dbbbbb] uppercase font-mono mt-0.5 leading-tight">
+            <p className="text-[9px] text-[#bda4a4] uppercase font-mono mt-0.5 leading-tight">
               Acesso direto ao site oficial
             </p>
           </div>
         </div>
 
-        <p className="text-[10px] text-military-400/90 leading-relaxed mb-4 uppercase">
+        <p className="text-[10px] text-military-450 leading-relaxed mb-4 uppercase">
           Acesse o portal nacional de mandados do Conselho Nacional de Justiça para realizar pesquisas utilizando filtros de CPF, nome de foragidos ou número de processo.
         </p>
 
         <div className="space-y-3">
           <button
             onClick={handleAbrirPortal}
-            className="w-full bg-red-900 hover:bg-red-800 active:scale-[0.99] transition-all border border-red-600/50 text-white font-black text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-md"
+            className="w-full bg-red-950/45 hover:bg-red-950/80 active:scale-[0.99] transition-all border border-red-900/30 text-red-300 font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:text-red-200"
           >
-            <ExternalLink size={14} />
+            <ExternalLink size={14} className="text-red-400/80" />
             <span>Pesquisar no Portal CNJ BNMP ↗</span>
           </button>
         </div>
 
-        <div className="mt-2.5 flex items-center justify-center gap-1 text-[8.5px] font-mono text-red-400/80 uppercase font-bold text-center">
-          <span>portalbnmp.cnj.jus.br/#/captcha</span>
+        <div className="mt-2.5 flex items-center justify-center gap-1 text-[8.5px] font-mono text-red-500/40 uppercase font-semibold text-center">
+          <span>portalbnmp.cnj.jus.br/#/pesquisa-peca</span>
         </div>
       </div>
 
@@ -1040,16 +1053,16 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
               {filteredMandados.map((item) => {
                 const isExpanded = expandedId === item.id;
                 const cardBg = item.gravidade === 'Alta' 
-                  ? 'bg-[#1e1313]/95 border-red-900/60' 
+                  ? 'bg-[#161111] hover:bg-[#1f1717] border-red-950/80 transition-all font-sans' 
                   : item.gravidade === 'Média' 
-                    ? 'bg-[#1d1b11]/95 border-yellow-800/40' 
-                    : 'bg-[#0f140f]/95 border-military-800';
+                    ? 'bg-[#151410] hover:bg-[#1d1b15] border-amber-950/60 transition-all font-sans' 
+                    : 'bg-[#0f120f] hover:bg-[#131813] border-emerald-950/40 transition-all font-sans';
 
                 const severityBadge = item.gravidade === 'Alta'
-                  ? 'bg-red-950/80 text-red-400 border-red-500/40'
+                  ? 'bg-red-950/40 text-red-300 border-red-900/30'
                   : item.gravidade === 'Média'
-                    ? 'bg-yellow-950/80 text-yellow-500 border-yellow-500/30'
-                    : 'bg-emerald-950/80 text-emerald-500 border-emerald-500/30';
+                    ? 'bg-amber-950/40 text-amber-300 border-amber-900/20'
+                    : 'bg-emerald-950/40 text-emerald-300 border-emerald-900/20';
 
                 return (
                   <div
@@ -1063,11 +1076,11 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                           BNMP: {item.numeroMandado.slice(0, 18)}...
                         </span>
                         <h4 className="font-black text-[12px] tracking-wide text-white uppercase leading-tight">
-                          {item.nome}
+                          <HighlightedText text={item.nome} query={searchQuery || activeSearchQuery || ''} />
                         </h4>
                         {item.alcunha && (
                           <span className="text-[9px] text-yellow-500 font-mono font-bold uppercase block">
-                            VULGO: "{item.alcunha.toUpperCase()}"
+                            VULGO: "<HighlightedText text={item.alcunha} query={searchQuery || activeSearchQuery || ''} />"
                           </span>
                         )}
                       </div>
@@ -1138,11 +1151,23 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                             <div className="grid grid-cols-2 gap-2">
                               <div>
                                 <span className="text-[7.5px] font-mono text-military-450 uppercase block">GENITORA (MÃE):</span>
-                                <span className="font-bold text-military-200 uppercase">{item.nomeMae || 'NÃO INFORMADO'}</span>
+                                <span className="font-bold text-military-200 uppercase">
+                                  {item.nomeMae ? (
+                                    <HighlightedText text={item.nomeMae} query={searchQuery || activeSearchQuery || ''} />
+                                  ) : (
+                                    'NÃO INFORMADO'
+                                  )}
+                                </span>
                               </div>
                               <div>
                                 <span className="text-[7.5px] font-mono text-military-450 uppercase block">GENITOR (PAI):</span>
-                                <span className="font-bold text-military-200 uppercase">{item.nomePai || 'NÃO INFORMADO'}</span>
+                                <span className="font-bold text-military-200 uppercase">
+                                  {item.nomePai ? (
+                                    <HighlightedText text={item.nomePai} query={searchQuery || activeSearchQuery || ''} />
+                                  ) : (
+                                    'NÃO INFORMADO'
+                                  )}
+                                </span>
                               </div>
                             </div>
 

@@ -9,6 +9,13 @@ interface WoodEntry {
   species: string;
   createdAt: number;
   selected: boolean;
+  length?: number;
+  d1?: number;
+  d2?: number;
+  d3?: number;
+  d4?: number;
+  width?: number;
+  height?: number;
 }
 
 interface CubagemBPAProps {
@@ -68,7 +75,12 @@ export default function CubagemBPA({ onBack }: CubagemBPAProps) {
       details: `${l}m | Topo: ${dTop.toFixed(1)}cm | Base: ${dBase.toFixed(1)}cm`,
       species: species || 'Não informada',
       createdAt: Date.now(),
-      selected: true
+      selected: true,
+      length: l,
+      d1: vD1,
+      d2: vD2,
+      d3: vD3,
+      d4: vD4
     };
 
     setEntries(prev => {
@@ -99,7 +111,10 @@ export default function CubagemBPA({ onBack }: CubagemBPAProps) {
       details: `${l}m x ${w}m x ${h}m`,
       species: species || 'Não informada',
       createdAt: Date.now(),
-      selected: true
+      selected: true,
+      length: l,
+      width: w,
+      height: h
     };
 
     setEntries(prev => {
@@ -276,26 +291,34 @@ export default function CubagemBPA({ onBack }: CubagemBPAProps) {
              <span className="text-[10px] font-black uppercase tracking-widest text-military-400">Resumo da Seleção ({selectedEntries.length} itens)</span>
            </div>
            
-           <div className="flex justify-between items-baseline p-3 bg-military-900/50 rounded-xl border border-military-700/50">
-              <span className="text-xs font-black uppercase tracking-widest text-military-400">Volume Total:</span>
-              <span className="text-2xl font-bold font-mono text-military-100">{totalVolume.toFixed(4)} m³</span>
+           <div className="flex flex-col p-3 bg-military-900/50 rounded-xl border border-military-700/50 gap-1.5 shadow-inner">
+              <div className="flex justify-between items-baseline">
+                 <span className="text-xs font-black uppercase tracking-widest text-military-400">Volume Total:</span>
+                 <span className="text-2xl font-bold font-mono text-military-100">{totalVolume.toFixed(4)} m³</span>
+              </div>
+              {activeTab === 'tora' && (
+                <div className="text-[8.5px] font-bold text-military-400 uppercase font-mono tracking-wider text-right border-t border-military-700/30 pt-1 mt-1 flex items-center justify-end gap-1 select-none">
+                  <Info size={10} className="text-military-450" />
+                  <span>Método de Cálculo: Smalian</span>
+                </div>
+              )}
            </div>
 
            <div className="space-y-3 pt-2">
              <div className="flex justify-between items-center px-2">
-                <span className="text-[10px] font-black uppercase tracking-tighter text-red-400">Total com Desconto (10%):</span>
-                <span className="text-lg font-bold font-mono text-red-300">{(totalVolume * 0.9).toFixed(4)} m³</span>
+                <span className="text-[10px] font-black uppercase tracking-tighter text-military-400">Total com Desconto (10%):</span>
+                <span className="text-lg font-bold font-mono text-military-300">{(totalVolume * 0.9).toFixed(4)} m³</span>
              </div>
              
              <div className="flex justify-between items-start px-2">
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black uppercase tracking-tighter text-purple-400">Total com Desconto (30%):</span>
+                  <span className="text-[10px] font-black uppercase tracking-tighter text-military-400">Total com Desconto (30%):</span>
                   <div className="flex items-center gap-1 opacity-60">
-                    <Info size={10} className="text-purple-500" />
-                    <span className="text-[7px] uppercase font-bold text-purple-500 tracking-tighter">Resol. CONAMA 411/09, ART 9º, § 7</span>
+                    <Info size={10} className="text-military-450" />
+                    <span className="text-[7px] uppercase font-bold text-military-450 tracking-tighter">Resol. CONAMA 411/09, ART 9º, § 7</span>
                   </div>
                 </div>
-                <span className="text-lg font-bold font-mono text-purple-300">{(totalVolume * 0.7).toFixed(4)} m³</span>
+                <span className="text-lg font-bold font-mono text-military-300">{(totalVolume * 0.7).toFixed(4)} m³</span>
              </div>
            </div>
         </div>
@@ -306,7 +329,7 @@ export default function CubagemBPA({ onBack }: CubagemBPAProps) {
         <div className="bg-military-700/30 px-6 py-4 flex items-center gap-2 border-b border-military-700">
            <ClipboardList className="w-4 h-4 text-military-400" />
            <h2 className="text-[10px] font-black uppercase tracking-widest text-military-300">
-             Histórico {activeTab === 'tora' ? 'de Toras (Método Smalian)' : 'de Blocos (Madeira Serrada)'}
+             Histórico {activeTab === 'tora' ? 'de Toras' : 'de Blocos (Madeira Serrada)'}
            </h2>
         </div>
         <div className="max-h-[400px] overflow-y-auto">
@@ -320,34 +343,115 @@ export default function CubagemBPA({ onBack }: CubagemBPAProps) {
                 </div>
                 <div className="divide-y divide-military-700/50">
                   {items.map((item, idx) => (
-                    <div key={item.id} className="p-4 flex justify-between items-center group transition-colors hover:bg-military-700/20">
-                      <div className="flex items-center gap-4">
+                    <div key={item.id} className="p-4 flex justify-between items-center gap-4 group transition-colors hover:bg-military-700/20">
+                      <div className="flex items-center gap-4 flex-1 min-w-0">
                         {/* Selection Checkbox */}
-                        <div className="flex items-center">
+                        <div className="flex items-center flex-shrink-0">
                           <input 
                             type="checkbox"
                             checked={item.selected}
                             onChange={() => toggleSelection(item.id)}
-                            className="w-5 h-5 rounded border-military-600 bg-military-900 text-military-500 focus:ring-military-500"
+                            className="w-5 h-5 rounded border-military-600 bg-military-900 text-military-500 focus:ring-military-500 cursor-pointer"
                           />
                         </div>
 
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-military-400 uppercase tracking-tighter">
-                              {new Date(item.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                            <span className="text-[10px] font-black text-military-300 uppercase truncate max-w-[120px] text-left">{item.species}</span>
+                        {item.type === 'tora' ? (
+                          <div className="flex flex-col text-left flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="text-[10px] font-bold text-military-400 uppercase tracking-tighter">
+                                {new Date(item.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <span className="text-xs font-black text-military-100 uppercase truncate max-w-[150px]">{item.species}</span>
+                              <span className="px-1.5 py-0.5 border border-military-700 bg-military-900/50 text-[8px] font-mono text-military-300 uppercase rounded font-bold font-mono">
+                                Tora
+                              </span>
+                            </div>
+                            
+                            {item.length !== undefined && item.d1 !== undefined ? (
+                              <div className="text-[11px] font-mono text-military-300 space-y-1 bg-military-900/30 p-2.5 rounded-xl border border-military-750/30 mt-1">
+                                <div>
+                                  <span className="font-bold text-military-450 uppercase">Comp:</span>{' '}
+                                  <span className="text-military-100 font-extrabold">{item.length.toFixed(2)}m</span>
+                                </div>
+                                <div className="grid grid-cols-12 gap-x-2 items-baseline">
+                                  <div className="col-span-4">
+                                    <span className="font-bold text-military-450">D1:</span>{' '}
+                                    <span className="text-military-100">{item.d1}cm</span>
+                                  </div>
+                                  <div className="col-span-4">
+                                    <span className="font-bold text-military-450">D2:</span>{' '}
+                                    <span className="text-military-100">{item.d2}cm</span>
+                                  </div>
+                                  <div className="col-span-4 text-right">
+                                    <span className="font-bold text-military-450 uppercase text-[9px]">Total:</span>{' '}
+                                    <span className="text-military-100 font-extrabold">{item.volume.toFixed(4)} m³</span>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-12 gap-x-2 items-baseline">
+                                  <div className="col-span-4">
+                                    <span className="font-bold text-military-450">D3:</span>{' '}
+                                    <span className="text-military-100">{item.d3}cm</span>
+                                  </div>
+                                  <div className="col-span-4">
+                                    <span className="font-bold text-military-450">D4:</span>{' '}
+                                    <span className="text-military-100">{item.d4}cm</span>
+                                  </div>
+                                  <div className="col-span-4 text-right text-[8px] text-military-500 font-bold tracking-tight">
+                                    M. Smalian
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs font-mono text-military-100 mt-1 block">{item.details}</span>
+                            )}
                           </div>
-                          <span className="text-xs font-mono text-military-100 text-left">{item.details}</span>
-                        </div>
+                        ) : (
+                          <div className="flex flex-col text-left flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="text-[10px] font-bold text-military-400 uppercase tracking-tighter">
+                                {new Date(item.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <span className="text-xs font-black text-military-100 uppercase truncate max-w-[150px]">{item.species}</span>
+                              <span className="px-1.5 py-0.5 border border-military-700 bg-military-900/50 text-[8px] font-mono text-military-300 uppercase rounded font-bold font-mono">
+                                Bloco
+                              </span>
+                            </div>
+                            
+                            {item.length !== undefined && item.width !== undefined ? (
+                              <div className="text-[11px] font-mono text-military-300 space-y-1 bg-military-900/30 p-2.5 rounded-xl border border-military-750/30 mt-1">
+                                <div>
+                                  <span className="font-bold text-military-450 uppercase">Comp:</span>{' '}
+                                  <span className="text-military-100 font-extrabold">{item.length.toFixed(2)}m</span>
+                                </div>
+                                <div className="grid grid-cols-12 gap-x-2 items-baseline">
+                                  <div className="col-span-4">
+                                    <span className="font-bold text-military-450">Larg:</span>{' '}
+                                    <span className="text-military-100">{item.width.toFixed(2)}m</span>
+                                  </div>
+                                  <div className="col-span-4">
+                                    <span className="font-bold text-military-450">Alt:</span>{' '}
+                                    <span className="text-military-100">{item.height ? item.height.toFixed(2) : ''}m</span>
+                                  </div>
+                                  <div className="col-span-4 text-right">
+                                    <span className="font-bold text-military-450 uppercase text-[9px]">Total:</span>{' '}
+                                    <span className="text-military-100 font-extrabold">{item.volume.toFixed(4)} m³</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-xs font-mono text-military-100 mt-1 block">{item.details}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
-                      <div className="flex items-center gap-4">
-                        <span className="font-mono font-bold text-military-300 whitespace-nowrap">{item.volume.toFixed(4)} m³</span>
+                      <div className="flex items-center gap-4 flex-shrink-0">
+                        {item.length === undefined && (
+                          <span className="font-mono font-bold text-military-300 whitespace-nowrap">{item.volume.toFixed(4)} m³</span>
+                        )}
                         <button 
                           onClick={() => setEntries(entries.filter(e => e.id !== item.id))} 
-                          className="text-military-500 hover:text-red-400 p-2 hover:bg-red-400/10 rounded-xl transition-all"
+                          className="text-military-500 hover:text-red-400 p-2 hover:bg-red-400/10 rounded-xl transition-all cursor-pointer"
                         >
                           <Trash2 size={16} />
                         </button>

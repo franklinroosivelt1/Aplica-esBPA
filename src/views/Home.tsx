@@ -93,10 +93,6 @@ export default function Home({ onNavigate }: HomeProps) {
           </div>
 
           <div className="relative z-10 max-w-xs mx-auto">
-            {/* Main Institutional Label */}
-            <span className="text-[9px] font-mono font-black text-military-300 tracking-[0.25em] uppercase block mb-1">
-              Polícia Militar do Acre
-            </span>
             <h1 className="text-2xl font-black tracking-tight text-white uppercase font-sans">
               APLICAÇÕES BPA
             </h1>

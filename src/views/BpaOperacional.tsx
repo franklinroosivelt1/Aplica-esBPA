@@ -401,16 +401,23 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
       const secL = parseFloat(latSec) || 0;
       let decL = degL + minL / 60 + secL / 3600;
       if (latDir === 'S') decL = -decL;
-      setLatInput(decL.toFixed(6));
+      const decLStr = decL.toFixed(6);
 
       const degG = parseFloat(lngDeg) || 0;
       const minG = parseFloat(lngMin) || 0;
       const secG = parseFloat(lngSec) || 0;
       let decG = degG + minG / 60 + secG / 3600;
       if (lngDir === 'W') decG = -decG;
-      setLngInput(decG.toFixed(6));
+      const decGStr = decG.toFixed(6);
+
+      if (latInput !== decLStr) {
+        setLatInput(decLStr);
+      }
+      if (lngInput !== decGStr) {
+        setLngInput(decGStr);
+      }
     }
-  }, [latDeg, latMin, latSec, latDir, lngDeg, lngMin, lngSec, lngDir, coordsMode]);
+  }, [latDeg, latMin, latSec, latDir, lngDeg, lngMin, lngSec, lngDir, coordsMode, latInput, lngInput]);
 
   // Synchronizers of decimal into GMS on decimal changes if current mode is Decimal
   useEffect(() => {
@@ -418,22 +425,32 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
       const parsedLat = parseFloat(latInput);
       if (!isNaN(parsedLat)) {
         const parts = decimalToGmsParts(parsedLat, true);
-        setLatDeg(parts.deg.toString());
-        setLatMin(parts.min.toString());
-        setLatSec(parts.sec.toString());
-        setLatDir(parts.dir as 'S' | 'N');
+        const degStr = parts.deg.toString();
+        const minStr = parts.min.toString();
+        const secStr = parts.sec.toString();
+        const dir = parts.dir as 'S' | 'N';
+
+        if (latDeg !== degStr) setLatDeg(degStr);
+        if (latMin !== minStr) setLatMin(minStr);
+        if (latSec !== secStr) setLatSec(secStr);
+        if (latDir !== dir) setLatDir(dir);
       }
 
       const parsedLng = parseFloat(lngInput);
       if (!isNaN(parsedLng)) {
         const parts = decimalToGmsParts(parsedLng, false);
-        setLngDeg(parts.deg.toString());
-        setLngMin(parts.min.toString());
-        setLngSec(parts.sec.toString());
-        setLngDir(parts.dir as 'W' | 'E');
+        const degStr = parts.deg.toString();
+        const minStr = parts.min.toString();
+        const secStr = parts.sec.toString();
+        const dir = parts.dir as 'W' | 'E';
+
+        if (lngDeg !== degStr) setLngDeg(degStr);
+        if (lngMin !== minStr) setLngMin(minStr);
+        if (lngSec !== secStr) setLngSec(secStr);
+        if (lngDir !== dir) setLngDir(dir);
       }
     }
-  }, [latInput, lngInput, coordsMode]);
+  }, [latInput, lngInput, coordsMode, latDeg, latMin, latSec, latDir, lngDeg, lngMin, lngSec, lngDir]);
   
   // Searched Property
   const [currentProp, setCurrentProp] = useState<any>(() => {

@@ -486,37 +486,37 @@ export default function CamStamp({ onBack }: CamStampProps) {
         </button>
       </div>
 
-      {/* Bottom Control Bar */}
-      <div className="absolute bottom-0 left-0 right-0 bg-military-800/90 backdrop-blur-md border-t border-military-700 px-6 py-4 pb-8 flex items-center justify-between">
-        {/* Gallery Preview */}
+      {/* Floating Bottom Controls (Transparent, elements only) */}
+      <div className="absolute bottom-6 left-6 right-6 pointer-events-none flex items-center justify-between z-[60]">
+        {/* Gallery Preview as a floating circular button */}
         <button 
           onClick={() => setShowGallery(true)}
-          className="w-10 h-10 rounded-lg border border-military-600 overflow-hidden active:scale-95 transition-transform bg-military-900 group"
+          className="w-12 h-12 rounded-full border border-white/20 overflow-hidden active:scale-95 transition-transform bg-black/40 backdrop-blur-md flex items-center justify-center text-white pointer-events-auto shadow-lg"
         >
           {gallery.length > 0 ? (
             <img src={gallery[0].url} alt="Galeria" className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-military-600">
+            <div className="w-full h-full flex items-center justify-center text-white/80">
               <FolderOpen size={18} />
             </div>
           )}
         </button>
 
-        {/* Capture Button */}
+        {/* Capture Button as a floating circular action button */}
         <button 
           onClick={handleCapture}
           disabled={isCapturing}
-          className="w-16 h-16 bg-white rounded-full p-1 shadow-xl disabled:opacity-50 active:scale-90 transition-transform relative"
+          className="w-16 h-16 bg-white/90 hover:bg-white rounded-full p-1 shadow-xl disabled:opacity-50 active:scale-90 transition-transform relative pointer-events-auto"
         >
-          <div className="w-full h-full rounded-full border-4 border-military-900 flex items-center justify-center">
+          <div className="w-full h-full rounded-full border border-black/10 flex items-center justify-center">
             <div className={`w-10 h-10 rounded-full ${isCapturing ? 'bg-red-500 animate-pulse' : 'bg-military-800'} transition-colors`} />
           </div>
         </button>
 
-        {/* Settings Button */}
+        {/* Settings Button as a floating circular button */}
         <button 
           onClick={() => setShowSettings(true)}
-          className="w-10 h-10 bg-military-700/50 hover:bg-military-700 rounded-lg flex items-center justify-center text-military-200 active:scale-95 transition-all"
+          className="w-12 h-12 bg-black/40 hover:bg-black/60 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white active:scale-95 transition-all pointer-events-auto shadow-lg"
         >
           <SettingsIcon className="w-5 h-5" />
         </button>
