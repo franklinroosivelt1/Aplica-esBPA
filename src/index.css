@@ -5,18 +5,19 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
-  --color-military-900: #192018;
-  --color-military-850: #222a21;
-  --color-military-800: #2c362a;
-  --color-military-750: #364233;
-  --color-military-700: #414e3e;
-  --color-military-600: #4e5d4a;
-  --color-military-500: #61725b;
-  --color-military-450: #75866f;
-  --color-military-400: #899984;
-  --color-military-300: #abc3a6;
-  --color-military-200: #cad6c7;
-  --color-military-100: #e5eae3;
+  --color-military-950: #fbfcfb;
+  --color-military-900: #f4f7f3; /* Limpo, tom claro para fundos */
+  --color-military-850: #e9ede7; /* Cinza oliva muito suave */
+  --color-military-800: #ffffff; /* Fundo de card puro ou branco */
+  --color-military-750: #e2e8e1; /* Divisores e bordas leves */
+  --color-military-700: #cbd2c9; /* Bordas um nível mais fortes */
+  --color-military-600: #7d8f7b; /* Texto secundário ou ícones desativados */
+  --color-military-500: #3c5e3c; /* Verde oliva principal acadêmico */
+  --color-military-450: #2d482d; /* Verde oliva escuro militar */
+  --color-military-400: #223321; /* Texto secundário forte, legível */
+  --color-military-300: #234723; /* Botões principais, links e títulos */
+  --color-military-200: #102410; /* Hover de botões, verde bem profundo */
+  --color-military-100: #0d140c; /* Tom quase preto para contraste supremo */
 }
 
 @layer base {

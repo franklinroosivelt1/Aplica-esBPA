@@ -787,7 +787,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0d110d] px-4 py-5 font-sans pb-28 text-white">
+    <div className="flex flex-col min-h-screen bg-military-900 px-4 py-5 font-sans pb-28 text-military-100">
       {/* Toast Alert */}
       <AnimatePresence>
         {toastMsg && (
@@ -795,7 +795,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
             initial={{ opacity: 0, y: -50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="fixed top-5 left-1/2 -translate-x-1/2 z-[999] bg-emerald-800 border border-emerald-500 text-white px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-center font-mono"
+            className="fixed top-5 left-1/2 -translate-x-1/2 z-[999] bg-emerald-600 border border-emerald-500 text-white px-5 py-2.5 rounded-full shadow-lg flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-center font-mono"
           >
             <UserCheck className="w-4 h-4 text-white animate-pulse" />
             <span>{toastMsg}</span>
@@ -807,83 +807,83 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
       <div className="flex items-center justify-between pb-4">
         <button 
           onClick={onBack}
-          className="px-3 py-1.5 bg-military-950/70 hover:bg-military-900 border border-military-850 hover:border-military-750 rounded-xl flex items-center gap-2 group transition-all text-white cursor-pointer shadow"
+          className="px-3 py-1.5 bg-military-800 hover:bg-military-850 border border-military-750 hover:border-military-700 rounded-xl flex items-center gap-2 group transition-all text-military-300 cursor-pointer shadow-sm font-semibold text-xs"
         >
-          <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform text-emerald-400" />
+          <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform text-military-500" />
           <span className="font-bold text-xs uppercase tracking-wider">Voltar</span>
         </button>
       </div>
 
       {/* Military Plate Header */}
-      <div className="w-full relative bg-gradient-to-b from-[#1b2518] to-[#121a11] border border-military-750 p-5 rounded-2xl mb-5 shadow-lg">
-        <h1 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-2 font-sans">
-          <ShieldAlert className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+      <div className="w-full relative bg-military-800 border border-military-750 p-5 rounded-2xl mb-5 shadow-sm">
+        <h1 className="text-lg font-black text-military-300 uppercase tracking-tight flex items-center gap-2 font-sans">
+          <ShieldAlert className="w-5 h-5 text-military-500 flex-shrink-0" />
           MANDADOS DE PRISÃO
         </h1>
       </div>
 
       {/* Portal Nacional BNMP – Consulta de CPF Online no CNJ */}
-      <div className="bg-[#141010]/95 border border-red-950/80 p-5 rounded-2xl mb-5 shadow relative overflow-hidden">
-        <div className="absolute top-0 right-0 bg-red-950/30 text-red-400/80 border-l border-b border-red-950/40 px-2.5 py-1 rounded-bl-xl text-[8px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-red-800/60 rounded-full" />
+      <div className="bg-red-50/50 border border-red-200/80 p-5 rounded-2xl mb-5 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 right-0 bg-red-100 text-red-700/90 border-l border-b border-red-200 px-2.5 py-1 rounded-bl-xl text-[8px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
+          <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
           Conexão Externa
         </div>
 
         <div className="flex items-start gap-3 mb-3">
-          <div className="p-2 bg-red-950/20 border border-red-950/40 rounded-xl text-red-300">
+          <div className="p-2 bg-red-100 border border-red-150 rounded-xl text-red-700">
             <ShieldAlert size={18} />
           </div>
           <div>
-            <h2 className="text-xs font-extrabold text-white/90 uppercase tracking-wider">
+            <h2 className="text-xs font-bold text-red-950 uppercase tracking-wider">
               CONSULTAR PORTAL BNMP ONLINE (CNJ)
             </h2>
-            <p className="text-[9px] text-[#bda4a4] uppercase font-mono mt-0.5 leading-tight">
+            <p className="text-[9px] text-red-700 uppercase font-mono mt-0.5 leading-tight">
               Acesso direto ao site oficial
             </p>
           </div>
         </div>
 
-        <p className="text-[10px] text-military-450 leading-relaxed mb-4 uppercase">
+        <p className="text-[10px] text-red-800 leading-relaxed mb-4 uppercase font-medium">
           Acesse o portal nacional de mandados do Conselho Nacional de Justiça para realizar pesquisas utilizando filtros de CPF, nome de foragidos ou número de processo.
         </p>
 
         <div className="space-y-3">
           <button
             onClick={handleAbrirPortal}
-            className="w-full bg-red-950/45 hover:bg-red-950/80 active:scale-[0.99] transition-all border border-red-900/30 text-red-300 font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:text-red-200"
+            className="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] transition-all text-white font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm"
           >
-            <ExternalLink size={14} className="text-red-400/80" />
+            <ExternalLink size={14} className="text-white" />
             <span>Pesquisar no Portal CNJ BNMP ↗</span>
           </button>
         </div>
 
-        <div className="mt-2.5 flex items-center justify-center gap-1 text-[8.5px] font-mono text-red-500/40 uppercase font-semibold text-center">
+        <div className="mt-2.5 flex items-center justify-center gap-1 text-[8.5px] font-mono text-red-600/70 uppercase font-semibold text-center">
           <span>portalbnmp.cnj.jus.br/#/pesquisa-peca</span>
         </div>
       </div>
 
       {/* Importador de PDF BNMP (Offline) */}
-      <div className="bg-[#121911] border border-emerald-950/80 p-4.5 rounded-2xl mb-5 shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 bg-[#1c2c19] text-emerald-400 border-l border-b border-emerald-900/50 px-2.5 py-1 rounded-bl-xl text-[8px] font-mono font-black uppercase tracking-wider flex items-center gap-1">
+      <div className="bg-military-800 border border-military-750 p-5 rounded-2xl mb-5 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 right-0 bg-emerald-100 text-emerald-800 border-l border-b border-emerald-200 px-2.5 py-1 rounded-bl-xl text-[8px] font-mono font-black uppercase tracking-wider flex items-center gap-1">
           <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
           100% OFF-LINE
         </div>
 
         <div className="flex items-start gap-3 mb-3">
-          <div className="p-2 bg-[#1b2b18] border border-emerald-800/60 rounded-xl text-emerald-400">
+          <div className="p-2 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700">
             <FileText size={18} />
           </div>
           <div>
-            <h2 className="text-xs font-extrabold text-white uppercase tracking-wider">
+            <h2 className="text-xs font-bold text-military-100 uppercase tracking-wider">
               IMPORTAR MANDADOS EM PDF (BNMP)
             </h2>
-            <p className="text-[9px] text-military-300 uppercase font-mono mt-0.5 leading-tight">
+            <p className="text-[9px] text-military-500 uppercase font-mono mt-0.5 leading-tight">
               Processamento seguro local no dispositivo
             </p>
           </div>
         </div>
 
-        <p className="text-[10px] text-military-400/90 leading-relaxed mb-4 uppercase">
+        <p className="text-[10px] text-military-600 leading-relaxed mb-4 uppercase font-medium">
           Carregue o arquivo PDF com as Certidões de Mandados de Prisão oficiais do BNMP. O App realizará a extração e inserção dos dados de forma local.
         </p>
 
@@ -901,29 +901,29 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
           <button
             type="button"
             onClick={() => document.getElementById('bnmp-pdf-picker')?.click()}
-            className="w-full bg-[#1b2518] hover:bg-[#253321] text-emerald-300 active:scale-[0.98] border border-military-750 transition-all font-black text-[10px] py-3.5 px-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-md text-center leading-tight hover:border-emerald-500/40"
+            className="w-full bg-military-500 hover:bg-military-450 text-white active:scale-[0.98] border border-military-750 transition-all font-black text-[10px] py-3.5 px-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm text-center leading-tight hover:border-military-500"
           >
-            <Database size={13} className="text-emerald-400 flex-shrink-0" />
-            <span>SELECIONAR ARQUIVO.PDF PARA BUSCAR OFF LINE</span>
+            <Database size={13} className="text-white flex-shrink-0" />
+            <span>SELECIONAR ARQUIVO.PDF PARA BUSCAR OFF-LINE</span>
           </button>
         ) : (
           <div className="space-y-2 mt-2">
-            <span className="text-[9px] font-mono font-bold text-military-450 uppercase tracking-widest block">
+            <span className="text-[9px] font-mono font-bold text-military-500 uppercase tracking-widest block">
               Documentos Anexados:
             </span>
             <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
               {attachedFiles.map((f) => (
-                <div key={f.id} className="flex items-center justify-between px-3 py-2 bg-[#0e160d] border border-emerald-950/70 rounded-xl gap-3">
+                <div key={f.id} className="flex items-center justify-between px-3 py-2 bg-military-900 border border-military-750 rounded-xl gap-3">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <FileText className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                    <span className="text-xs font-mono font-bold text-emerald-300 uppercase truncate" title={f.name}>
+                    <FileText className="w-3.5 h-3.5 text-military-500 flex-shrink-0" />
+                    <span className="text-xs font-mono font-bold text-military-400 uppercase truncate" title={f.name}>
                       {f.name}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => handleDeleteAttachedFile(f.id)}
-                    className="p-1 px-1.5 text-red-400 hover:text-red-300 hover:bg-red-950/45 rounded transition-all flex items-center justify-center cursor-pointer"
+                    className="p-1 px-1.5 text-red-600 hover:text-red-500 hover:bg-red-50 rounded transition-all flex items-center justify-center cursor-pointer"
                     title="Excluir arquivo"
                   >
                     <Trash2 size={13} />
@@ -935,7 +935,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
             <button
               type="button"
               onClick={() => document.getElementById('bnmp-pdf-picker')?.click()}
-              className="mt-2 text-center w-full block text-[9px] font-black text-emerald-400 hover:text-emerald-300 cursor-pointer uppercase tracking-wider py-1 hover:underline"
+              className="mt-2 text-center w-full block text-[9px] font-black text-military-500 hover:text-military-300 cursor-pointer uppercase tracking-wider py-1 hover:underline"
             >
               + Anexar outro arquivo PDF
             </button>
@@ -943,9 +943,9 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
         )}
 
         {isParsingPdf && (
-          <div className="flex items-center justify-center gap-2 py-3 bg-[#0a100a]/50 border border-emerald-900/30 rounded-xl mt-3 animate-pulse">
-            <div className="w-3.5 h-3.5 border border-emerald-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-[10px] text-emerald-400 font-mono font-bold uppercase tracking-wider">
+          <div className="flex items-center justify-center gap-2 py-3 bg-military-900 border border-military-750 rounded-xl mt-3 animate-pulse">
+            <div className="w-3.5 h-3.5 border border-military-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-[10px] text-military-500 font-mono font-bold uppercase tracking-wider">
               {parseProgress || "Lendo..."}
             </span>
           </div>
@@ -958,7 +958,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por Nome, Vulgo, CPF ou Nº Mandado..."
-            className="w-full bg-[#0a0f09] text-white border border-military-750 focus:border-military-500 focus:outline-none rounded-xl py-3 pl-10 pr-4 placeholder-military-450 text-xs tracking-wide uppercase font-semibold transition-all"
+            className="w-full bg-military-900 text-military-100 border border-military-700 focus:border-military-500 focus:outline-none rounded-xl py-3 pl-10 pr-4 placeholder-military-600 text-xs tracking-wide uppercase font-semibold transition-all shadow-inner"
           />
           <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-military-400" />
           {searchQuery && (
@@ -1053,16 +1053,16 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
               {filteredMandados.map((item) => {
                 const isExpanded = expandedId === item.id;
                 const cardBg = item.gravidade === 'Alta' 
-                  ? 'bg-[#161111] hover:bg-[#1f1717] border-red-950/80 transition-all font-sans' 
+                  ? 'bg-red-50 hover:bg-red-100/50 border-red-200 text-red-950 transition-all font-sans' 
                   : item.gravidade === 'Média' 
-                    ? 'bg-[#151410] hover:bg-[#1d1b15] border-amber-950/60 transition-all font-sans' 
-                    : 'bg-[#0f120f] hover:bg-[#131813] border-emerald-950/40 transition-all font-sans';
+                    ? 'bg-amber-50 hover:bg-amber-100/50 border-amber-200 text-amber-950 transition-all font-sans' 
+                    : 'bg-emerald-50/60 hover:bg-emerald-50 border-emerald-200 text-emerald-950 transition-all font-sans';
 
                 const severityBadge = item.gravidade === 'Alta'
-                  ? 'bg-red-950/40 text-red-300 border-red-900/30'
+                  ? 'bg-red-100 text-red-800 border-red-200 font-bold'
                   : item.gravidade === 'Média'
-                    ? 'bg-amber-950/40 text-amber-300 border-amber-900/20'
-                    : 'bg-emerald-950/40 text-emerald-300 border-emerald-900/20';
+                    ? 'bg-amber-100 text-amber-800 border-amber-200 font-bold'
+                    : 'bg-emerald-100 text-emerald-850 border-emerald-200 font-bold';
 
                 return (
                   <div
@@ -1072,30 +1072,30 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                   >
                     <div className="flex items-start justify-between gap-3 pr-4">
                       <div className="space-y-0.5">
-                        <span className="text-[7.5px] font-mono uppercase tracking-widest text-military-450 block font-black">
+                        <span className="text-[7.5px] font-mono uppercase tracking-widest text-military-500 block font-black">
                           BNMP: {item.numeroMandado.slice(0, 18)}...
                         </span>
-                        <h4 className="font-black text-[12px] tracking-wide text-white uppercase leading-tight">
+                        <h4 className="font-extrabold text-[12px] tracking-wide text-military-100 uppercase leading-tight">
                           <HighlightedText text={item.nome} query={searchQuery || activeSearchQuery || ''} />
                         </h4>
                         {item.alcunha && (
-                          <span className="text-[9px] text-yellow-500 font-mono font-bold uppercase block">
+                          <span className="text-[9px] text-[#865d1a] font-mono font-bold uppercase block">
                             VULGO: "<HighlightedText text={item.alcunha} query={searchQuery || activeSearchQuery || ''} />"
                           </span>
                         )}
                       </div>
 
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <span className={`px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-wider border ${severityBadge}`}>
+                        <span className={`px-1.2 py-0.5 rounded text-[7px] font-black uppercase tracking-wider border ${severityBadge}`}>
                           {item.gravidade}
                         </span>
-                        <span className="bg-black/40 text-military-300 border border-military-850 px-1 py-0.5 rounded text-[7.5px] font-mono uppercase font-semibold">
+                        <span className="bg-military-900 text-military-400 border border-military-750 px-1 py-0.5 rounded text-[7.5px] font-mono uppercase font-semibold">
                           {item.tipoPrisao}
                         </span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-x-2 mt-2 pt-2 border-t border-military-850/35 text-[9.5px]">
+                    <div className="grid grid-cols-2 gap-x-2 mt-2 pt-2 border-t border-military-750/50 text-[9.5px]">
                       <div>
                         <span className="text-[7px] font-mono text-military-450 uppercase block">MOTIVO/DELITO</span>
                         <p className="text-military-200 truncate uppercase mt-0.5 font-medium">{item.naturezaInfracao}</p>
@@ -1183,11 +1183,11 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                             </div>
 
                             {item.observacoes && (
-                              <div className="bg-[#191107] border border-orange-950/45 p-2 rounded-lg mt-1">
-                                <span className="text-[7.5px] font-mono text-orange-400 uppercase tracking-widest font-black block mb-0.5">
+                              <div className="bg-amber-50 border border-amber-200/50 p-2.5 rounded-lg mt-1 text-amber-950">
+                                <span className="text-[7.5px] font-mono text-amber-800 uppercase tracking-widest font-black block mb-0.5">
                                   ⚠️ REGISTRO ADICIONAL:
                                 </span>
-                                <p className="text-[10px] text-orange-200 leading-normal leading-relaxed uppercase">
+                                <p className="text-[10px] text-amber-900 leading-relaxed uppercase font-medium">
                                   {item.observacoes}
                                 </p>
                               </div>
@@ -1197,9 +1197,9 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                           <div className="flex items-center justify-end pt-2 border-t border-military-850">
                             <button
                               onClick={(e) => handleDeleteWarrant(item.id, e)}
-                              className="px-2.5 py-1 bg-red-950 hover:bg-red-900 border border-red-900/40 text-red-200 rounded-md text-[8px] uppercase font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                              className="px-2.5 py-1 bg-red-100 hover:bg-red-200 border border-red-200 text-red-700 rounded-md text-[8px] uppercase font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                             >
-                              <Trash2 size={10} className="text-red-400" />
+                              <Trash2 size={10} className="text-red-600" />
                               Deletar Registro
                             </button>
                           </div>
@@ -1232,12 +1232,12 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
             <div className="space-y-2 max-h-[254px] overflow-y-auto pr-1">
               {fileLinesMatched.map((match, idx) => (
-                <div key={idx} className="bg-[#17150c]/90 border border-yellow-900/30 p-3 rounded-xl space-y-1">
-                  <div className="flex items-center justify-between text-[8px] font-mono text-military-450">
+                <div key={idx} className="bg-amber-100/50 border border-amber-200/85 p-3 rounded-xl space-y-1">
+                  <div className="flex items-center justify-between text-[8px] font-mono text-military-500">
                     <span className="truncate max-w-[70%]">{match.fileName}</span>
                     <span>Pág. {match.pageNum}</span>
                   </div>
-                  <p className="text-[11px] text-yellow-100 font-sans leading-relaxed selection:bg-yellow-500/40">
+                  <p className="text-[11px] text-amber-950 font-sans leading-relaxed selection:bg-yellow-500/40 font-medium">
                     <HighlightedText text={match.lineText} query={activeSearchQuery} />
                   </p>
                 </div>
@@ -1248,10 +1248,10 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
         {/* Empty search matches integrated in the same area */}
         {activeSearchQuery && filteredMandados.length === 0 && fileLinesMatched.length === 0 && (
-          <div className="mt-5 pt-4 border-t border-military-850 text-center py-8 px-4 bg-[#121911]/20 rounded-xl">
-            <UserCheck className="w-8 h-8 text-military-600/40 mx-auto mb-2" />
+          <div className="mt-5 pt-4 border-t border-military-750 text-center py-8 px-4 bg-military-850/50 rounded-xl">
+            <UserCheck className="w-8 h-8 text-military-500/40 mx-auto mb-2" />
             <p className="text-[11px] text-military-400 font-bold uppercase tracking-wider mb-0.5">Nenhum registro encontrado</p>
-            <p className="text-[9px] text-military-500 max-w-xs mx-auto leading-normal uppercase">
+            <p className="text-[9px] text-military-600 max-w-xs mx-auto leading-normal uppercase font-medium">
               Sem resultados na pesquisa off-line. Altere os termos da busca ou carregue novas certidões de mandado.
             </p>
           </div>

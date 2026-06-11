@@ -307,7 +307,7 @@ export default function CubagemBPA({ onBack }: CubagemBPAProps) {
            <div className="space-y-3 pt-2">
              <div className="flex justify-between items-center px-2">
                 <span className="text-[10px] font-black uppercase tracking-tighter text-military-400">Total com Desconto (10%):</span>
-                <span className="text-lg font-bold font-mono text-military-300">{(totalVolume * 0.9).toFixed(4)} m³</span>
+                <span className="text-lg font-bold font-mono text-military-100">{(totalVolume * 0.9).toFixed(4)} m³</span>
              </div>
              
              <div className="flex justify-between items-start px-2">
@@ -318,7 +318,7 @@ export default function CubagemBPA({ onBack }: CubagemBPAProps) {
                     <span className="text-[7px] uppercase font-bold text-military-450 tracking-tighter">Resol. CONAMA 411/09, ART 9º, § 7</span>
                   </div>
                 </div>
-                <span className="text-lg font-bold font-mono text-military-300">{(totalVolume * 0.7).toFixed(4)} m³</span>
+                <span className="text-lg font-bold font-mono text-military-100">{(totalVolume * 0.7).toFixed(4)} m³</span>
              </div>
            </div>
         </div>
@@ -447,7 +447,7 @@ export default function CubagemBPA({ onBack }: CubagemBPAProps) {
 
                       <div className="flex items-center gap-4 flex-shrink-0">
                         {item.length === undefined && (
-                          <span className="font-mono font-bold text-military-300 whitespace-nowrap">{item.volume.toFixed(4)} m³</span>
+                          <span className="font-mono font-extrabold text-military-100 whitespace-nowrap">{item.volume.toFixed(4)} m³</span>
                         )}
                         <button 
                           onClick={() => setEntries(entries.filter(e => e.id !== item.id))} 

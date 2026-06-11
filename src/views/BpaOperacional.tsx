@@ -1055,14 +1055,14 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
             </div>
 
             {/* G.M.S / Decimal Toggle Pill Bar matching the screenshot */}
-            <div className="border border-white/60 rounded-full p-1 flex bg-[#0d120a] w-full" id="coords-mode-toggle">
+            <div className="border border-military-750 rounded-full p-1.5 flex bg-military-850 w-full" id="coords-mode-toggle">
               <button
                 type="button"
                 onClick={() => setCoordsMode('gms')}
-                className={`flex-1 py-2 rounded-full text-center text-xs font-extrabold uppercase tracking-widest transition-all ${
+                className={`flex-1 py-2 rounded-full text-center text-xs font-black uppercase tracking-widest transition-all cursor-pointer ${
                   coordsMode === 'gms'
-                    ? 'bg-[#1e261a] text-sky-400 border border-white/20 shadow-md scale-[1.01]'
-                    : 'text-[#6c8266] hover:text-military-200'
+                    ? 'bg-military-800 text-military-300 border border-military-750 shadow-sm scale-[1.01]'
+                    : 'text-military-600 hover:text-military-100'
                 }`}
               >
                 G.M.S
@@ -1070,10 +1070,10 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               <button
                 type="button"
                 onClick={() => setCoordsMode('decimal')}
-                className={`flex-1 py-2 rounded-full text-center text-xs font-extrabold uppercase tracking-widest transition-all ${
+                className={`flex-1 py-2 rounded-full text-center text-xs font-black uppercase tracking-widest transition-all cursor-pointer ${
                   coordsMode === 'decimal'
-                    ? 'bg-[#1e261a] text-[#86af75] border border-white/20 shadow-md scale-[1.01]'
-                    : 'text-[#6c8266] hover:text-[#abc3a6]'
+                    ? 'bg-military-800 text-military-300 border border-military-750 shadow-sm scale-[1.01]'
+                    : 'text-military-600 hover:text-military-100'
                 }`}
               >
                 DECIMAL
@@ -1081,8 +1081,8 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
             </div>
 
             {/* Campo de Colar Coordenada Copiada */}
-            <div className="bg-[#0f140e] border border-military-800 p-4 rounded-2xl space-y-2">
-              <label className="text-[9.5px] font-black uppercase tracking-wider text-[#abc3a6] block">
+            <div className="bg-military-800 border border-military-750 p-4.5 rounded-2xl space-y-2 shadow-sm">
+              <label className="text-[9.5px] font-black uppercase tracking-wider text-military-500 block">
                 Colar Coordenada Copiada (Qualquer Formato)
               </label>
               <div className="flex gap-2">
@@ -1091,7 +1091,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                   value={pastedCoord}
                   onChange={(e) => handlePastedInputChange(e.target.value)}
                   placeholder="Ex: -9.5842, -67.5451 ou 9° 35' 3.12'' S 67° 32' 42.36'' W"
-                  className="flex-1 bg-[#050805] text-white border border-military-700/80 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:border-yellow-500 placeholder-military-600"
+                  className="flex-1 bg-military-900 text-military-100 border border-military-700 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:border-military-500 placeholder-military-600"
                 />
                 {pastedCoord && (
                   <button
@@ -1110,30 +1110,30 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
             {/* Coordinates Fields matching of the attached photograph */}
             {coordsMode === 'gms' ? (
-              <div className="bg-[#0f140e] p-5 border-2 border-military-800 rounded-2xl space-y-4">
+              <div className="bg-military-800 p-5 border border-military-750 rounded-2xl space-y-4 shadow-sm">
                 {/* LAT ROW */}
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-black text-[#abc3a6] text-right w-11 uppercase tracking-widest font-mono">LAT:</span>
+                  <span className="text-xs font-black text-military-500 text-right w-11 uppercase tracking-widest font-mono">LAT:</span>
                   <div className="flex-1 grid grid-cols-3 gap-2">
                     <div className="flex flex-col items-center">
                       <input
                         type="number"
                         value={latDeg}
                         onChange={e => setLatDeg(e.target.value)}
-                        className="w-full bg-[#070b07] border border-[#dcd3b5]/80 hover:border-[#dcd3b5] rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-white focus:outline-none focus:border-yellow-500 transition-all shadow-inner"
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
                         placeholder="9"
                       />
-                      <span className="text-[8px] font-bold text-[#abc3a6]/60 uppercase tracking-widest mt-1.5">GRAUS</span>
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">GRAUS</span>
                     </div>
                     <div className="flex flex-col items-center">
                       <input
                         type="number"
                         value={latMin}
                         onChange={e => setLatMin(e.target.value)}
-                        className="w-full bg-[#070b07] border border-[#dcd3b5]/80 hover:border-[#dcd3b5] rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-white focus:outline-none focus:border-yellow-500 transition-all shadow-inner"
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
                         placeholder="18"
                       />
-                      <span className="text-[8px] font-bold text-[#abc3a6]/60 uppercase tracking-widest mt-1.5">MINUTOS</span>
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">MINUTOS</span>
                     </div>
                     <div className="flex flex-col items-center">
                       <input
@@ -1141,16 +1141,16 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                         step="any"
                         value={latSec}
                         onChange={e => setLatSec(e.target.value)}
-                        className="w-full bg-[#070b07] border border-[#dcd3b5]/80 hover:border-[#dcd3b5] rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-white focus:outline-none focus:border-yellow-500 transition-all shadow-inner"
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
                         placeholder="22.64"
                       />
-                      <span className="text-[8px] font-bold text-[#abc3a6]/60 uppercase tracking-widest mt-1.5">SEGUNDOS</span>
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">SEGUNDOS</span>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setLatDir(prev => prev === 'S' ? 'N' : 'S')}
-                    className="px-4 py-3 bg-black/40 border border-sky-500/80 hover:bg-sky-500/10 rounded-xl text-sky-400 hover:text-sky-300 font-black text-sm transition-all active:scale-95 w-14 flex items-center justify-center shrink-0 shadow-lg"
+                    className="px-4 py-3 bg-military-850 hover:bg-military-900 border border-military-700 rounded-xl text-military-300 font-black text-sm transition-all active:scale-[0.95] w-14 flex items-center justify-center shrink-0 shadow-sm cursor-pointer"
                   >
                     {latDir}
                   </button>
@@ -1158,27 +1158,27 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
                 {/* LONG ROW */}
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-black text-[#abc3a6] text-right w-11 uppercase tracking-widest font-mono">LONG:</span>
+                  <span className="text-xs font-black text-military-500 text-right w-11 uppercase tracking-widest font-mono">LONG:</span>
                   <div className="flex-1 grid grid-cols-3 gap-2">
                     <div className="flex flex-col items-center">
                       <input
                         type="number"
                         value={lngDeg}
                         onChange={e => setLngDeg(e.target.value)}
-                        className="w-full bg-[#070b07] border border-[#dcd3b5]/80 hover:border-[#dcd3b5] rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-white focus:outline-none focus:border-yellow-500 transition-all shadow-inner"
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
                         placeholder="68"
                       />
-                      <span className="text-[8px] font-bold text-[#abc3a6]/60 uppercase tracking-widest mt-1.5">GRAUS</span>
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">GRAUS</span>
                     </div>
                     <div className="flex flex-col items-center">
                       <input
                         type="number"
                         value={lngMin}
                         onChange={e => setLngMin(e.target.value)}
-                        className="w-full bg-[#070b07] border border-[#dcd3b5]/80 hover:border-[#dcd3b5] rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-white focus:outline-none focus:border-yellow-500 transition-all shadow-inner"
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
                         placeholder="24"
                       />
-                      <span className="text-[8px] font-bold text-[#abc3a6]/60 uppercase tracking-widest mt-1.5">MINUTOS</span>
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">MINUTOS</span>
                     </div>
                     <div className="flex flex-col items-center">
                       <input
@@ -1186,16 +1186,16 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                         step="any"
                         value={lngSec}
                         onChange={e => setLngSec(e.target.value)}
-                        className="w-full bg-[#070b07] border border-[#dcd3b5]/80 hover:border-[#dcd3b5] rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-white focus:outline-none focus:border-yellow-500 transition-all shadow-inner"
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
                         placeholder="54.92"
                       />
-                      <span className="text-[8px] font-bold text-[#abc3a6]/60 uppercase tracking-widest mt-1.5">SEGUNDOS</span>
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">SEGUNDOS</span>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setLngDir(prev => prev === 'W' ? 'E' : 'W')}
-                    className="px-4 py-3 bg-black/40 border border-sky-500/80 hover:bg-sky-500/10 rounded-xl text-sky-400 hover:text-sky-300 font-black text-sm transition-all active:scale-95 w-14 flex items-center justify-center shrink-0 shadow-lg"
+                    className="px-4 py-3 bg-military-850 hover:bg-military-900 border border-military-700 rounded-xl text-military-300 font-black text-sm transition-all active:scale-[0.95] w-14 flex items-center justify-center shrink-0 shadow-sm cursor-pointer"
                   >
                     {lngDir}
                   </button>
@@ -1204,26 +1204,26 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3.5 bg-[#0f140e] p-5 border-2 border-military-800 rounded-2xl">
+              <div className="grid grid-cols-2 gap-3.5 bg-military-800 p-5 border border-military-750 rounded-2xl shadow-sm">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-[#abc3a6]/80 uppercase tracking-widest pl-1">Latitude (Decimal)</label>
+                  <label className="text-[9px] font-black text-military-500 uppercase tracking-widest pl-1">Latitude (Decimal)</label>
                   <input 
                     type="number" 
                     step="any"
                     value={latInput}
                     onChange={e => setLatInput(e.target.value)}
-                    className="w-full bg-[#070b07] border border-military-700 rounded-xl px-3 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-yellow-500 transition-all text-center"
+                    className="w-full bg-military-900 border border-military-700 focus:border-military-500 rounded-xl px-3 py-2.5 text-xs font-mono text-military-100 focus:outline-none transition-all text-center"
                     placeholder="-9.584200"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-[#abc3a6]/80 uppercase tracking-widest pl-1">Longitude (Decimal)</label>
+                  <label className="text-[9px] font-black text-military-500 uppercase tracking-widest pl-1">Longitude (Decimal)</label>
                   <input 
                     type="number" 
                     step="any"
                     value={lngInput}
                     onChange={e => setLngInput(e.target.value)}
-                    className="w-full bg-[#070b07] border border-military-700 rounded-xl px-3 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-yellow-500 transition-all text-center"
+                    className="w-full bg-military-900 border border-military-700 focus:border-military-500 rounded-xl px-3 py-2.5 text-xs font-mono text-military-100 focus:outline-none transition-all text-center"
                     placeholder="-67.545100"
                   />
                 </div>
@@ -1390,13 +1390,13 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
         )}
 
         {activeTab === 'mapa' && (
-          <div className="flex-1 flex flex-col items-stretch bg-[#0c100a] h-full" id="mapa-car-tab">
+          <div className="flex-1 flex flex-col items-stretch bg-military-950 h-full" id="mapa-car-tab">
             {/* Header exactly matching the user's attachment */}
-            <div className="bg-[#121811] px-5 py-3 border-b border-military-800 flex items-center justify-between select-none shrink-0">
+            <div className="bg-military-850 px-5 py-3 border-b border-military-750 flex items-center justify-between select-none shrink-0">
               <span className="text-[10px] sm:text-[11.5px] font-black uppercase tracking-wider text-military-100 font-sans">
                 RELAÇÃO DE LOCALIZAÇÃO (SEU PONTO VS. LIMITES)
               </span>
-              <div className="bg-[#192b1a] text-[#0df2aa] border border-[#0df2aa]/30 px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest leading-none">
+              <div className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest leading-none">
                 SATELLITE HYBRID
               </div>
             </div>
@@ -1405,14 +1405,14 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
             <div className="flex-1 w-full bg-[#0a0f09] relative overflow-hidden flex flex-col items-stretch">
               
               {/* Layers status banner & control absolute inside canvas on top right */}
-              <div className="absolute top-4 right-4 z-10 bg-[#0f140f]/90 border border-military-850 p-2 rounded-xl shadow-xl flex items-center gap-2.5 backdrop-blur-sm">
-                <span className="text-[8px] font-black uppercase tracking-widest text-military-450 px-1 border-r border-military-800 pr-2">
+              <div className="absolute top-4 right-4 z-10 bg-military-800/95 border border-military-750 p-2 rounded-xl shadow-md flex items-center gap-2.5 backdrop-blur-sm">
+                <span className="text-[8px] font-black uppercase tracking-widest text-military-500 px-1 border-r border-military-750 pr-2">
                   Camada
                 </span>
                 <button 
                   onClick={() => setShowAlerts(!showAlerts)}
-                  className={`py-1 px-2 rounded-lg flex items-center gap-2 text-[8.5px] font-mono font-bold transition-all ${
-                    showAlerts ? 'bg-red-500/15 text-red-400 border border-red-500/30' : 'bg-[#1b251a] text-military-400'
+                  className={`py-1 px-2 rounded-lg flex items-center gap-2 text-[8.5px] font-mono font-bold transition-all cursor-pointer ${
+                    showAlerts ? 'bg-red-50 text-red-650 border border-red-200/50' : 'bg-military-900 text-military-300'
                   }`}
                   title="Alternar alertas de desmatamento"
                 >
@@ -1421,31 +1421,31 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               </div>
 
               {/* Map Title name floating on top left */}
-              <div className="absolute top-4 left-4 z-10 p-2 px-3 bg-[#0a0f0a]/85 border border-military-800 rounded-lg text-[9px] font-mono text-military-300 pointer-events-none">
-                <span className="font-extrabold uppercase text-white block">
+              <div className="absolute top-4 left-4 z-10 p-2 px-3 bg-military-800/95 border border-military-750 rounded-lg text-[9px] font-mono text-military-500 pointer-events-none shadow-sm">
+                <span className="font-extrabold uppercase text-military-100 block">
                   {currentProp.name}
                 </span>
               </div>
 
               {/* Tactile Zoom Buttons on Bottom Right (styled directly matching your image overlay) */}
-              <div className="absolute bottom-4 right-4 z-10 flex flex-col bg-[#111610]/95 border border-military-850 rounded-lg overflow-hidden shadow-2xl w-10">
+              <div className="absolute bottom-4 right-4 z-10 flex flex-col bg-military-800 border border-military-750 rounded-lg overflow-hidden shadow-md w-10">
                 <button 
                   onClick={() => setZoomLevel(prev => Math.min(6.0, prev * 1.35))}
-                  className="h-10 w-full flex items-center justify-center hover:bg-military-800 text-white transition-colors active:scale-90 border-b border-military-900"
+                  className="h-10 w-full flex items-center justify-center hover:bg-military-850 text-military-100 transition-colors active:scale-90 border-b border-military-750 cursor-pointer"
                   title="Aumentar Zoom"
                 >
-                  <Plus className="w-4 h-4 text-white" />
+                  <Plus className="w-4 h-4 text-military-300" />
                 </button>
                 <button 
                   onClick={() => setZoomLevel(prev => Math.max(0.04, prev / 1.35))}
-                  className="h-10 w-full flex items-center justify-center hover:bg-military-800 text-white transition-colors active:scale-90 border-b border-[#0f140e]"
+                  className="h-10 w-full flex items-center justify-center hover:bg-military-850 text-military-100 transition-colors active:scale-90 border-b border-military-750 cursor-pointer"
                   title="Diminuir Zoom"
                 >
-                  <Minus className="w-4 h-4 text-white" />
+                  <Minus className="w-4 h-4 text-military-300" />
                 </button>
                 <button 
                   onClick={resetMapOffset}
-                  className="h-9 w-full flex items-center justify-center hover:bg-military-850 text-military-400 hover:text-white transition-colors active:scale-90"
+                  className="h-9 w-full flex items-center justify-center hover:bg-military-850 text-military-500 hover:text-military-205 transition-colors active:scale-90 cursor-pointer"
                   title="Centralizar Coordenadas"
                 >
                   <Maximize className="w-3.5 h-3.5" />
@@ -1471,13 +1471,13 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
             </div>
 
             {/* Custom bottom legends bar exactly matching the design and photograph */}
-            <div className="bg-[#121811] border-t border-military-800 p-3.5 flex flex-row items-center justify-center gap-6 text-[9.5px] uppercase font-bold tracking-wider text-military-300 select-none shrink-0">
+            <div className="bg-military-850 border-t border-military-750 p-3.5 flex flex-row items-center justify-center gap-6 text-[9.5px] uppercase font-bold tracking-wider text-military-300 select-none shrink-0">
               <div className="flex items-center gap-2">
                 <span className="w-3.5 h-3.5 rounded-full border-[2.5px] border-[#0df2aa] bg-transparent inline-block shrink-0" />
                 <span>Limites da Área (SIGEF/CAR)</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded-full border border-white bg-[#ef4444] inline-block shrink-0" />
+                <span className="w-3.5 h-3.5 rounded-full border border-military-750 bg-[#ef4444] inline-block shrink-0" />
                 <span>Coordenada Consultada</span>
               </div>
             </div>
