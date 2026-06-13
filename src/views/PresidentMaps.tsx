@@ -22,7 +22,9 @@ import {
   ChevronUp,
   Share2,
   Save,
-  Pencil
+  Pencil,
+  RotateCcw,
+  Crosshair
 } from 'lucide-react';
 import { decimalToDMS } from '../utils/coords';
 import brandLogo from '../assets/images/batalhao_ambiental_logo_1779854041969.png';
@@ -236,6 +238,37 @@ function worldPixelToLatLng(x: number, y: number, zoom: number) {
 const BASE_LAT = -9.04312;
 const BASE_LNG = -68.65581;
 
+const ACRE_MUNICIPIOS = [
+  "Rio Branco", "Sena Madureira", "Cruzeiro do Sul", "Tarauacá", 
+  "Feijó", "Epitaciolândia", "Brasiléia", "Senador Guiomard", 
+  "Mâncio Lima", "Porto Walter", "Assis Brasil", "Plácido de Castro", "Xapuri", "Porto Acre"
+];
+
+const ACRE_MUNICIPIOS_GEO = [
+  { name: "Sena Madureira", lat: -9.06, lng: -68.66 },
+  { name: "Rio Branco", lat: -9.97, lng: -67.81 },
+  { name: "Cruzeiro do Sul", lat: -7.63, lng: -72.67 },
+  { name: "Tarauacá", lat: -8.16, lng: -70.76 },
+  { name: "Feijó", lat: -8.16, lng: -70.35 },
+  { name: "Epitaciolândia", lat: -11.02, lng: -68.74 },
+  { name: "Brasiléia", lat: -11.01, lng: -68.75 },
+  { name: "Senador Guiomard", lat: -9.90, lng: -67.73 },
+  { name: "Mâncio Lima", lat: -7.61, lng: -72.90 },
+  { name: "Porto Walter", lat: -8.27, lng: -72.74 },
+  { name: "Assis Brasil", lat: -10.94, lng: -69.57 },
+  { name: "Plácido de Castro", lat: -10.33, lng: -67.15 },
+  { name: "Xapuri", lat: -10.30, lng: -68.50 },
+  { name: "Porto Acre", lat: -9.58, lng: -67.53 },
+  { name: "Manoel Urbano", lat: -8.84, lng: -69.26 },
+  { name: "Bujari", lat: -9.82, lng: -67.95 },
+  { name: "Acrelândia", lat: -9.83, lng: -66.88 },
+  { name: "Capixaba", lat: -10.32, lng: -67.92 },
+  { name: "Santa Rosa do Purus", lat: -9.43, lng: -70.50 },
+  { name: "Jordão", lat: -9.43, lng: -71.88 },
+  { name: "Marechal Thaumaturgo", lat: -8.94, lng: -72.79 },
+  { name: "Rodrigues Alves", lat: -7.74, lng: -72.65 }
+];
+
 // Load PDF.js dynamically from CDN to render GeoPDF files offline
 const loadPdfJs = (): Promise<any> => {
   return new Promise((resolve, reject) => {
@@ -326,6 +359,40 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [deviceHeading, setDeviceHeading] = useState<number>(0);
+  const [smoothHeading, setSmoothHeading] = useState<number>(0);
+  const [showTargetReticle, setShowTargetReticle] = useState<boolean>(true);
+  const prevHeading = useRef<number>(0);
+
+  // Smooth continuous heading to avoid 359 -> 0 degree spinning/jitter
+  useEffect(() => {
+    let diff = deviceHeading - (prevHeading.current % 360);
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+    const nextHeading = prevHeading.current + diff;
+    setSmoothHeading(nextHeading);
+    prevHeading.current = nextHeading;
+  }, [deviceHeading]);
+
+  // Listener for dynamic device orientation/compass heading
+  useEffect(() => {
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      let heading = (e as any).webkitCompassHeading;
+      if (heading === undefined) {
+        if (e.alpha !== null && e.alpha !== undefined) {
+          heading = 360 - e.alpha;
+        }
+      }
+      if (heading !== undefined && heading !== null) {
+        setDeviceHeading(heading);
+      }
+    };
+
+    window.addEventListener('deviceorientation', handleOrientation);
+    return () => {
+      window.removeEventListener('deviceorientation', handleOrientation);
+    };
+  }, []);
 
   // Selected feature ballon state
   const [selectedFeature, setSelectedFeature] = useState<{
@@ -335,6 +402,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     layerName: string;
     lat: number;
     lng: number;
+    coordinates?: Array<{ lat: number; lng: number }>;
   } | null>(null);
 
   const [selectedSavedPoint, setSelectedSavedPoint] = useState<SavedPoint | null>(null);
@@ -1242,7 +1310,8 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             type: feat.type,
             layerName: layer.name,
             lat: feat.coordinates[0].lat,
-            lng: feat.coordinates[0].lng
+            lng: feat.coordinates[0].lng,
+            coordinates: feat.coordinates
           };
         }
       }
@@ -1352,7 +1421,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
   const handleWheel = (e: React.WheelEvent) => {
     const scale = e.deltaY < 0 ? 1 : -1;
-    const newZoom = Math.min(Math.max(zoom + scale, 10), 22);
+    const newZoom = Math.max(1.0, Math.min(100.0, zoom + scale * 0.5));
     setZoom(newZoom);
   };
 
@@ -1408,7 +1477,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       const dist = Math.sqrt((t1.clientX - t2.clientX) ** 2 + (t1.clientY - t2.clientY) ** 2);
       const scale = dist / touchState.current.initialDist;
       const zoomDiff = Math.log2(scale);
-      const nextZoom = Math.min(Math.max(touchState.current.initialZoom + zoomDiff, 10), 22);
+      const nextZoom = Math.max(1.0, Math.min(100.0, touchState.current.initialZoom + zoomDiff));
       setZoom(nextZoom);
 
       // Calculate Two-Finger Rotation
@@ -2149,14 +2218,42 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           id="pm-gis-canvas"
         />
 
-        {/* Discretized target reticle in center of viewport */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center">
-          {/* Small modern dot reticle with subtle circular halo */}
-          <div className="w-1.5 h-1.5 bg-blue-500/80 rounded-full shadow" />
-          <div className="absolute w-6 h-6 border border-blue-500/25 rounded-full" />
-          <div className="absolute h-3 w-[1px] bg-blue-500/25" />
-          <div className="absolute w-3 h-[1px] bg-blue-500/25" />
-        </div>
+        {/* Central tactical reticle marking the coordinate displayed at the bottom of the screen */}
+        {showTargetReticle && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none flex items-center justify-center z-20">
+            {/* Crisp, small, high-contrast classic GIS reticle (blue/white double-stroke) */}
+            <svg 
+              width="24" 
+              height="24" 
+              viewBox="0 0 100 100" 
+              className="drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.65)] select-none"
+            >
+              {/* Core central blue dot with neat white border */}
+              <circle cx="50" cy="50" r="10" fill="#3b82f6" stroke="white" strokeWidth="3" />
+              
+              {/* Outer precise target ring (small) */}
+              <circle cx="50" cy="50" r="32" stroke="#3b82f6" strokeWidth="5" fill="none" />
+              <circle cx="50" cy="50" r="32" stroke="white" strokeWidth="1.8" fill="none" />
+
+              {/* Precision crosshair tick lines */}
+              {/* Top vertical indicator */}
+              <line x1="50" y1="8" x2="50" y2="24" stroke="#3b82f6" strokeWidth="5" strokeLinecap="round" />
+              <line x1="50" y1="8" x2="50" y2="24" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+              
+              {/* Bottom vertical indicator */}
+              <line x1="50" y1="76" x2="50" y2="92" stroke="#3b82f6" strokeWidth="5" strokeLinecap="round" />
+              <line x1="50" y1="76" x2="50" y2="92" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+              
+              {/* Left horizontal indicator */}
+              <line x1="8" y1="50" x2="24" y2="50" stroke="#3b82f6" strokeWidth="5" strokeLinecap="round" />
+              <line x1="8" y1="50" x2="24" y2="50" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+              
+              {/* Right horizontal indicator */}
+              <line x1="76" y1="50" x2="92" y2="50" stroke="#3b82f6" strokeWidth="5" strokeLinecap="round" />
+              <line x1="76" y1="50" x2="92" y2="50" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </div>
+        )}
 
         {/* 3. TACTICAL SIDE CONTROLS (ZOOM, COMPASS, GPS PIN) */}
         <div 
@@ -2168,6 +2265,24 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           onClick={e => e.stopPropagation()}
         >
           <button 
+            onClick={() => setZoom(prev => Math.min(100.0, prev + 1))}
+            className="p-2.5 bg-military-800/95 border border-military-700/80 rounded-xl hover:bg-military-700 hover:text-blue-300 transition-all text-military-300 flex items-center justify-center backdrop-blur-md shadow-lg"
+            title="Aumentar Zoom"
+            id="btn-zoom-in"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+
+          <button 
+            onClick={() => setZoom(prev => Math.max(1.0, prev - 1))}
+            className="p-2.5 bg-military-800/95 border border-military-700/80 rounded-xl hover:bg-military-700 hover:text-blue-300 transition-all text-military-300 flex items-center justify-center backdrop-blur-md shadow-lg"
+            title="Diminuir Zoom"
+            id="btn-zoom-out"
+          >
+            <Minus className="w-5 h-5" />
+          </button>
+
+          <button 
             onClick={centerOnGps}
             className="p-2.5 bg-military-800/95 border border-military-700/80 rounded-xl hover:bg-military-700 hover:text-blue-300 transition-all text-blue-400 flex items-center justify-center backdrop-blur-md shadow-lg"
             title="Minha Localização do Telefone"
@@ -2177,12 +2292,16 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           </button>
 
           <button 
-            onClick={() => setRotation(0)}
-            className="p-2.5 bg-military-800/95 border border-military-700/80 rounded-xl hover:bg-military-700 hover:text-military-205 transition-all text-military-300 flex items-center justify-center backdrop-blur-md shadow-lg"
-            title="Norte"
-            id="btn-north-pm"
+            onClick={() => setShowTargetReticle(!showTargetReticle)}
+            className={`p-2.5 bg-military-800/95 border transition-all flex items-center justify-center backdrop-blur-md shadow-lg rounded-xl ${
+              showTargetReticle 
+                ? 'border-blue-500/50 text-blue-400 bg-blue-950/20' 
+                : 'border-military-700/80 text-military-300 hover:bg-military-700 hover:text-military-205'
+            }`}
+            title="Alternar Retículo de Mira"
+            id="btn-toggle-reticle"
           >
-            <Compass className="w-5 h-5 text-orange-500 transition-transform" style={{ transform: `rotate(${rotation}rad)` }} />
+            <Crosshair className="w-5 h-5" />
           </button>
         </div>
 
@@ -2319,6 +2438,204 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           );
         })()}
 
+        {/* selectedFeature Balloon (Floating on the vector feature's position) */}
+        {selectedFeature && (() => {
+          // Fallback to first point, but for LineString or Polygon we can float on centroid
+          const positionCoords = (selectedFeature.coordinates && selectedFeature.coordinates.length > 0)
+            ? averageLatLng(selectedFeature.coordinates)
+            : { lat: selectedFeature.lat, lng: selectedFeature.lng };
+
+          const screenPos = getScreenPos(positionCoords.lat, positionCoords.lng);
+          const isOffScreen = screenPos.x < 0 || screenPos.x > dimensions.width || screenPos.y < 0 || screenPos.y > dimensions.height;
+          if (isOffScreen) return null;
+
+          // Calculations
+          let featureLengthKm = 0;
+          let featureAreaHectares = 0;
+
+          if (selectedFeature.coordinates && selectedFeature.coordinates.length > 1) {
+            const coords = selectedFeature.coordinates;
+            if (selectedFeature.type === 'LineString') {
+              for (let i = 1; i < coords.length; i++) {
+                featureLengthKm += calculateHaversineDistance(coords[i-1], coords[i]);
+              }
+            } else if (selectedFeature.type === 'Polygon') {
+              // Perimeter
+              for (let i = 0; i < coords.length; i++) {
+                const next = coords[(i + 1) % coords.length];
+                featureLengthKm += calculateHaversineDistance(coords[i], next);
+              }
+              // Area
+              let areaSqKm = 0;
+              const j = coords.length;
+              for (let i = 0; i < j; i++) {
+                const p1 = coords[i];
+                const p2 = coords[(i + 1) % j];
+                const x1 = calculateHaversineDistance({ lat: center.lat, lng: p1.lng }, center) * 1000 * (p1.lng >= center.lng ? 1 : -1);
+                const y1 = calculateHaversineDistance({ lat: p1.lat, lng: center.lng }, center) * 1000 * (p1.lat >= center.lat ? 1 : -1);
+                const x2 = calculateHaversineDistance({ lat: center.lat, lng: p2.lng }, center) * 1000 * (p2.lng >= center.lng ? 1 : -1);
+                const y2 = calculateHaversineDistance({ lat: p2.lat, lng: center.lng }, center) * 1000 * (p2.lat >= center.lat ? 1 : -1);
+                areaSqKm += (x1 * y2 - x2 * y1);
+              }
+              featureAreaHectares = Math.abs(areaSqKm / 2) / 10000;
+            }
+          }
+
+          return (
+            <div 
+              style={{ 
+                left: screenPos.x, 
+                top: screenPos.y,
+              }}
+              className="absolute pointer-events-auto z-40 -translate-x-1/2 -translate-y-[105%] flex flex-col items-center select-text animate-fade-in"
+              id="selected-kml-feature-overlay"
+              onMouseDown={e => e.stopPropagation()}
+              onMouseUp={e => e.stopPropagation()}
+              onTouchStart={e => e.stopPropagation()}
+              onTouchEnd={e => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xl w-[260px] flex flex-col gap-2.5 relative text-slate-800">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
+                  <div className="flex flex-col flex-grow min-w-0">
+                    <h4 className="font-sans text-xs font-black text-slate-800 uppercase tracking-wide truncate pr-1">
+                      {selectedFeature.name || "Elemento Vetorial"}
+                    </h4>
+                    <span className="text-[7.5px] font-mono text-emerald-600 uppercase tracking-widest font-black mt-0.5 truncate">
+                      Camada: {selectedFeature.layerName || "Inserida"}
+                    </span>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedFeature(null)}
+                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+                    title="Fechar Balão"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Body / Attribute Table Details */}
+                <div className="flex flex-col gap-2 text-[10px] font-mono select-all">
+                  
+                  {/* General details based on feature type */}
+                  <div className="flex justify-between items-center bg-[#f8fafc] px-2 py-1 rounded-lg border border-slate-250/20 text-[9px] text-slate-500 font-sans font-bold">
+                    <span className="uppercase text-[7.5px]">Tipo da Feição</span>
+                    <span className="font-black text-blue-600 uppercase">
+                      {selectedFeature.type === 'Point' ? 'PONTO / MARCO' : selectedFeature.type === 'LineString' ? 'LINHA / TRAJETO' : 'POLÍGONO / ÁREA'}
+                    </span>
+                  </div>
+
+                  {/* LINESTRING SPECIFIC DETAILS: Length / Extension */}
+                  {selectedFeature.type === 'LineString' && (
+                    <>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Extensão da Linha</span>
+                        <div className="bg-[#f0f9ff] px-2.5 py-1.5 rounded-lg text-blue-700 border border-blue-100 text-xs font-black font-mono">
+                          {featureLengthKm.toFixed(3)} km
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Extensão em Metros</span>
+                        <div className="bg-[#f8fafc] px-2.5 py-1.5 rounded-lg text-slate-700 border border-slate-200 text-xs font-black font-mono">
+                          {(featureLengthKm * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* POLYGON SPECIFIC DETAILS: Area & Perimeter */}
+                  {selectedFeature.type === 'Polygon' && (
+                    <>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Área Calculada</span>
+                        <div className="bg-[#fffbeb] px-2.5 py-1.5 rounded-lg text-amber-700 border border-amber-100 text-xs font-black font-mono">
+                          {featureAreaHectares.toFixed(3)} ha
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Metros Quadrados</span>
+                        <div className="bg-[#f0f9ff] px-2.5 py-1.5 rounded-lg text-blue-700 border border-blue-100 text-xs font-black font-mono">
+                          {(featureAreaHectares * 10000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m²
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Perímetro (Extensão)</span>
+                        <div className="bg-[#f8fafc] px-2.5 py-1.5 rounded-lg text-slate-700 border border-slate-200 text-xs font-black font-mono">
+                          {featureLengthKm.toFixed(3)} km ({(featureLengthKm * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m)
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* POINT SPECIFIC DETAILS: Coordinates (GMS & Decimal) */}
+                  {selectedFeature.type === 'Point' && (
+                    <>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Graus Minutos Segundos (GMS)</span>
+                        <div className="bg-[#f0f9ff] px-2.5 py-1.5 rounded-lg text-blue-800 border border-blue-100 text-[8.5px] leading-relaxed">
+                          <div>LAT: {decimalToDMS(selectedFeature.lat, 'lat')}</div>
+                          <div>LNG: {decimalToDMS(selectedFeature.lng, 'lng')}</div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Coordenadas Decimais</span>
+                        <div className="bg-[#f8fafc] px-2 py-1 rounded-lg text-slate-600 border border-slate-200 text-[9px]">
+                          <div>LAT: {selectedFeature.lat.toFixed(6)}</div>
+                          <div>LNG: {selectedFeature.lng.toFixed(6)}</div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Feature description / Attribute table display */}
+                  {selectedFeature.description && selectedFeature.description.trim() && (
+                    <div className="flex flex-col gap-0.5 mt-0.5">
+                      <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Atributos Adicionais</span>
+                      <div 
+                        className="max-h-[85px] overflow-y-auto border border-slate-200/80 rounded-xl p-2.5 bg-[#f8fafc] text-[8.5px] leading-normal text-slate-600 select-text scrollbar-thin overflow-x-hidden"
+                        dangerouslySetInnerHTML={{ __html: selectedFeature.description }}
+                      />
+                    </div>
+                  )}
+
+                  {selectedFeature.coordinates && selectedFeature.coordinates.length > 0 && (
+                    <div className="flex justify-between items-center text-[7.5px] text-slate-400 font-black mt-1">
+                      <span>NÓS: {selectedFeature.coordinates.length} PONTOS</span>
+                      <span>CENTRO COORD: {positionCoords.lat.toFixed(4)}, {positionCoords.lng.toFixed(4)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Action */}
+                <div className="flex gap-1.5 mt-1 border-t border-slate-100 pt-2.5">
+                  <button
+                    onClick={() => {
+                      let copyText = `Elemento: ${selectedFeature.name || "Elemento Vetorial"}\nCamada: ${selectedFeature.layerName}\nTipo: ${selectedFeature.type}\nCoordenadas Centro: ${positionCoords.lat.toFixed(6)}, ${positionCoords.lng.toFixed(6)}`;
+                      if (selectedFeature.type === 'LineString') {
+                        copyText += `\nExtensão: ${featureLengthKm.toFixed(3)} km (${(featureLengthKm * 1000).toLocaleString('pt-BR')} m)`;
+                      } else if (selectedFeature.type === 'Polygon') {
+                        copyText += `\nÁrea: ${featureAreaHectares.toFixed(2)} ha / Perímetro: ${featureLengthKm.toFixed(3)} km`;
+                      }
+                      if (selectedFeature.description) {
+                        copyText += `\nAtributos: ${selectedFeature.description.replace(/<[^>]*>/g, ' ').trim()}`;
+                      }
+                      navigator.clipboard.writeText(copyText);
+                      showTemporaryStatus("Atributos copiados com sucesso!");
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-[10px] font-mono text-white font-extrabold uppercase tracking-widest transition-all"
+                  >
+                    Copiar Atributos
+                  </button>
+                </div>
+              </div>
+
+              {/* Speech pointer */}
+              <div className="w-3 h-3 bg-white border-r border-b border-slate-200/80 rotate-45 -translate-y-1.5 shadow" />
+            </div>
+          );
+        })()}
+
         {/* selectedDistance Balloon (Floating on the trajectory's center position) */}
         {selectedDistance && (() => {
           const centroid = averageLatLng(selectedDistance.points);
@@ -2340,18 +2657,18 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               onTouchEnd={e => e.stopPropagation()}
               onClick={e => e.stopPropagation()}
             >
-              <div className="bg-military-900 border border-military-600 rounded-xl p-3.5 shadow-xl w-[250px] flex flex-col gap-2 relative text-military-100">
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xl w-[250px] flex flex-col gap-2.5 relative text-slate-800">
                 {/* Header */}
-                <div className="flex items-start justify-between gap-2 border-b border-military-700/60 pb-1.5">
-                  <div className="flex flex-col">
-                    <h4 className="font-sans text-xs font-bold text-military-100 uppercase tracking-wide truncate max-w-[200px]">
+                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
+                  <div className="flex flex-col animate-fade-in">
+                    <h4 className="font-sans text-xs font-black text-slate-800 uppercase tracking-wide truncate max-w-[190px]">
                       {selectedDistance.name || "Sem Nome"}
                     </h4>
-                    <span className="text-[7.5px] font-mono text-military-400 uppercase tracking-widest mt-0.5">Dispositivo Medidor de Linhas</span>
+                    <span className="text-[7.5px] font-mono text-slate-400 uppercase tracking-widest font-black mt-0.5">Dispositivo Medidor de Linhas</span>
                   </div>
                   <button 
                     onClick={() => setSelectedDistance(null)}
-                    className="p-1 rounded-md text-military-400 hover:text-military-100 hover:bg-military-800 transition-colors shrink-0"
+                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
                     title="Fechar Balão"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -2359,24 +2676,24 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 </div>
                 
                 {/* Body Details */}
-                <div className="flex flex-col gap-1.5 text-[10px] font-mono select-all">
+                <div className="flex flex-col gap-2 text-[10px] font-mono select-all">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Distância Medida</span>
-                    <div className="bg-black/60 px-2 py-1 rounded text-emerald-400 border border-military-800/60 text-xs font-black font-mono">
+                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Distância Medida</span>
+                    <div className="bg-[#ecfdf5] px-2.5 py-1.5 rounded-lg text-emerald-700 border border-emerald-100 text-xs font-black font-mono">
                       {selectedDistance.distance.toFixed(2)} km
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Metros</span>
-                    <div className="bg-black/60 px-2 py-1 rounded text-military-205 border border-military-800/60 text-[9px]">
+                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Metros</span>
+                    <div className="bg-[#f0f9ff] px-2.5 py-1.5 rounded-lg text-blue-700 border border-blue-100 text-xs font-black font-mono">
                       {(selectedDistance.distance * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Quantidade de Nós / Pontos</span>
-                    <div className="bg-black/60 px-2 py-1 rounded text-military-205 border border-military-800/60 text-[9px]">
+                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Quantidade de Nós / Pontos</span>
+                    <div className="bg-[#f8fafc] px-2.5 py-1.5 rounded-lg text-slate-700 border border-slate-200 text-xs font-black font-mono">
                       {selectedDistance.points.length} pontos
                     </div>
                   </div>
@@ -2390,7 +2707,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       navigator.clipboard.writeText(text);
                       showTemporaryStatus("Informações de trajeto copiadas!");
                     }}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] font-mono text-white font-extrabold uppercase tracking-widest transition-all"
+                    className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-[10px] font-mono text-white font-extrabold uppercase tracking-widest transition-all"
                   >
                     Copiar Dados
                   </button>
@@ -2398,7 +2715,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               </div>
 
               {/* Speech pointer */}
-              <div className="w-3 h-3 bg-military-900 border-r border-b border-military-600 rotate-45 -translate-y-1.5 shadow" />
+              <div className="w-3 h-3 bg-white border-r border-b border-slate-200/80 rotate-45 -translate-y-1.5 shadow" />
             </div>
           );
         })()}
@@ -2424,18 +2741,18 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               onTouchEnd={e => e.stopPropagation()}
               onClick={e => e.stopPropagation()}
             >
-              <div className="bg-military-900 border border-military-600 rounded-xl p-3.5 shadow-xl w-[250px] flex flex-col gap-2 relative text-military-100">
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xl w-[250px] flex flex-col gap-2.5 relative text-slate-800">
                 {/* Header */}
-                <div className="flex items-start justify-between gap-2 border-b border-military-700/60 pb-1.5">
-                  <div className="flex flex-col">
-                    <h4 className="font-sans text-xs font-bold text-military-100 uppercase tracking-wide truncate max-w-[200px]">
+                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
+                  <div className="flex flex-col animate-fade-in">
+                    <h4 className="font-sans text-xs font-black text-slate-800 uppercase tracking-wide truncate max-w-[190px]">
                       {selectedArea.name || "Sem Nome"}
                     </h4>
-                    <span className="text-[7.5px] font-mono text-military-400 uppercase tracking-widest mt-0.5">Dispositivo Medidor de Polígonos</span>
+                    <span className="text-[7.5px] font-mono text-slate-400 uppercase tracking-widest font-black mt-0.5">Dispositivo Medidor de Polígonos</span>
                   </div>
                   <button 
                     onClick={() => setSelectedArea(null)}
-                    className="p-1 rounded-md text-military-400 hover:text-military-100 hover:bg-military-800 transition-colors shrink-0"
+                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
                     title="Fechar Balão"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -2443,24 +2760,24 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 </div>
                 
                 {/* Body Details */}
-                <div className="flex flex-col gap-1.5 text-[10px] font-mono select-all">
+                <div className="flex flex-col gap-2 text-[10px] font-mono select-all">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Área Calculada</span>
-                    <div className="bg-black/60 px-2 py-1 rounded text-yellow-300 border border-military-800/60 text-xs font-black font-mono">
+                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Área Calculada</span>
+                    <div className="bg-[#fffbeb] px-2.5 py-1.5 rounded-lg text-amber-700 border border-amber-100 text-xs font-black font-mono">
                       {selectedArea.area.toFixed(2)} ha
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Metros Quadrados</span>
-                    <div className="bg-black/60 px-2 py-1 rounded text-military-205 border border-military-800/60 text-[9px]">
+                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Metros Quadrados</span>
+                    <div className="bg-[#f0f9ff] px-2.5 py-1.5 rounded-lg text-blue-700 border border-blue-100 text-xs font-black font-mono">
                       {(selectedArea.area * 10000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m²
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-military-450 uppercase font-black tracking-wider">Quantidade de Vértices</span>
-                    <div className="bg-black/60 px-2 py-1 rounded text-military-205 border border-military-800/60 text-[9px]">
+                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Quantidade de Vértices</span>
+                    <div className="bg-[#f8fafc] px-2.5 py-1.5 rounded-lg text-slate-700 border border-slate-200 text-xs font-black font-mono">
                       {selectedArea.points.length} vertices
                     </div>
                   </div>
@@ -2474,7 +2791,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       navigator.clipboard.writeText(text);
                       showTemporaryStatus("Informações de área copiadas!");
                     }}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded bg-blue-600 hover:bg-blue-500 text-[10px] font-mono text-white font-extrabold uppercase tracking-widest transition-all"
+                    className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-[10px] font-mono text-white font-extrabold uppercase tracking-widest transition-all"
                   >
                     Copiar Dados
                   </button>
@@ -2482,7 +2799,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               </div>
 
               {/* Speech pointer */}
-              <div className="w-3 h-3 bg-military-900 border-r border-b border-military-600 rotate-45 -translate-y-1.5 shadow" />
+              <div className="w-3 h-3 bg-white border-r border-b border-slate-200/80 rotate-45 -translate-y-1.5 shadow" />
             </div>
           );
         })()}
@@ -2522,9 +2839,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 </span>
               </div>
               
-              <div className="flex flex-col text-right">
-                <span className="text-[9px] text-military-400 uppercase">Resultado Total</span>
-                <span className="font-bold text-blue-300">
+              <div className="flex flex-col text-right justify-center">
+                <span className="text-[10px] text-amber-400 uppercase tracking-widest font-black">Resultado Total</span>
+                <span className="font-extrabold text-emerald-400 text-2xl tracking-tight leading-tight mt-0.5 drop-shadow-md">
                   {measuringMode === 'measure_distance' ? (() => {
                     let total = 0;
                     for (let i = 1; i < measurePoints.length; i++) {
@@ -2532,7 +2849,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     }
                     return `${total.toFixed(2)} km`;
                   })() : (() => {
-                    if (areaPoints.length < 3) return 'Vértices insuficientes';
+                    if (areaPoints.length < 3) return 'Poucos Vértices';
                     let areaSqKm = 0;
                     const j = areaPoints.length;
                     for (let i = 0; i < j; i++) {
@@ -2554,7 +2871,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               Clique em múltiplos pontos na tela do mapa para desenhar o traçado tático.
             </p>
 
-            <div className="flex gap-1.5 mt-1">
+            <div className="flex justify-center gap-4 mt-2">
               <button
                 onClick={() => {
                   if (measuringMode === 'measure_distance') {
@@ -2573,10 +2890,11 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     }
                   }
                 }}
-                className="flex-1 py-1.5 px-2 rounded bg-military-800 border border-military-700 hover:bg-military-750 text-[9px] font-bold text-military-202 hover:text-white transition-all uppercase"
-                title="Apagar ponto a ponto de trás para frente"
+                className="w-11 h-9 flex items-center justify-center rounded-xl bg-amber-150 hover:bg-amber-200 border border-amber-400 text-amber-950 transition-all active:scale-95 shadow-sm cursor-pointer"
+                title="Desfazer Último Ponto"
+                type="button"
               >
-                Desfazer Ponto
+                <RotateCcw className="w-4 h-4" />
               </button>
               
               <button
@@ -2633,10 +2951,11 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     showTemporaryStatus("Medição de área salva!");
                   }
                 }}
-                className="flex-1 py-1.5 px-2 rounded bg-emerald-600 hover:bg-emerald-500 text-[9px] font-bold text-white transition-all uppercase"
-                title="Salvar esta medição"
+                className="w-11 h-9 flex items-center justify-center rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all active:scale-95 shadow-sm cursor-pointer"
+                title="Salvar Medição"
+                type="button"
               >
-                Salvar
+                <Save className="w-4 h-4" />
               </button>
 
               <button
@@ -2645,9 +2964,11 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   setMeasurePoints([]);
                   setAreaPoints([]);
                 }}
-                className="flex-grow py-1.5 px-2 rounded bg-blue-600 hover:bg-blue-500 text-[9px] font-bold text-white transition-all uppercase"
+                className="w-11 h-9 flex items-center justify-center rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition-all active:scale-95 shadow-sm cursor-pointer"
+                title="Concluir Medição"
+                type="button"
               >
-                Concluir
+                <Check className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -2656,7 +2977,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         {/* 4f. ADICIONAR PONTO BOTTOM COORD PANEL */}
         {measuringMode === 'add_point' && (
           <div 
-            className="absolute left-4 right-4 bottom-4 z-40 bg-military-900/98 border border-military-700 p-4 rounded-2xl text-white font-sans backdrop-blur-md shadow-2xl flex flex-col gap-3"
+            className="absolute left-4 right-4 bottom-4 z-40 bg-military-900/98 border border-military-700 p-2.5 px-3 rounded-xl text-white font-sans backdrop-blur-md shadow-xl flex flex-col gap-2"
             onMouseDown={e => e.stopPropagation()}
             onMouseUp={e => e.stopPropagation()}
             onTouchStart={e => e.stopPropagation()}
@@ -2665,11 +2986,11 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           >
             
             {/* Header section with instructions according to Screenshot 2 */}
-            <div className="flex items-center justify-between border-b border-military-800 pb-2">
-              <div className="flex items-center gap-2">
-                <Navigation className="w-3.5 h-3.5 text-blue-400 rotate-45 shrink-0" />
-                <span className="text-[9.5px] font-bold tracking-wider uppercase text-military-100">
-                  {editingPointId ? 'EDITAR MARCADOR EXISTENTE' : 'ARRASTE O MAPA OU MANIPULE AS COORDENADAS'}
+            <div className="flex items-center justify-between border-b border-military-800 pb-1.5">
+              <div className="flex items-center gap-1.5">
+                <Navigation className="w-3 h-3 text-blue-400 rotate-45 shrink-0" />
+                <span className="text-[8.5px] font-black tracking-wider uppercase text-military-100">
+                  {editingPointId ? 'EDITAR MARCADOR' : 'ADICIONAR PONTO TÁTICO'}
                 </span>
               </div>
               <button 
@@ -2678,29 +2999,29 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   setEditingPointId(null);
                   setPointName('');
                 }}
-                className="p-1 rounded-lg bg-military-850 hover:bg-military-800 border border-military-750 text-military-400 hover:text-white transition-colors"
+                className="p-0.5 rounded bg-military-850 hover:bg-military-800 border border-military-750 text-military-400 hover:text-white transition-colors"
                 title="Fechar Painel"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3 h-3" />
               </button>
             </div>
 
             {/* Row 1: Name entry field & action buttons configured perfectly */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <div className="relative flex-grow">
                 <input
                   type="text"
                   placeholder="Nome do Ponto"
                   value={pointName}
                   onChange={(e) => setPointName(e.target.value)}
-                  className="w-full pl-3 pr-10 py-2 rounded-xl bg-military-950 border border-military-800 hover:border-military-700 focus:border-blue-500 text-xs font-mono placeholder-military-450 text-military-100 uppercase tracking-wide focus:outline-none transition-all"
+                  className="w-full pl-2.5 pr-8 py-1.5 rounded-lg bg-military-950 border border-military-800 hover:border-military-700 focus:border-blue-500 text-[10.5px] font-mono placeholder-military-450 text-military-100 uppercase tracking-wide focus:outline-none transition-all"
                 />
                 {pointName && (
                   <button
                     onClick={() => setPointName('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-military-800/80 hover:bg-military-700 flex items-center justify-center text-military-400 transition-colors"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-4.5 h-4.5 rounded-full bg-military-800/80 hover:bg-military-700 flex items-center justify-center text-military-400 transition-colors"
                   >
-                    <X className="w-3 h-3" />
+                    <X className="w-2.5 h-2.5" />
                   </button>
                 )}
               </div>
@@ -2746,24 +3067,24 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   setPointName('');
                   setMeasuringMode('none');
                 }}
-                className="p-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-lg shadow-emerald-950/20 shrink-0"
+                className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-md shrink-0"
                 title="Salvar Ponto Tático"
               >
-                <Save className="w-5 h-5" />
+                <Save className="w-4 h-4" />
               </button>
             </div>
 
             {/* Row 2: Tabs for input format selectors */}
-            <div className="grid grid-cols-2 bg-military-950 border border-military-850 rounded-xl p-0.5 text-center font-mono text-[9px] font-black uppercase">
+            <div className="grid grid-cols-2 bg-military-950 border border-military-850 rounded-lg p-0.5 text-center font-mono text-[8px] font-black uppercase">
               <button
                 onClick={() => setPointFormat('DMS')}
-                className={`py-1 rounded-lg transition-all ${pointFormat === 'DMS' ? 'bg-military-800 border border-military-700 text-blue-400 font-extrabold' : 'text-military-400 hover:text-military-205'}`}
+                className={`py-0.5 rounded transition-all ${pointFormat === 'DMS' ? 'bg-military-800 border border-military-700 text-blue-400 font-extrabold' : 'text-military-400 hover:text-military-205'}`}
               >
                 G.M.S
               </button>
               <button
                 onClick={() => setPointFormat('DEC')}
-                className={`py-1 rounded-lg transition-all ${pointFormat === 'DEC' ? 'bg-military-800 border border-military-700 text-blue-400 font-extrabold' : 'text-military-400 hover:text-military-205'}`}
+                className={`py-0.5 rounded transition-all ${pointFormat === 'DEC' ? 'bg-military-800 border border-military-700 text-blue-400 font-extrabold' : 'text-military-400 hover:text-military-205'}`}
               >
                 DECIMAL
               </button>
@@ -3066,9 +3387,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                             key={m.id}
                             className={`flex flex-col border p-3 rounded-xl transition-all ${activeMapId === m.id ? 'border-blue-500 bg-blue-900/15 shadow-md shadow-blue-500/5' : 'border-military-750 bg-military-850/60 hover:border-military-600'}`}
                           >
-                            {/* Nome do mapa: Letreiro Digital contínuo */}
-                            <div className="bg-black/40 border border-military-800 rounded px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2.5">
-                              <div className="inline-block animate-[marquee_18s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11px] font-black uppercase tracking-widest text-emerald-400 pr-12">
+                            {/* Nome do mapa: Letreiro Digital contínuo com destaque discreto */}
+                            <div className="bg-[#f1f5f9] border border-slate-200/60 rounded-lg px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2.5">
+                              <div className="inline-block animate-[marquee_18s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11.5px] font-black uppercase tracking-normal text-slate-800 pr-12">
                                 {m.name} &nbsp;&bull;&nbsp; {m.name} &nbsp;&bull;&nbsp; {m.name}
                               </div>
                             </div>
@@ -3176,9 +3497,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                             key={k.id}
                             className="flex flex-col border border-military-750 bg-military-850/60 hover:border-military-600 p-3 rounded-xl transition-all"
                           >
-                            {/* Nome com letreiro eletrônico */}
-                            <div className="bg-black/40 border border-military-800 rounded px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2.5">
-                              <div className="inline-block animate-[marquee_18s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11px] font-black uppercase tracking-widest text-blue-400 pr-12">
+                            {/* Nome com letreiro eletrônico com destaque discreto */}
+                            <div className="bg-[#f0fdf4] border border-emerald-200/60 rounded-lg px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2.5">
+                              <div className="inline-block animate-[marquee_18s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11.5px] font-black uppercase tracking-normal text-slate-800 pr-12">
                                 {k.name} &nbsp;&bull;&nbsp; {k.name} &nbsp;&bull;&nbsp; {k.name}
                               </div>
                             </div>
@@ -3287,9 +3608,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           setIsMenuOpen(false); // Close slider to let user click on canvas
                           showTemporaryStatus("Modo Medição de Distância Ativo. Clique no mapa para adicionar pontos.");
                         }}
-                        className="w-full flex items-center justify-center gap-2 border border-dashed border-blue-500 bg-blue-900/10 hover:bg-blue-900/20 hover:border-blue-400 transition-all p-3 rounded-lg text-blue-200 cursor-pointer"
+                        className="w-full flex items-center justify-center gap-2 border border-dashed border-military-650 hover:border-blue-500 hover:bg-military-800/30 transition-all p-3 rounded-lg text-military-205 cursor-pointer"
                       >
-                        <Plus className="w-4 h-4 text-blue-400 shrink-0" />
+                        <Plus className="w-4 h-4 text-blue-500 shrink-0" />
                         <span className="font-mono text-[11px] font-bold uppercase tracking-wider">Medir Nova Distância</span>
                       </button>
 
@@ -3465,9 +3786,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           setIsMenuOpen(false); // Close slider to let user click on canvas
                           showTemporaryStatus("Modo Medição de Área Ativo. Clique em 3 ou mais pontos no mapa.");
                         }}
-                        className="w-full flex items-center justify-center gap-2 border border-dashed border-yellow-500 bg-yellow-950/10 hover:bg-yellow-950/20 hover:border-yellow-400 transition-all p-3 rounded-lg text-yellow-200 cursor-pointer"
+                        className="w-full flex items-center justify-center gap-2 border border-dashed border-military-650 hover:border-yellow-600 hover:bg-military-800/30 transition-all p-3 rounded-lg text-military-205 cursor-pointer"
                       >
-                        <Plus className="w-4 h-4 text-yellow-400 shrink-0" />
+                        <Plus className="w-4 h-4 text-yellow-600 shrink-0" />
                         <span className="font-mono text-[11px] font-bold uppercase tracking-wider">Calcular Nova Área</span>
                       </button>
 
@@ -3625,16 +3946,6 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 </span>
               </div>
 
-              {/* Export to KML Button mimicking Screenshot 3 */}
-              <button
-                onClick={handleExportKml}
-                className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 bg-military-950 border border-military-750 hover:border-emerald-500 hover:text-emerald-300 rounded-xl text-military-205 py-2 px-3 text-xs font-mono font-black uppercase tracking-wider transition-all"
-                title="Download de todos os pontos táticos salvos formato KML"
-              >
-                <Share2 className="w-4 h-4 text-emerald-400 animate-pulse" />
-                EXPORTAR PARA KML
-              </button>
-
               {/* Saved points list layout resembling Screenshot 3 */}
               <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                 {savedPoints.length === 0 ? (
@@ -3647,27 +3958,33 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   savedPoints.map(pt => (
                     <div 
                       key={pt.id} 
-                      className={`flex flex-col border rounded-xl p-3 transition-all ${editingPointId === pt.id ? 'border-amber-500 bg-amber-950/10' : 'border-military-750 bg-military-850/40 hover:border-military-600'}`}
+                      className={`flex flex-col border rounded-xl p-3 transition-all ${editingPointId === pt.id ? 'border-amber-500 bg-amber-950/10' : 'border-military-750 bg-military-800 hover:border-military-500 hover:shadow-sm'}`}
                     >
                       {/* Base Point details */}
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5 truncate max-w-[70%]">
-                          <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 shadow-lg shadow-red-500/30 animate-pulse" />
+                        <div className="flex items-center gap-3 truncate max-w-[75%]">
+                          {/* Modern Left Icon Badge styled specifically like a high-end GPS device */}
+                          <div className="w-9 h-9 rounded-xl bg-military-900 border border-military-750 flex items-center justify-center text-military-300 shrink-0">
+                            <MapPin className="w-4 h-4 text-military-300 fill-military-300/10" />
+                          </div>
+                          
                           <div className="flex flex-col truncate">
-                            <span className="font-sans text-[11px] uppercase font-black text-military-100 truncate">
+                            <span className="font-sans text-[11px] uppercase font-black text-military-100 tracking-wide truncate">
                               {pt.name}
                             </span>
-                            <span className="font-mono text-[8.5px] text-military-450 mt-0.5">
-                              Lat: {decimalToDMS(pt.lat, 'lat')}
-                            </span>
-                            <span className="font-mono text-[8.5px] text-military-450">
-                              Lon: {decimalToDMS(pt.lng, 'lng')}
-                            </span>
+                            <div className="flex items-center gap-1.5 mt-0.5 font-mono text-[8.5px] text-military-450">
+                              <span className="bg-military-900 border border-military-750 px-1 py-0.2 rounded text-[7.5px] font-black text-military-400 uppercase">Lat</span>
+                              <span>{decimalToDMS(pt.lat, 'lat')}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5 font-mono text-[8.5px] text-military-450">
+                              <span className="bg-military-900 border border-military-750 px-1 py-0.2 rounded text-[7.5px] font-black text-military-400 uppercase">Long</span>
+                              <span>{decimalToDMS(pt.lng, 'lng')}</span>
+                            </div>
                           </div>
                         </div>
 
                         {/* Fast Fly To and Expansion Controls */}
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
                           {/* Centrar (IR) Pill Badge */}
                           <button
                             onClick={() => {
@@ -3676,7 +3993,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                               setIsMenuOpen(false); // Close slider to let user view
                               showTemporaryStatus(`Centrado em: ${pt.name}`);
                             }}
-                            className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white font-mono text-[9.5px] font-black rounded-lg uppercase tracking-wider transition-all"
+                            className="px-2.5 py-1 bg-military-900 border border-military-750 hover:bg-blue-600 hover:text-white hover:border-blue-600 text-military-350 text-[9px] font-black rounded-lg uppercase tracking-wider transition-all cursor-pointer"
                             title="Ir ao local"
                           >
                             Ir
@@ -3685,7 +4002,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           {/* Options Hamburger */}
                           <button
                             onClick={() => setExpandedPointMenuId(expandedPointMenuId === pt.id ? null : pt.id)}
-                            className={`p-1.5 rounded-lg border border-transparent transition-all ${expandedPointMenuId === pt.id ? 'bg-military-800 text-military-100 border-military-600' : 'text-military-400 hover:text-military-200 hover:bg-military-850'}`}
+                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${expandedPointMenuId === pt.id ? 'bg-military-950 text-military-100 border-military-600' : 'text-military-400 hover:text-military-200 hover:bg-military-900 border-transparent'}`}
                             title="Ações do Ponto"
                           >
                             <Menu className="w-3.5 h-3.5" />

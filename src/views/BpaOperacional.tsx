@@ -107,6 +107,12 @@ const ACRE_PRESETS = [
   }
 ];
 
+const ACRE_MUNICIPIOS = [
+  "Rio Branco", "Sena Madureira", "Cruzeiro do Sul", "Tarauacá", 
+  "Feijó", "Epitaciolândia", "Brasiléia", "Senador Guiomard", 
+  "Mâncio Lima", "Porto Walter", "Assis Brasil", "Plácido de Castro", "Xapuri", "Porto Acre"
+];
+
 // --- INTERACTIVE MAP CONSTANTS AND POLYGON GENERATOR ---
 function getPropertyPolygon(centerLat: number, centerLng: number, area: number) {
   const seed = Math.abs(Math.sin(centerLat) * 99 + Math.cos(centerLng) * 33);
@@ -153,11 +159,20 @@ function getDeforestationAlerts(centerLat: number, centerLng: number, radius: nu
 }
 
 // --- DYNAMIC CONSISTENT PROPS GENERATOR ---
-function getOrGenerateProperty(lat: number, lng: number) {
+function getOrGenerateProperty(lat: number, lng: number, index = 0) {
   const preset = ACRE_PRESETS.find(p => Math.abs(p.lat - lat) < 0.03 && Math.abs(p.lng - lng) < 0.03);
-  if (preset) return preset;
+  if (preset && index === 0) {
+    // Inject custom alert orgao/tipo/data and embargoOrgao to preset if not present
+    return {
+      ...preset,
+      alertOrgao: preset.riskLevel !== "BAIXO" ? "IBAMA / PRODES" : "Nenhum Órgão (Sem pendências)",
+      alertTipo: preset.riskLevel !== "BAIXO" ? "Desmatamento sob Alerta" : "Área de Preservação Íntegra",
+      alertData: preset.riskLevel !== "BAIXO" ? "14/05/2026" : "-",
+      embargoOrgao: preset.embargo.includes("IMAC") ? "IMAC (Estadual)" : "Não consta",
+    };
+  }
 
-  const coordHash = Math.abs(Math.sin(lat) * 1234.56 + Math.cos(lng) * 7890.12);
+  const coordHash = Math.abs(Math.sin(lat) * 1234.56 + Math.cos(lng) * 7890.12) + index * 42.17;
   const seed = (coordHash - Math.floor(coordHash));
 
   const prefixes = ["Fazenda", "Estância", "Seringal", "Chácara", "Gleba", "Sítio"];
@@ -167,9 +182,9 @@ function getOrGenerateProperty(lat: number, lng: number) {
   const prefix = prefixes[Math.floor(seed * prefixes.length)];
   const name1 = sub1[Math.floor((seed * 17) % sub1.length)];
   const name2 = (seed > 0.45) ? " " + sub2[Math.floor((seed * 31) % sub2.length)] : "";
-  const name = `${prefix} ${name1}${name2}`;
+  const name = `${prefix} ${name1}${name2}` + (index > 0 ? ` (Lote ${index + 1})` : "");
 
-  const municipios = ["Rio Branco", "Sena Madureira", "Cruzeiro do Sul", "Tarauacá", "Feijó", "Epitaciolândia", "Brasiléia", "Senador Guiomard", "Mâncio Lima", "Porto Walter", "Assis Brasil", "Plácido de Castro", "Xapuri"];
+  const municipios = ACRE_MUNICIPIOS;
   const municipio = municipios[Math.floor(seed * municipios.length)];
 
   const area = Math.round((60 + seed * 850) * 10) / 10;
@@ -181,21 +196,45 @@ function getOrGenerateProperty(lat: number, lng: number) {
   const appPreserved = isCompliant || seed > 0.6;
 
   let status: "ATIVO" | "SUSPENSO" | "PENDENTE" = "ATIVO";
-  let prodesAlert = "Nenhum Alerta Ativo";
+  let prodesAlert = "Nenhum Alerta Ativo nos últimos 12 meses.";
   let embargo = "Sem embargos registrados";
   let riskLevel: "BAIXO" | "MÉDIO" | "ALTO" = "BAIXO";
+
+  let alertOrgao = "Não consta";
+  let alertTipo = "Nenhum";
+  let alertData = "Sem registros";
+  let embargoOrgao = "Não consta";
 
   if (!isCompliant) {
     status = seed > 0.18 ? "PENDENTE" : "SUSPENSO";
     riskLevel = seed > 0.18 ? "MÉDIO" : "ALTO";
-    prodesAlert = `Alerta DETER (Maio/2026): Supressão florestal contínua detectada no polígono rural de aproximadamente ${Math.round(area * 0.07)} ha.`;
+    prodesAlert = `Supressão florestal contínua detectada no polígono rural de aproximadamente ${Math.round(area * 0.07)} ha.`;
+    alertOrgao = seed > 0.18 ? "INPE / DETER" : "IBAMA / PRODES";
+    alertTipo = "Desmatamento sob Alerta (Corte Raso)";
+    alertData = "14/05/2026";
     if (seed < 0.15) {
-      embargo = "Área embargada pelo IMAC/IBAMA por infração ambiental e corte de espécies nativas protegidas.";
+      embargo = "Área embargada por infração ambiental de corte raso e queima de espécies nativas protegidas.";
+      embargoOrgao = "IMAC / IBAMA";
+    } else {
+      embargo = "Embargo preventivo por suposta degradação de faixa marginal (APP).";
+      embargoOrgao = "IMAC (Estadual)";
     }
   } else if (seed < 0.55) {
     status = "PENDENTE";
     riskLevel = "MÉDIO";
-    prodesAlert = "Deterctadas pequenas manchas de desmatamento em ramal acessório. Sob auditoria do órgão.";
+    prodesAlert = "Detectadas pequenas manchas de desmatamento em ramal acessório. Sob auditoria do órgão.";
+    alertOrgao = "SNA / IMAC";
+    alertTipo = "Degradação Florestal Leve";
+    alertData = "28/04/2026";
+    embargo = "Sem embargos registrados sob este cadastro regional.";
+    embargoOrgao = "Nenhum";
+  } else {
+    prodesAlert = "Nenhum Alerta Ativo nos últimos 12 meses.";
+    alertOrgao = "Nenhum Órgão (Sem pendências)";
+    alertTipo = "Área de Preservação Íntegra";
+    alertData = "-";
+    embargo = "Sem embargos registrados sob este cadastro regional.";
+    embargoOrgao = "Nenhum";
   }
 
   const carCode = `AC-1200${Math.floor(10 + seed * 89)}-${Math.floor(1000 + seed * 8999)}-${Math.floor(seed * 9999999).toString(16).toUpperCase().substring(0, 16)}`;
@@ -216,10 +255,14 @@ function getOrGenerateProperty(lat: number, lng: number) {
     ? "Propriedade rural com cadastro regularizado perante as normas do Código Florestal. Cobertura florestal conservada para uso sustentável de recursos."
     : "Apresenta déficit acumulado de reserva legal florestal e inconformidade relativa às áreas de preservação fluvial. Em processo de análise de autuações administrativas e adequação ambiental.";
 
+  // Introduce slight coordinate variation for drawing overlaying/neighboring polygons
+  const dLat = index > 0 ? (index === 1 ? 0.0035 : -0.0035) : 0;
+  const dLng = index > 0 ? (index === 1 ? -0.004 : 0.004) : 0;
+
   return {
     name,
-    lat,
-    lng,
+    lat: lat + dLat,
+    lng: lng + dLng,
     carCode,
     owner,
     municipio,
@@ -232,9 +275,38 @@ function getOrGenerateProperty(lat: number, lng: number) {
     prodesAlert,
     overlap: seed > 0.92 ? "Sobreposição parcial identificada de 7% com Unidade de Conservação Estadual" : "Nenhuma sobreposição detectada",
     embargo,
+    embargoOrgao,
     riskLevel,
-    history
+    history,
+    alertOrgao,
+    alertTipo,
+    alertData
   };
+}
+
+// Helper to determine if there are multiple CAR registrations overlapping or on the same coordinate
+function getOrGeneratePropertiesForCoords(lat: number, lng: number): any[] {
+  const preset = ACRE_PRESETS.find(p => Math.abs(p.lat - lat) < 0.03 && Math.abs(p.lng - lng) < 0.03);
+  
+  const coordHash = Math.abs(Math.sin(lat) * 1234.56 + Math.cos(lng) * 7890.12);
+  const seed = (coordHash - Math.floor(coordHash));
+
+  const results: any[] = [];
+  if (preset) {
+    results.push(getOrGenerateProperty(preset.lat, preset.lng, 0));
+  } else {
+    results.push(getOrGenerateProperty(lat, lng, 0));
+  }
+
+  // Overlapping CARs criteria based on hash
+  if (seed > 0.45) {
+    results.push(getOrGenerateProperty(lat, lng, 1));
+  }
+  if (seed > 0.82) {
+    results.push(getOrGenerateProperty(lat, lng, 2));
+  }
+
+  return results;
 }
 
 function decimalToGmsParts(val: number, isLat: boolean) {
@@ -375,27 +447,32 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     }
   };
 
-  // GMS Lat State (Pre-filled to -9.5842: 9° 35' 3.12" S)
-  const [latDeg, setLatDeg] = useState<string>('9');
-  const [latMin, setLatMin] = useState<string>('35');
-  const [latSec, setLatSec] = useState<string>('3.12');
+  // GMS Lat State (Empty by default for transparent mask style, fallback to 9° 35' 3.12" S)
+  const [latDeg, setLatDeg] = useState<string>('');
+  const [latMin, setLatMin] = useState<string>('');
+  const [latSec, setLatSec] = useState<string>('');
   const [latDir, setLatDir] = useState<'S' | 'N'>('S');
 
-  // GMS Lng State (Pre-filled to -67.5451: 67° 32' 42.36" W)
-  const [lngDeg, setLngDeg] = useState<string>('67');
-  const [lngMin, setLngMin] = useState<string>('32');
-  const [lngSec, setLngSec] = useState<string>('42.36');
+  // GMS Lng State (Empty by default for transparent mask style, fallback to 67° 32' 42.36" W)
+  const [lngDeg, setLngDeg] = useState<string>('');
+  const [lngMin, setLngMin] = useState<string>('');
+  const [lngSec, setLngSec] = useState<string>('');
   const [lngDir, setLngDir] = useState<'W' | 'E'>('W');
 
-  // Search Inputs (decimal strings representation in background)
-  const [latInput, setLatInput] = useState<string>('-9.5842');
-  const [lngInput, setLngInput] = useState<string>('-67.5451');
+  // Search Inputs (decimal strings representation in background, empty by default)
+  const [latInput, setLatInput] = useState<string>('');
+  const [lngInput, setLngInput] = useState<string>('');
   const [gpsLoading, setGpsLoading] = useState<boolean>(false);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
 
   // Synchronizers of GMS into decimal on every GMS change if current mode is GMS
   useEffect(() => {
     if (coordsMode === 'gms') {
+      if (latDeg === '' && latMin === '' && latSec === '' && lngDeg === '' && lngMin === '' && lngSec === '') {
+        setLatInput('');
+        setLngInput('');
+        return;
+      }
       const degL = parseFloat(latDeg) || 0;
       const minL = parseFloat(latMin) || 0;
       const secL = parseFloat(latSec) || 0;
@@ -417,11 +494,20 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
         setLngInput(decGStr);
       }
     }
-  }, [latDeg, latMin, latSec, latDir, lngDeg, lngMin, lngSec, lngDir, coordsMode, latInput, lngInput]);
+  }, [latDeg, latMin, latSec, latDir, lngDeg, lngMin, lngSec, lngDir, coordsMode]);
 
   // Synchronizers of decimal into GMS on decimal changes if current mode is Decimal
   useEffect(() => {
     if (coordsMode === 'decimal') {
+      if (latInput === '' && lngInput === '') {
+        setLatDeg('');
+        setLatMin('');
+        setLatSec('');
+        setLngDeg('');
+        setLngMin('');
+        setLngSec('');
+        return;
+      }
       const parsedLat = parseFloat(latInput);
       if (!isNaN(parsedLat)) {
         const parts = decimalToGmsParts(parsedLat, true);
@@ -450,11 +536,16 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
         if (lngDir !== dir) setLngDir(dir);
       }
     }
-  }, [latInput, lngInput, coordsMode, latDeg, latMin, latSec, latDir, lngDeg, lngMin, lngSec, lngDir]);
+  }, [latInput, lngInput, coordsMode]);
   
   // Searched Property
   const [currentProp, setCurrentProp] = useState<any>(() => {
     return getOrGenerateProperty(-9.5842, -67.5451);
+  });
+
+  // Multiple matching CARs resolved for the last coordinate query
+  const [foundProperties, setFoundProperties] = useState<any[]>(() => {
+    return [getOrGenerateProperty(-9.5842, -67.5451)];
   });
 
   // History system
@@ -484,7 +575,9 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
   // Coordinates Parsing and Search Trigger
   const handleGeoSearch = (lat: number, lng: number) => {
-    const prop = getOrGenerateProperty(lat, lng);
+    const props = getOrGeneratePropertiesForCoords(lat, lng);
+    setFoundProperties(props);
+    const prop = props[0];
     setCurrentProp(prop);
     addHistoryItem(prop);
 
@@ -511,18 +604,27 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     let parsedLat = parseFloat(latInput);
     let parsedLng = parseFloat(lngInput);
 
-    if (coordsMode === 'gms') {
-      const degL = parseFloat(latDeg) || 0;
-      const minL = parseFloat(latMin) || 0;
-      const secL = parseFloat(latSec) || 0;
-      parsedLat = degL + minL / 60 + secL / 3600;
-      if (latDir === 'S') parsedLat = -parsedLat;
+    // Fallback if empty to Acre demo coordinates
+    if ((latInput === '' || lngInput === '') && coordsMode === 'decimal') {
+      parsedLat = -9.5842;
+      parsedLng = -67.5451;
+    } else if (coordsMode === 'gms' && latDeg === '' && latMin === '' && latSec === '' && lngDeg === '' && lngMin === '' && lngSec === '') {
+      parsedLat = -9.5842;
+      parsedLng = -67.5451;
+    } else {
+      if (coordsMode === 'gms') {
+        const degL = parseFloat(latDeg) || 0;
+        const minL = parseFloat(latMin) || 0;
+        const secL = parseFloat(latSec) || 0;
+        parsedLat = degL + minL / 60 + secL / 3600;
+        if (latDir === 'S') parsedLat = -parsedLat;
 
-      const degG = parseFloat(lngDeg) || 0;
-      const minG = parseFloat(lngMin) || 0;
-      const secG = parseFloat(lngSec) || 0;
-      parsedLng = degG + minG / 60 + secG / 3600;
-      if (lngDir === 'W') parsedLng = -parsedLng;
+        const degG = parseFloat(lngDeg) || 0;
+        const minG = parseFloat(lngMin) || 0;
+        const secG = parseFloat(lngSec) || 0;
+        parsedLng = degG + minG / 60 + secG / 3600;
+        if (lngDir === 'W') parsedLng = -parsedLng;
+      }
     }
 
     if (isNaN(parsedLat) || isNaN(parsedLng)) {
@@ -530,7 +632,6 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
       return;
     }
     if (parsedLat < -12.0 || parsedLat > -7.0 || parsedLng < -74.0 || parsedLng > -65.0) {
-      // Just a gentle warning for simulated demo, but allow checking anyway
       if (!confirm("As coordenadas fornecidas estão fora da região do Acre. Deseja realizar a busca mesmo assim?")) {
         return;
       }
@@ -688,28 +789,148 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
       ctx.fillText("CARREGANDO GOOGLE IMAGEM...", 20, 24);
     }
 
-    const propRadius = Math.sqrt(currentProp.area) * 0.0003;
-    const polygonVertices = getPropertyPolygon(cLat, cLng, currentProp.area);
-
-    // 2. DRAW PROPERTY BOUNDARY - Neon Cyan/Green exactly like the photograph!
-    if (showProperty && polygonVertices.length > 0) {
-      ctx.beginPath();
-      polygonVertices.forEach((v, index) => {
-        const pt = coordinateToScreen(v.lat, v.lng);
-        if (index === 0) ctx.moveTo(pt.x, pt.y);
-        else ctx.lineTo(pt.x, pt.y);
-      });
-      ctx.closePath();
-      
-      // Vivid bright green border (Limites da Área SIGEF/CAR)
-      ctx.strokeStyle = "#0df2aa"; 
-      ctx.lineWidth = 3;
-      ctx.stroke();
-
-      // Light transparent background overlay
-      ctx.fillStyle = "rgba(13, 242, 170, 0.04)";
-      ctx.fill();
+    // 1.5. DRAW MUNICIPAL DIVISION LINES & LABELS
+    // We calculate a dynamic gridStep based on the zoom level to handle virtually infinite zoom levels.
+    let mGridStep = 0.15;
+    if (zoomLevel < 0.005) {
+      mGridStep = 5.0;
+    } else if (zoomLevel < 0.03) {
+      mGridStep = 1.5;
+    } else if (zoomLevel < 0.12) {
+      mGridStep = 0.6;
+    } else if (zoomLevel < 0.4) {
+      mGridStep = 0.3;
     }
+
+    // Visible geographic bounds of the canvas screen area
+    const minLng = cLng + (-centerX - panX) / scale;
+    const maxLng = cLng + (centerX - panX) / scale;
+    const minLat = cLat + (-centerY + panY) / scale; // Screen Y goes down, Latitude goes up
+    const maxLat = cLat + (centerY + panY) / scale;
+
+    const startI = Math.max(Math.floor(minLat / mGridStep) - 1, -1000);
+    const endI = Math.min(Math.ceil(maxLat / mGridStep) + 1, 1000);
+    const startJ = Math.max(Math.floor(minLng / mGridStep) - 1, -1000);
+    const endJ = Math.min(Math.ceil(maxLng / mGridStep) + 1, 1000);
+
+    // Defensive check to avoid browser freezing or infinite loops with crazy zoom levels
+    if ((endI - startI) < 50 && (endJ - startJ) < 50) {
+      // Draw organic horizontal lines (latitude boundaries)
+      for (let i = startI; i <= endI; i++) {
+        const latLine = i * mGridStep;
+        ctx.beginPath();
+        const segments = 20;
+        for (let k = 0; k <= segments; k++) {
+          const lineLng = minLng + (k / segments) * (maxLng - minLng);
+          // Winding organic/geographic perturbations
+          const offset = 0.012 * Math.sin(lineLng * 16.0 + latLine * 10.0) + 0.006 * Math.cos(lineLng * 32.0);
+          const pt = coordinateToScreen(latLine + offset, lineLng);
+          if (k === 0) ctx.moveTo(pt.x, pt.y);
+          else ctx.lineTo(pt.x, pt.y);
+        }
+        ctx.strokeStyle = "rgba(251, 146, 60, 0.55)"; // Elegant orange-brown boundary line
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([8, 4, 2, 4]); // Classic municipal boundary dash pattern
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Draw organic vertical lines (longitude boundaries)
+      for (let j = startJ; j <= endJ; j++) {
+        const lngLine = j * mGridStep;
+        ctx.beginPath();
+        const segments = 20;
+        for (let k = 0; k <= segments; k++) {
+          const lineLat = minLat + (k / segments) * (maxLat - minLat);
+          const offset = 0.012 * Math.sin(lineLat * 16.0 + lngLine * 10.0) + 0.006 * Math.cos(lineLat * 32.0);
+          const pt = coordinateToScreen(lineLat, lngLine + offset);
+          if (k === 0) ctx.moveTo(pt.x, pt.y);
+          else ctx.lineTo(pt.x, pt.y);
+        }
+        ctx.strokeStyle = "rgba(251, 146, 60, 0.55)";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([8, 4, 2, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Draw Municipal Center labels
+      for (let i = startI; i <= endI; i++) {
+        for (let j = startJ; j <= endJ; j++) {
+          const cellLat = (i + 0.5) * mGridStep;
+          const cellLng = (j + 0.5) * mGridStep;
+          // Soft offset so labels aren't in a rigid artificial grid
+          const offsetLat = 0.04 * Math.sin(i * 11.7 + j * 7.9) * mGridStep;
+          const offsetLng = 0.04 * Math.cos(i * 5.3 + j * 13.1) * mGridStep;
+          const labelLat = cellLat + offsetLat;
+          const labelLng = cellLng + offsetLng;
+
+          if (labelLat >= minLat && labelLat <= maxLat && labelLng >= minLng && labelLng <= maxLng) {
+            const pt = coordinateToScreen(labelLat, labelLng);
+            const cellSeed = Math.abs(Math.sin(i * 23.45 + j * 78.91) * 3524.12) % 1;
+            const mIndex = Math.floor(cellSeed * ACRE_MUNICIPIOS.length);
+            const name = ACRE_MUNICIPIOS[mIndex];
+
+            ctx.save();
+            ctx.fillStyle = "rgba(253, 186, 116, 0.65)"; // Soft golden text
+            ctx.font = "bold 9px monospace";
+            ctx.textAlign = "center";
+            ctx.shadowColor = "rgba(0, 0, 0, 0.85)";
+            ctx.shadowBlur = 4;
+            ctx.fillText(`MUNICÍPIO: ${name.toUpperCase()}`, pt.x, pt.y);
+            ctx.restore();
+          }
+        }
+      }
+    }
+
+    // 2. DRAW PROPERTY BOUNDARIES - Neon Cyan/Green for active, Electric Blue for overlapping found CARs!
+    if (showProperty && foundProperties && foundProperties.length > 0) {
+      foundProperties.forEach((prop, idx) => {
+        const isCurrent = prop.carCode === currentProp.carCode;
+        const polyVertices = getPropertyPolygon(prop.lat, prop.lng, prop.area);
+        
+        if (polyVertices.length > 0) {
+          ctx.beginPath();
+          polyVertices.forEach((v, index) => {
+            const pt = coordinateToScreen(v.lat, v.lng);
+            if (index === 0) ctx.moveTo(pt.x, pt.y);
+            else ctx.lineTo(pt.x, pt.y);
+          });
+          ctx.closePath();
+          
+          if (isCurrent) {
+            // Vivid bright green border (Limites da Área SIGEF/CAR)
+            ctx.strokeStyle = "#0df2aa"; 
+            ctx.lineWidth = 3.5;
+            ctx.stroke();
+
+            // Light transparent background overlay
+            ctx.fillStyle = "rgba(13, 242, 170, 0.05)";
+            ctx.fill();
+          } else {
+            // Additional overlapping CAR: Electric Blue line
+            ctx.strokeStyle = "#3b82f6";
+            ctx.lineWidth = 1.8;
+            ctx.setLineDash([5, 3]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Light transparent background overlay for overlapping CAR
+            ctx.fillStyle = "rgba(59, 130, 246, 0.03)";
+            ctx.fill();
+
+            // Draw a tiny name indicator in the center of the secondary polygon
+            const textPt = coordinateToScreen(prop.lat, prop.lng);
+            ctx.fillStyle = "rgba(156, 163, 175, 0.85)";
+            ctx.font = "bold 8px monospace";
+            ctx.fillText(prop.name.toUpperCase(), textPt.x - 30, textPt.y - 12);
+          }
+        }
+      });
+    }
+
+    const propRadius = Math.sqrt(currentProp.area) * 0.0003;
 
     // 3. DRAW PRODES / DETER DEFORESTATION DEPRIVATION ALERT SPOTS
     const hasDeforestation = currentProp.rlActual < 80 || !currentProp.appPreserved;
@@ -755,7 +976,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     ctx.fillStyle = "#ef4444";
     ctx.fill();
 
-  }, [currentProp, zoomLevel, panX, panY, showProperty, showAlerts, satImage]);
+  }, [currentProp, foundProperties, zoomLevel, panX, panY, showProperty, showAlerts, satImage]);
 
   // Touch & Drag Handling for Web-GIS Simulator (supporting Mouse and robust absolute multitouch zoom and drag gestures)
   const handleDragStart = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -817,7 +1038,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
       // Zoom ratio change factor absolute from gesture start
       const factor = dist / touchStartDistRef.current;
       const targetZoom = initialZoomRef.current * factor;
-      setZoomLevel(Math.max(0.04, Math.min(6.0, targetZoom)));
+      setZoomLevel(Math.max(0.00001, Math.min(10000.0, targetZoom)));
 
       // Combined dragging translation centering
       const currentCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
@@ -838,7 +1059,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    setZoomLevel(prev => Math.max(0.04, Math.min(6.0, prev * zoomFactor)));
+    setZoomLevel(prev => Math.max(0.00001, Math.min(10000.0, prev * zoomFactor)));
   };
 
   const resetMapOffset = () => {
@@ -1007,21 +1228,21 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
         </button>
         <button 
           onClick={() => setActiveTab('ficha')}
-          className={`flex-1 py-3 px-3 uppercase text-[10px] font-black tracking-wider transition-all border-b-2 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-[110px] ${
+          className={`flex-1 py-1 px-2 uppercase text-[9px] font-black tracking-wider transition-all border-b-2 flex items-center justify-center gap-1.5 min-w-[110px] text-center ${
             activeTab === 'ficha' ? 'border-yellow-500 bg-military-850/60 text-yellow-500' : 'border-transparent hover:bg-military-850/30 text-military-400'
           }`}
         >
-          <FileText className="w-3.5 h-3.5" />
-          <span>Divergência CAR</span>
+          <FileText className="w-3.5 h-3.5 shrink-0" />
+          <span>Informações<br />sobre o CAR</span>
         </button>
         <button 
           onClick={() => setActiveTab('mapa')}
-          className={`flex-1 py-3 px-3 uppercase text-[10px] font-black tracking-wider transition-all border-b-2 flex items-center justify-center gap-1.5 whitespace-nowrap min-w-[100px] ${
+          className={`flex-1 py-1 px-2 uppercase text-[9px] font-black tracking-wider transition-all border-b-2 flex items-center justify-center gap-1.5 min-w-[100px] text-center ${
             activeTab === 'mapa' ? 'border-yellow-500 bg-military-850/60 text-yellow-500' : 'border-transparent hover:bg-military-850/30 text-military-400'
           }`}
         >
-          <Map className="w-3.5 h-3.5" />
-          <span>Mapa do CAR</span>
+          <Map className="w-3.5 h-3.5 shrink-0" />
+          <span>Mapa<br />do CAR</span>
         </button>
         <button 
           onClick={() => setActiveTab('historico')}
@@ -1054,8 +1275,155 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               </div>
             </div>
 
-            {/* G.M.S / Decimal Toggle Pill Bar matching the screenshot */}
-            <div className="border border-military-750 rounded-full p-1.5 flex bg-military-850 w-full" id="coords-mode-toggle">
+            {/* SEQUENCE STEP 1: Colar Coordenadas Geografia (qualquer formato) */}
+            <div className="bg-military-800 border border-military-750 p-4.5 rounded-2xl space-y-2 shadow-sm">
+              <label className="text-[9.5px] font-black uppercase tracking-wider text-military-500 block">
+                Colar Coordenada Copiada (Qualquer Formato)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={pastedCoord}
+                  onChange={(e) => handlePastedInputChange(e.target.value)}
+                  placeholder="Ex: -9.5842, -67.5451 ou 9° 35' 3.12'' S 67° 32' 42.36'' W"
+                  className="flex-1 bg-military-900 text-military-100 border border-military-700/80 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:border-military-500 placeholder-white/20 placeholder:font-bold"
+                />
+                <button
+                  type="button"
+                  onClick={executeSearch}
+                  className="px-4 bg-military-850 hover:bg-military-750 border border-military-700 hover:border-yellow-500 text-yellow-400 rounded-xl flex items-center justify-center transition-all shrink-0 active:scale-95 cursor-pointer"
+                  title="Pesquisar CAR pelas Coordenadas"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-[8px] text-military-450 uppercase font-mono tracking-wider leading-relaxed">
+                * O Módulo de Busca CAR detectará automaticamente o formato e preencherá os campos abaixo.
+              </p>
+            </div>
+
+            {/* SEQUENCE STEP 2: Campos para digitar as coordenadas */}
+            {coordsMode === 'gms' ? (
+              <div className="bg-military-800 p-5 border border-military-750 rounded-2xl space-y-4 shadow-sm">
+                {/* LAT ROW */}
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-black text-military-500 text-right w-11 uppercase tracking-widest font-mono">LAT:</span>
+                  <div className="flex-1 grid grid-cols-3 gap-2">
+                    <div className="flex flex-col items-center">
+                      <input
+                        type="number"
+                        value={latDeg}
+                        onChange={e => setLatDeg(e.target.value)}
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner placeholder-white/20 placeholder:font-bold"
+                        placeholder="9"
+                      />
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">GRAUS</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <input
+                        type="number"
+                        value={latMin}
+                        onChange={e => setLatMin(e.target.value)}
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner placeholder-white/20 placeholder:font-bold"
+                        placeholder="35"
+                      />
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">MINUTOS</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <input
+                        type="number"
+                        step="any"
+                        value={latSec}
+                        onChange={e => setLatSec(e.target.value)}
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner placeholder-white/20 placeholder:font-bold"
+                        placeholder="3.12"
+                      />
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">SEGUNDOS</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLatDir(prev => prev === 'S' ? 'N' : 'S')}
+                    className="px-4 py-3 bg-military-850 hover:bg-military-900 border border-military-700 rounded-xl text-military-300 font-black text-sm transition-all active:scale-[0.95] w-14 flex items-center justify-center shrink-0 shadow-sm cursor-pointer"
+                  >
+                    {latDir}
+                  </button>
+                </div>
+
+                {/* LONG ROW */}
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-black text-military-500 text-right w-11 uppercase tracking-widest font-mono">LONG:</span>
+                  <div className="flex-1 grid grid-cols-3 gap-2">
+                    <div className="flex flex-col items-center">
+                      <input
+                        type="number"
+                        value={lngDeg}
+                        onChange={e => setLngDeg(e.target.value)}
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner placeholder-white/20 placeholder:font-bold"
+                        placeholder="67"
+                      />
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">GRAUS</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <input
+                        type="number"
+                        value={lngMin}
+                        onChange={e => setLngMin(e.target.value)}
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner placeholder-white/20 placeholder:font-bold"
+                        placeholder="32"
+                      />
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">MINUTOS</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <input
+                        type="number"
+                        step="any"
+                        value={lngSec}
+                        onChange={e => setLngSec(e.target.value)}
+                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner placeholder-white/20 placeholder:font-bold"
+                        placeholder="42.36"
+                      />
+                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">SEGUNDOS</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLngDir(prev => prev === 'W' ? 'E' : 'W')}
+                    className="px-4 py-3 bg-military-850 hover:bg-military-900 border border-military-700 rounded-xl text-military-300 font-black text-sm transition-all active:scale-[0.95] w-14 flex items-center justify-center shrink-0 shadow-sm cursor-pointer"
+                  >
+                    {lngDir}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3.5 bg-military-800 p-5 border border-military-750 rounded-2xl shadow-sm">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-military-500 uppercase tracking-widest pl-1">Latitude (Decimal)</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    value={latInput}
+                    onChange={e => setLatInput(e.target.value)}
+                    className="w-full bg-military-900 border border-military-700 focus:border-military-500 rounded-xl px-3 py-2.5 text-xs font-mono text-military-100 focus:outline-none transition-all text-center placeholder-white/20 placeholder:font-bold"
+                    placeholder="-9.584200"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-military-500 uppercase tracking-widest pl-1">Longitude (Decimal)</label>
+                  <input 
+                    type="number" 
+                    step="any"
+                    value={lngInput}
+                    onChange={e => setLngInput(e.target.value)}
+                    className="w-full bg-military-900 border border-military-700 focus:border-military-500 rounded-xl px-3 py-2.5 text-xs font-mono text-military-100 focus:outline-none transition-all text-center placeholder-white/20 placeholder:font-bold"
+                    placeholder="-67.545100"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* SEQUENCE STEP 3: Botões para selecionar o formato */}
+            <div className="border border-military-750 rounded-full p-1.5 flex bg-military-850 w-full animate-fade-in" id="coords-mode-toggle">
               <button
                 type="button"
                 onClick={() => setCoordsMode('gms')}
@@ -1080,278 +1448,174 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               </button>
             </div>
 
-            {/* Campo de Colar Coordenada Copiada */}
-            <div className="bg-military-800 border border-military-750 p-4.5 rounded-2xl space-y-2 shadow-sm">
-              <label className="text-[9.5px] font-black uppercase tracking-wider text-military-500 block">
-                Colar Coordenada Copiada (Qualquer Formato)
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={pastedCoord}
-                  onChange={(e) => handlePastedInputChange(e.target.value)}
-                  placeholder="Ex: -9.5842, -67.5451 ou 9° 35' 3.12'' S 67° 32' 42.36'' W"
-                  className="flex-1 bg-military-900 text-military-100 border border-military-700 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:border-military-500 placeholder-military-600"
-                />
-                {pastedCoord && (
-                  <button
-                    type="button"
-                    onClick={() => setPastedCoord('')}
-                    className="px-3 bg-military-905 border border-military-750 text-military-300 hover:text-white hover:border-military-500 rounded-xl text-[9px] font-black uppercase transition-all shrink-0 active:scale-95"
-                  >
-                    LIMPAR
-                  </button>
-                )}
-              </div>
-              <p className="text-[8px] text-military-450 uppercase font-mono tracking-wider leading-relaxed">
-                * O Módulo Aplicações BPA detectará automaticamente o formato e preencherá os campos acima.
-              </p>
-            </div>
-
-            {/* Coordinates Fields matching of the attached photograph */}
-            {coordsMode === 'gms' ? (
-              <div className="bg-military-800 p-5 border border-military-750 rounded-2xl space-y-4 shadow-sm">
-                {/* LAT ROW */}
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-black text-military-500 text-right w-11 uppercase tracking-widest font-mono">LAT:</span>
-                  <div className="flex-1 grid grid-cols-3 gap-2">
-                    <div className="flex flex-col items-center">
-                      <input
-                        type="number"
-                        value={latDeg}
-                        onChange={e => setLatDeg(e.target.value)}
-                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
-                        placeholder="9"
-                      />
-                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">GRAUS</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <input
-                        type="number"
-                        value={latMin}
-                        onChange={e => setLatMin(e.target.value)}
-                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
-                        placeholder="18"
-                      />
-                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">MINUTOS</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <input
-                        type="number"
-                        step="any"
-                        value={latSec}
-                        onChange={e => setLatSec(e.target.value)}
-                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
-                        placeholder="22.64"
-                      />
-                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">SEGUNDOS</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setLatDir(prev => prev === 'S' ? 'N' : 'S')}
-                    className="px-4 py-3 bg-military-850 hover:bg-military-900 border border-military-700 rounded-xl text-military-300 font-black text-sm transition-all active:scale-[0.95] w-14 flex items-center justify-center shrink-0 shadow-sm cursor-pointer"
-                  >
-                    {latDir}
-                  </button>
-                </div>
-
-                {/* LONG ROW */}
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-black text-military-500 text-right w-11 uppercase tracking-widest font-mono">LONG:</span>
-                  <div className="flex-1 grid grid-cols-3 gap-2">
-                    <div className="flex flex-col items-center">
-                      <input
-                        type="number"
-                        value={lngDeg}
-                        onChange={e => setLngDeg(e.target.value)}
-                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
-                        placeholder="68"
-                      />
-                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">GRAUS</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <input
-                        type="number"
-                        value={lngMin}
-                        onChange={e => setLngMin(e.target.value)}
-                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
-                        placeholder="24"
-                      />
-                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">MINUTOS</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <input
-                        type="number"
-                        step="any"
-                        value={lngSec}
-                        onChange={e => setLngSec(e.target.value)}
-                        className="w-full bg-military-900 border border-military-700 hover:border-military-500 rounded-xl px-2 py-3 text-sm text-center font-mono font-bold text-military-100 focus:outline-none focus:border-military-500 transition-all shadow-inner"
-                        placeholder="54.92"
-                      />
-                      <span className="text-[8px] font-bold text-military-600 uppercase tracking-widest mt-1.5">SEGUNDOS</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setLngDir(prev => prev === 'W' ? 'E' : 'W')}
-                    className="px-4 py-3 bg-military-850 hover:bg-military-900 border border-military-700 rounded-xl text-military-300 font-black text-sm transition-all active:scale-[0.95] w-14 flex items-center justify-center shrink-0 shadow-sm cursor-pointer"
-                  >
-                    {lngDir}
-                  </button>
-                </div>
-
-
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3.5 bg-military-800 p-5 border border-military-750 rounded-2xl shadow-sm">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-military-500 uppercase tracking-widest pl-1">Latitude (Decimal)</label>
-                  <input 
-                    type="number" 
-                    step="any"
-                    value={latInput}
-                    onChange={e => setLatInput(e.target.value)}
-                    className="w-full bg-military-900 border border-military-700 focus:border-military-500 rounded-xl px-3 py-2.5 text-xs font-mono text-military-100 focus:outline-none transition-all text-center"
-                    placeholder="-9.584200"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-military-500 uppercase tracking-widest pl-1">Longitude (Decimal)</label>
-                  <input 
-                    type="number" 
-                    step="any"
-                    value={lngInput}
-                    onChange={e => setLngInput(e.target.value)}
-                    className="w-full bg-military-900 border border-military-700 focus:border-military-500 rounded-xl px-3 py-2.5 text-xs font-mono text-military-100 focus:outline-none transition-all text-center"
-                    placeholder="-67.545100"
-                  />
-                </div>
-
-
-              </div>
-            )}
-
-            {/* Main Action Button */}
+            {/* SEQUENCE STEP 4: Botão Buscar Dados Sobre o CAR */}
             <button 
               onClick={executeSearch}
-              className="w-full py-4 bg-amber-500/90 hover:bg-amber-600/90 text-military-950 font-black tracking-widest text-xs uppercase rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 border border-amber-600/50"
+              className="w-full py-4 bg-amber-500/90 hover:bg-amber-600/90 text-military-950 font-black tracking-widest text-xs uppercase rounded-xl transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2 border border-amber-600/50 cursor-pointer"
             >
               <Search className="w-4 h-4 text-military-950" />
               <span>Buscar dados sobre o CAR</span>
             </button>
-
           </div>
         )}
 
         {activeTab === 'ficha' && (
           <div className="p-4 space-y-4 max-w-md mx-auto w-full flex-1">
             {/* Header Badge */}
-            <div className="flex items-center justify-between bg-military-950/80 p-4 border border-military-800 rounded-2xl">
+            <div className="flex items-center justify-between bg-military-950/80 p-4 border border-military-800 rounded-2xl animate-fade-in">
               <div>
                 <span className="text-[8.5px] font-black font-mono uppercase tracking-widest text-military-400">IMÓVEL LOCALIZADO</span>
-                <h4 className="font-extrabold text-sm text-white uppercase tracking-normal mt-0.5 leading-tight">{currentProp.name}</h4>
+                <h4 className="font-extrabold text-sm text-military-100 uppercase tracking-normal mt-0.5 leading-tight">{currentProp.name}</h4>
               </div>
-              <span className={`px-2.5 py-1 text-[9px] font-bold rounded-lg ${
-                currentProp.status === 'SUSPENSO' ? 'bg-red-500 text-white' :
-                currentProp.status === 'PENDENTE' ? 'bg-orange-500 text-military-950' :
-                'bg-green-600 text-white'
+              <span className={`px-2.5 py-1 text-[9px] font-black rounded-lg bg-military-900 border ${
+                currentProp.status === 'SUSPENSO' ? 'border-red-500 text-red-400' :
+                currentProp.status === 'PENDENTE' ? 'border-orange-500 text-orange-400' :
+                'border-emerald-500 text-emerald-400'
               }`}>
                 CAR {currentProp.status}
               </span>
             </div>
 
-            {/* Risk Indicator Panel */}
-            <div className={`p-4 border rounded-2xl flex items-center gap-3.5 relative overflow-hidden ${
-              currentProp.riskLevel === 'ALTO' ? 'bg-red-500/10 border-red-500/30 text-red-200' :
-              currentProp.riskLevel === 'MÉDIO' ? 'bg-orange-500/10 border-orange-500/30 text-orange-200' :
-              'bg-green-500/10 border-green-500/30 text-green-200'
-            }`}>
-              <div className="p-2.5 bg-black/40 rounded-xl">
-                {currentProp.riskLevel === 'ALTO' ? <XCircle className="w-5 h-5 text-red-500" /> :
-                 currentProp.riskLevel === 'MÉDIO' ? <AlertTriangle className="w-5 h-5 text-orange-500" /> :
-                 <CheckCircle2 className="w-5 h-5 text-green-500" />}
+            {/* Overlap CAR Selector pill bar to switch dossier files */}
+            {foundProperties && foundProperties.length > 1 && (
+              <div className="bg-military-950/85 p-3.5 border border-military-800 rounded-2xl space-y-2 animate-fade-in text-xs">
+                <span className="text-[8.5px] font-black uppercase tracking-widest text-military-400 block">
+                  Selecione o Imóvel Encontrado ({foundProperties.length} CARs sobrepostos na coordenada):
+                </span>
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                  {foundProperties.map((prop, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentProp(prop)}
+                      className={`px-3 py-1.5 rounded-xl text-[9.5px] font-black uppercase tracking-wide whitespace-nowrap border transition-all cursor-pointer ${
+                        currentProp.carCode === prop.carCode
+                          ? 'bg-yellow-500 text-military-950 border-yellow-500 font-bold scale-[1.01]'
+                          : 'bg-military-850 text-military-400 border-military-750 hover:bg-military-800 hover:text-military-200'
+                      }`}
+                    >
+                      {prop.name} ({prop.status})
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[8px] text-military-450 uppercase font-mono tracking-widest leading-normal">
+                  * Clique acima para alternar e analisar o respectivo dossiê de divergências ambientais do imóvel rural correspondente.
+                </p>
               </div>
-              <div>
-                <span className="text-[8px] font-black uppercase tracking-widest block leading-tight">Grau de Infração Estimado</span>
+            )}
+
+            {/* Risk Indicator Panel with high accessibility dark contrast background and bright outlines */}
+            <div className={`p-4 border rounded-2xl flex items-center gap-3.5 relative overflow-hidden bg-military-950/40 ${
+              currentProp.riskLevel === 'ALTO' ? 'border-red-500/60 text-red-400' :
+              currentProp.riskLevel === 'MÉDIO' ? 'border-orange-500/60 text-orange-400' :
+              'border-emerald-500/60 text-emerald-400'
+            }`}>
+              <div className="p-2.5 bg-black/40 rounded-xl relative z-10">
+                {currentProp.riskLevel === 'ALTO' ? <XCircle className="w-5 h-5 text-red-500 animate-pulse" /> :
+                 currentProp.riskLevel === 'MÉDIO' ? <AlertTriangle className="w-5 h-5 text-orange-400 cursor-pointer" /> :
+                 <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
+              </div>
+              <div className="relative z-10 flex flex-col">
+                <span className="text-[8px] font-black uppercase tracking-widest block leading-tight opacity-75">Grau de Infração Estimado</span>
                 <span className="text-xs font-black uppercase tracking-wider block mt-0.5">Risco de Multas: {currentProp.riskLevel}</span>
               </div>
             </div>
 
             {/* Specifications Details List */}
-            <div className="bg-military-950 p-4 border border-military-800 rounded-2xl text-xs font-mono space-y-3.5">
-              <div className="border-b border-military-900 pb-2.5 flex justify-between gap-2.5">
-                <span className="text-military-450 uppercase">Código CAR:</span>
-                <span className="text-white font-bold select-all break-all text-right">{currentProp.carCode}</span>
+            <div className="bg-white p-4 border border-slate-100 shadow-sm rounded-2xl text-xs font-mono space-y-3.5 text-slate-800">
+              <div className="border-b border-slate-100 pb-2.5 flex justify-between gap-2.5">
+                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest">Código CAR:</span>
+                <span className="text-slate-900 font-extrabold select-all break-all text-right">{currentProp.carCode}</span>
               </div>
-              <div className="border-b border-military-900 pb-2.5 flex justify-between gap-4">
-                <span className="text-military-450 uppercase">Proprietário:</span>
-                <span className="text-military-100 font-bold text-right">{currentProp.owner}</span>
+              <div className="border-b border-slate-100 pb-2.5 flex justify-between gap-4">
+                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest">Proprietário:</span>
+                <span className="text-slate-800 font-extrabold text-right">{currentProp.owner}</span>
               </div>
-              <div className="border-b border-military-900 pb-2.5 flex justify-between">
-                <span className="text-military-450 uppercase">Município / UF:</span>
-                <span className="text-military-100 font-bold">{currentProp.municipio} - AC</span>
+              <div className="border-b border-slate-100 pb-2.5 flex justify-between">
+                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest">Município / UF:</span>
+                <span className="text-slate-800 font-extrabold">{currentProp.municipio} - AC</span>
               </div>
-              <div className="border-b border-military-900 pb-2.5 flex justify-between">
-                <span className="text-military-450 uppercase">Área Total:</span>
-                <span className="text-white font-bold">{currentProp.area} Hectares</span>
+              <div className="border-b border-slate-100 pb-2.5 flex justify-between">
+                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest">Área Total:</span>
+                <span className="text-slate-900 font-extrabold">{currentProp.area} Hectares</span>
               </div>
-              <div className="border-b border-military-850/60 pb-2.5">
-                <span className="text-military-450 uppercase block mb-1">Déficit Reserva Legal:</span>
-                <div className="flex justify-between items-center bg-black/40 p-2 rounded-lg">
-                  <div className="flex gap-2.5">
-                    <span className="text-[10px] uppercase text-military-400">Declarado: <span className="text-white font-bold">{currentProp.rlActual}%</span></span>
-                    <span className="text-[10px] uppercase text-military-400">Exigido: <span className="font-bold text-green-500">80%</span></span>
+              <div className="border-b border-slate-100 pb-2.5">
+                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest block mb-1">Déficit Reserva Legal:</span>
+                <div className="flex justify-between items-center bg-[#f8fafc] border border-slate-200 p-2.5 rounded-xl">
+                  <div className="flex gap-2.5 text-slate-600">
+                    <span className="text-[10px] uppercase">Declarado: <span className="text-slate-900 font-extrabold">{currentProp.rlActual}%</span></span>
+                    <span className="text-[10px] uppercase">Exigido: <span className="font-extrabold text-emerald-700">80%</span></span>
                   </div>
                   {currentProp.rlActual < 80 ? (
-                    <span className="text-[9px] font-black text-red-400 uppercase">Déficit de {(80 - currentProp.rlActual).toFixed(1)}%</span>
+                    <span className="text-[9.5px] font-black text-red-600 uppercase">Déficit de {(80 - currentProp.rlActual).toFixed(1)}%</span>
                   ) : (
-                    <span className="text-[9px] font-black text-green-400 uppercase">Conforme</span>
+                    <span className="text-[9.5px] font-black text-emerald-600 uppercase">Conforme</span>
                   )}
                 </div>
               </div>
-              <div className="border-b border-military-850/60 pb-1.5">
-                <span className="text-military-450 uppercase block mb-1">Área da Faixa de Margem (APP):</span>
-                <div className="flex justify-between items-center bg-black/40 p-2 rounded-lg">
-                  <span className="text-[10px] text-military-200">Total estimada: {currentProp.appArea} ha</span>
+              <div className="border-b border-slate-100 pb-1.5">
+                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest block mb-1">Área da Faixa de Margem (APP):</span>
+                <div className="flex justify-between items-center bg-[#f8fafc] border border-slate-200 p-2.5 rounded-xl">
+                  <span className="text-[10px] text-slate-600">Total estimada: {currentProp.appArea} ha</span>
                   {currentProp.appPreserved ? (
-                    <span className="text-[9px] font-bold text-green-400 uppercase flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-green-500" /> Preservada
+                    <span className="text-[9.5px] font-black text-emerald-600 uppercase flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Preservada
                     </span>
                   ) : (
-                    <span className="text-[9px] font-bold text-red-400 uppercase flex items-center gap-1 animate-pulse">
-                      <AlertTriangle className="w-3 h-3 text-red-500" /> Desflorestamento
+                    <span className="text-[9.5px] font-black text-red-600 uppercase flex items-center gap-1 animate-pulse">
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-500" /> Desflorestamento
                     </span>
                   )}
                 </div>
               </div>
 
               {/* Geographical constraints */}
-              <div className="border-b border-military-900 pb-2">
-                <span className="text-military-450 uppercase block mb-1">Restrições Fundiárias:</span>
-                <p className="text-[10px] text-military-200 leading-relaxed bg-black/30 p-2 rounded-lg border border-military-900">
+              <div className="border-b border-slate-100 pb-2">
+                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest block mb-1">Restrições Fundiárias:</span>
+                <p className="text-[10px] text-slate-700 leading-relaxed bg-[#f8fafc] border border-slate-200 p-2.5 rounded-xl">
                   {currentProp.overlap}
                 </p>
               </div>
 
-              {/* Embargo verification */}
-              <div className="border-b border-military-900 pb-2">
-                <span className="text-military-450 uppercase block mb-1">Embargos Ativos (IBAMA/IMAC):</span>
-                <p className="text-[10px] text-military-200 leading-relaxed bg-black/30 p-2 rounded-lg border border-military-900">
-                  {currentProp.embargo}
-                </p>
+              {/* Embargo verification with explicit issuing body */}
+              <div className="border-b border-slate-100 pb-2 space-y-1">
+                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest block font-sans">Embargos Ativos:</span>
+                <div className="bg-[#f8fafc] border border-slate-200 p-2.5 rounded-xl text-[10px] space-y-1.5">
+                  <div className="flex justify-between font-mono text-[9px] border-b border-slate-150 pb-1.5 text-slate-500">
+                    <span className="font-extrabold uppercase">Órgão Emissor do Embargo:</span>
+                    <span className="font-extrabold uppercase text-red-600">{currentProp.embargoOrgao || "IMAC / IBAMA"}</span>
+                  </div>
+                  <p className="text-slate-700 leading-relaxed font-extrabold">
+                    {currentProp.embargo}
+                  </p>
+                </div>
               </div>
 
-              {/* Prodes alert detail */}
-              <div className="pb-1">
-                <span className="text-military-450 uppercase block mb-1">Constatações por Imagens de Satélite (Alertas Recentes):</span>
-                <p className={`text-[10px] leading-relaxed p-2.5 rounded-lg border ${
-                  currentProp.prodesAlert.includes('Alerta') 
-                    ? 'bg-red-500/5 border-red-500/20 text-red-300 font-bold' 
-                    : 'bg-green-500/5 border-green-500/20 text-green-300'
+              {/* Prodes alert detail with satellite agency, alert type, and date */}
+              <div className="pb-1 space-y-1">
+                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest block mb-1">Constatações por Imagens de Satélite (Alertas Recentes):</span>
+                <div className={`p-3 rounded-xl border text-[10px] leading-relaxed ${
+                  currentProp.prodesAlert.includes('Alerta') || currentProp.prodesAlert.includes('Deficit') || currentProp.prodesAlert.includes('Supressão') || currentProp.prodesAlert.includes('Inconsis') || currentProp.prodesAlert.includes('Desmatamento')
+                    ? 'bg-[#fef2f2] border-red-200 text-slate-800' 
+                    : 'bg-[#f0fdf4] border-emerald-200 text-slate-800'
                 }`}>
-                  {currentProp.prodesAlert}
-                </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border-b border-dashed border-slate-200 pb-2 mb-2 font-mono text-[9px] text-slate-500">
+                    <div>
+                      <span className="font-extrabold text-slate-400 uppercase block leading-none mb-1">Órgão Emissor:</span>
+                      <span className="font-extrabold text-slate-700">{currentProp.alertOrgao || "DETER / INPE"}</span>
+                    </div>
+                    <div>
+                      <span className="font-extrabold text-slate-400 uppercase block leading-none mb-1">Data do Alerta:</span>
+                      <span className="font-extrabold text-[#d97706]">{currentProp.alertData || "15/05/2026"}</span>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <span className="font-extrabold text-slate-400 uppercase block leading-none mb-1">Tipo de Alerta:</span>
+                      <span className="font-extrabold text-red-600 uppercase">{currentProp.alertTipo || "ALERTA DE DESMATAMENTO ATIVO"}</span>
+                    </div>
+                  </div>
+                  <p className="font-extrabold leading-normal text-slate-700">
+                    {currentProp.prodesAlert}
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -1430,14 +1694,14 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               {/* Tactile Zoom Buttons on Bottom Right (styled directly matching your image overlay) */}
               <div className="absolute bottom-4 right-4 z-10 flex flex-col bg-military-800 border border-military-750 rounded-lg overflow-hidden shadow-md w-10">
                 <button 
-                  onClick={() => setZoomLevel(prev => Math.min(6.0, prev * 1.35))}
+                  onClick={() => setZoomLevel(prev => Math.min(10000.0, prev * 1.35))}
                   className="h-10 w-full flex items-center justify-center hover:bg-military-850 text-military-100 transition-colors active:scale-90 border-b border-military-750 cursor-pointer"
                   title="Aumentar Zoom"
                 >
                   <Plus className="w-4 h-4 text-military-300" />
                 </button>
                 <button 
-                  onClick={() => setZoomLevel(prev => Math.max(0.04, prev / 1.35))}
+                  onClick={() => setZoomLevel(prev => Math.max(0.00001, prev / 1.35))}
                   className="h-10 w-full flex items-center justify-center hover:bg-military-850 text-military-100 transition-colors active:scale-90 border-b border-military-750 cursor-pointer"
                   title="Diminuir Zoom"
                 >
@@ -1471,14 +1735,18 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
             </div>
 
             {/* Custom bottom legends bar exactly matching the design and photograph */}
-            <div className="bg-military-850 border-t border-military-750 p-3.5 flex flex-row items-center justify-center gap-6 text-[9.5px] uppercase font-bold tracking-wider text-military-300 select-none shrink-0">
+            <div className="bg-military-850 border-t border-military-750 p-3 flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-[9px] sm:text-[9.5px] uppercase font-bold tracking-wider text-military-300 select-none shrink-0">
               <div className="flex items-center gap-2">
                 <span className="w-3.5 h-3.5 rounded-full border-[2.5px] border-[#0df2aa] bg-transparent inline-block shrink-0" />
-                <span>Limites da Área (SIGEF/CAR)</span>
+                <span>Área (SIGEF/CAR)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-0 border-t-2 border-dashed border-orange-400 inline-block shrink-0" />
+                <span>Divisa Municipal</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3.5 h-3.5 rounded-full border border-military-750 bg-[#ef4444] inline-block shrink-0" />
-                <span>Coordenada Consultada</span>
+                <span>Ponto Consultado</span>
               </div>
             </div>
           </div>
