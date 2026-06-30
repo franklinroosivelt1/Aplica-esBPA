@@ -84,8 +84,10 @@ export default function App() {
     }
   };
 
+  const isHome = currentView === 'home';
+
   return (
-    <div className="min-h-screen bg-military-900 text-military-100 font-sans selection:bg-military-500 selection:text-white">
+    <div className={`min-h-screen ${isHome ? 'bg-[#F8F9FA] text-[#111827]' : 'bg-military-900 text-military-100'} font-sans selection:bg-[#0E7490] selection:text-white transition-colors duration-200`}>
       {/* App Header (Sticky when not in home, camstamp, view maps, fotopdf, cubagem, or bpaoperacional) */}
       {currentView !== 'home' && currentView !== 'camstamp' && currentView !== 'mapas' && currentView !== 'fotopdf' && currentView !== 'cubagem' && currentView !== 'bpaoperacional' && currentView !== 'mandados' && (
         <header className="sticky top-0 z-50 bg-military-800/80 backdrop-blur-md border-b border-military-700 px-4 py-3 flex items-center justify-between">
@@ -120,7 +122,7 @@ export default function App() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
             className={currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' || currentView === 'mandados' ? '' : 'p-4 pt-6'}
           >
             {renderView()}
@@ -129,11 +131,13 @@ export default function App() {
       </main>
       
       {/* Background Decals */}
-      <div className="fixed inset-0 pointer-events-none opacity-[0.03] overflow-hidden -z-10">
-        <div className="absolute -top-24 -left-24 w-96 h-96 border-[40px] border-military-500 rounded-full" />
-        <div className="absolute -bottom-24 -right-24 w-96 h-96 border-[40px] border-military-500 rounded-full" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] border border-military-500/20 rotate-45" />
-      </div>
+      {!isHome && (
+        <div className="fixed inset-0 pointer-events-none opacity-[0.03] overflow-hidden -z-10">
+          <div className="absolute -top-24 -left-24 w-96 h-96 border-[40px] border-military-500 rounded-full" />
+          <div className="absolute -bottom-24 -right-24 w-96 h-96 border-[40px] border-military-500 rounded-full" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] border border-military-500/20 rotate-45" />
+        </div>
+      )}
     </div>
   );
 }
