@@ -1485,43 +1485,70 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                 }
               </h4>
               <p className="text-[8.5px] text-military-400 uppercase tracking-wide mt-1 font-mono">
-                Abaixo estão listados os dossiês completos de cada propriedade sobreposta.
+                {foundProperties && foundProperties.length > 1 
+                  ? "Selecione as abas abaixo para alternar a análise detalhada dos imóveis."
+                  : "Abaixo está listado o dossiê completo da propriedade."
+                }
               </p>
             </div>
 
-            {/* Loop through each property to present them elegantly */}
-            {((foundProperties && foundProperties.length > 0) ? foundProperties : [currentProp]).map((prop, idx) => {
-              const isSelectedOnMap = currentProp.carCode === prop.carCode;
+            {/* Elegant Tab-style selector if there are multiple CARs */}
+            {foundProperties && foundProperties.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-none border-b border-military-750 pt-1">
+                {foundProperties.map((prop, idx) => {
+                  const isSelected = currentProp.carCode === prop.carCode;
+                  return (
+                    <button
+                      key={prop.carCode || idx}
+                      onClick={() => setCurrentProp(prop)}
+                      className={`px-4 py-2.5 rounded-t-xl text-xs font-black uppercase tracking-wider border-t border-x transition-all flex items-center gap-2 cursor-pointer ${
+                        isSelected
+                          ? 'bg-military-950 text-military-100 border-military-750 border-b-transparent shadow-sm scale-102 z-10'
+                          : 'bg-military-900 text-military-400 border-transparent border-b-military-750 hover:bg-military-850 hover:text-military-100'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${
+                        prop.status === 'SUSPENSO' ? 'bg-red-500' :
+                        prop.status === 'PENDENTE' ? 'bg-orange-500' :
+                        'bg-emerald-500'
+                      }`} />
+                      <span className="truncate max-w-[120px]">{prop.name || `Imóvel ${idx + 1}`}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Render selected property dossier */}
+            {(() => {
+              const prop = currentProp;
+              const idx = foundProperties ? foundProperties.findIndex(p => p.carCode === prop.carCode) : 0;
+              const displayIdx = idx >= 0 ? idx : 0;
+              
               return (
                 <div 
-                  key={prop.carCode || idx}
-                  className={`bg-military-950 border-2 rounded-2xl p-5 space-y-4 shadow-xl transition-all relative ${
-                    isSelectedOnMap 
-                      ? 'border-amber-500/80 ring-2 ring-amber-500/25' 
-                      : 'border-military-800'
-                  }`}
+                  key={prop.carCode}
+                  className="bg-military-950 border-2 border-amber-500/80 ring-2 ring-amber-500/25 rounded-2xl p-5 space-y-4 shadow-xl transition-all relative"
                 >
                   {/* Selected Indicator Badge on Map */}
-                  {isSelectedOnMap && (
-                    <div className="absolute -top-3 left-4 bg-amber-500 text-military-950 font-black text-[8px] uppercase tracking-widest px-2.5 py-1 rounded-full shadow-sm">
-                      Focado no Mapa Tático
-                    </div>
-                  )}
+                  <div className="absolute -top-3 left-4 bg-amber-500 text-military-950 font-black text-[8px] uppercase tracking-widest px-2.5 py-1 rounded-full shadow-sm">
+                    Focado no Mapa Tático
+                  </div>
 
                   {/* Property Header with high-contrast Name & CAR status */}
-                  <div className="flex items-start justify-between gap-2.5 border-b border-military-800 pb-3">
+                  <div className="flex items-start justify-between gap-2.5 border-b border-military-750 pb-3">
                     <div>
                       <span className="text-[8.5px] font-black font-mono text-military-450 uppercase tracking-widest">
-                        IMÓVEL RURAL #{idx + 1}
+                        IMÓVEL RURAL #{displayIdx + 1}
                       </span>
-                      <h4 className="font-extrabold text-base text-white uppercase tracking-tight leading-tight mt-0.5">
+                      <h4 className="font-extrabold text-base text-military-100 uppercase tracking-tight leading-tight mt-0.5">
                         {prop.name}
                       </h4>
                     </div>
                     <span className={`px-2.5 py-1 text-[9.5px] font-black rounded-lg border shrink-0 ${
-                      prop.status === 'SUSPENSO' ? 'bg-red-950/80 border-red-500 text-red-300' :
-                      prop.status === 'PENDENTE' ? 'bg-orange-950/80 border-orange-500 text-orange-300' :
-                      'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                      prop.status === 'SUSPENSO' ? 'bg-red-50 border-red-500 text-red-700' :
+                      prop.status === 'PENDENTE' ? 'bg-orange-50 border-orange-500 text-orange-700' :
+                      'bg-emerald-55 border-emerald-600 text-emerald-800'
                     }`}>
                       {prop.status}
                     </span>
@@ -1529,17 +1556,17 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
                   {/* Risk Badge */}
                   <div className={`p-3.5 border rounded-xl flex items-center gap-3 bg-military-900/60 ${
-                    prop.riskLevel === 'ALTO' ? 'border-red-500/40 text-red-300' :
-                    prop.riskLevel === 'MÉDIO' ? 'border-orange-500/40 text-orange-300' :
-                    'border-emerald-500/40 text-emerald-350'
+                    prop.riskLevel === 'ALTO' ? 'border-red-500/40 text-red-700' :
+                    prop.riskLevel === 'MÉDIO' ? 'border-orange-500/40 text-orange-700' :
+                    'border-emerald-500/40 text-emerald-850'
                   }`}>
-                    <div className="p-2 bg-black/50 rounded-lg shrink-0">
-                      {prop.riskLevel === 'ALTO' ? <XCircle className="w-4 h-4 text-red-400" /> :
-                       prop.riskLevel === 'MÉDIO' ? <AlertTriangle className="w-4 h-4 text-orange-400" /> :
-                       <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                    <div className="p-2 bg-white/80 rounded-lg shrink-0 border border-military-750 shadow-sm">
+                      {prop.riskLevel === 'ALTO' ? <XCircle className="w-4 h-4 text-red-600" /> :
+                       prop.riskLevel === 'MÉDIO' ? <AlertTriangle className="w-4 h-4 text-orange-500" /> :
+                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[7.5px] font-black uppercase tracking-widest text-military-400">Grau de Infração Estimado</span>
+                      <span className="text-[7.5px] font-black uppercase tracking-widest text-military-450">Grau de Infração Estimado</span>
                       <span className="text-xs font-bold uppercase tracking-wider mt-0.5">Risco de Multas: {prop.riskLevel}</span>
                     </div>
                   </div>
@@ -1548,55 +1575,55 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                   <div className="space-y-2.5 text-xs">
                     {/* CAR Code row */}
                     <div className="bg-military-900 p-3 rounded-xl border border-military-850 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono">Código do CAR</span>
-                      <span className="text-white font-black font-mono select-all break-all sm:text-right">{prop.carCode}</span>
+                      <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono">Código do CAR</span>
+                      <span className="text-military-100 font-black font-mono select-all break-all sm:text-right">{prop.carCode}</span>
                     </div>
 
                     {/* Owner row */}
                     <div className="bg-military-900 p-3 rounded-xl border border-military-850 flex justify-between items-center gap-2">
-                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono">Detentor</span>
-                      <span className="text-white font-black text-right">{prop.owner}</span>
+                      <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono">Detentor</span>
+                      <span className="text-military-100 font-black text-right">{prop.owner}</span>
                     </div>
 
                     {/* Municipality row */}
                     <div className="bg-military-900 p-3 rounded-xl border border-military-850 flex justify-between items-center">
-                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono">Município / UF</span>
-                      <span className="text-white font-black">{prop.municipio} - AC</span>
+                      <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono">Município / UF</span>
+                      <span className="text-military-100 font-black">{prop.municipio} - AC</span>
                     </div>
 
                     {/* Total Area row */}
                     <div className="bg-military-900 p-3 rounded-xl border border-military-850 flex justify-between items-center">
-                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono">Área Declarada</span>
-                      <span className="text-amber-300 font-extrabold font-mono">{prop.area} ha</span>
+                      <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono">Área Declarada</span>
+                      <span className="text-amber-800 font-extrabold font-mono">{prop.area} ha</span>
                     </div>
 
                     {/* Legal Reserve row */}
                     <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-1.5">
-                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono block">Déficit Reserva Legal (Exigência: 80%)</span>
-                      <div className="flex items-center justify-between bg-black/30 p-2 rounded-lg border border-military-800">
-                        <div className="text-[10px] text-military-300 font-mono">
-                          Declarado: <span className="text-white font-extrabold">{prop.rlActual}%</span>
+                      <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono block">Déficit Reserva Legal (Exigência: 80%)</span>
+                      <div className="flex items-center justify-between bg-military-850 p-2 rounded-lg border border-military-750">
+                        <div className="text-[10px] text-military-400 font-mono">
+                          Declarado: <span className="text-military-100 font-black">{prop.rlActual}%</span>
                         </div>
                         {prop.rlActual < 80 ? (
-                          <span className="text-[9.5px] font-black text-red-400 uppercase">Déficit de {(80 - prop.rlActual).toFixed(1)}%</span>
+                          <span className="text-[9.5px] font-black text-red-600 uppercase">Déficit de {(80 - prop.rlActual).toFixed(1)}%</span>
                         ) : (
-                          <span className="text-[9.5px] font-black text-emerald-400 uppercase">Conforme</span>
+                          <span className="text-[9.5px] font-black text-emerald-700 uppercase">Conforme</span>
                         )}
                       </div>
                     </div>
 
                     {/* APP Margin row */}
                     <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-1.5">
-                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono block">Área de Preservação Permanente (APP)</span>
-                      <div className="flex items-center justify-between bg-black/30 p-2 rounded-lg border border-military-800">
-                        <span className="text-[10px] text-military-300 font-mono">Total: {prop.appArea} ha</span>
+                      <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono block">Área de Preservação Permanente (APP)</span>
+                      <div className="flex items-center justify-between bg-military-850 p-2 rounded-lg border border-military-750">
+                        <span className="text-[10px] text-military-400 font-mono">Total: <span className="text-military-100 font-black">{prop.appArea} ha</span></span>
                         {prop.appPreserved ? (
-                          <span className="text-[9px] font-black text-emerald-400 uppercase flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Preservada
+                          <span className="text-[9px] font-black text-emerald-700 uppercase flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" /> Preservada
                           </span>
                         ) : (
-                          <span className="text-[9px] font-black text-red-400 uppercase flex items-center gap-1 animate-pulse">
-                            <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> Passivo APP
+                          <span className="text-[9px] font-black text-red-600 uppercase flex items-center gap-1 animate-pulse">
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-600" /> Passivo APP
                           </span>
                         )}
                       </div>
@@ -1604,8 +1631,8 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
                     {/* Fundiary restrictions */}
                     <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-1">
-                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono block">Restrições Territoriais / TI</span>
-                      <p className="text-[10px] text-military-200 leading-relaxed font-mono">
+                      <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono block">Restrições Territoriais / TI</span>
+                      <p className="text-[10px] text-military-100 leading-relaxed font-mono font-medium">
                         {prop.overlap}
                       </p>
                     </div>
@@ -1613,10 +1640,10 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                     {/* Embargo rows */}
                     <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-2">
                       <div className="flex items-center justify-between border-b border-military-800 pb-1.5 text-[8.5px] font-mono">
-                        <span className="text-military-400 uppercase font-black">Embargos Ativos</span>
-                        <span className="font-black text-red-400 uppercase">{prop.embargoOrgao || "IMAC / IBAMA"}</span>
+                        <span className="text-military-450 uppercase font-black">Embargos Ativos</span>
+                        <span className="font-black text-red-700 uppercase">{prop.embargoOrgao || "IMAC / IBAMA"}</span>
                       </div>
-                      <p className="text-[10px] text-military-200 leading-relaxed font-mono font-bold">
+                      <p className="text-[10px] text-military-100 leading-relaxed font-mono font-bold">
                         {prop.embargo}
                       </p>
                     </div>
@@ -1624,18 +1651,18 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                     {/* Satellite Alerts row */}
                     <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-2">
                       <div className="flex items-center justify-between border-b border-military-800 pb-1.5 text-[8.5px] font-mono">
-                        <span className="text-military-400 uppercase font-black">Imagens de Satélite</span>
-                        <span className="font-black text-amber-400 uppercase">{prop.alertOrgao || "DETER / INPE"} ({prop.alertData || "15/05/2026"})</span>
+                        <span className="text-military-450 uppercase font-black">Imagens de Satélite</span>
+                        <span className="font-black text-amber-800 uppercase">{prop.alertOrgao || "DETER / INPE"} ({prop.alertData || "15/05/2026"})</span>
                       </div>
-                      <span className="text-[9px] font-black text-red-400 uppercase block">{prop.alertTipo || "DESMATAMENTO RECENTE"}</span>
-                      <p className="text-[10px] text-military-200 leading-relaxed font-mono font-bold">
+                      <span className="text-[9px] font-black text-red-600 uppercase block">{prop.alertTipo || "DESMATAMENTO RECENTE"}</span>
+                      <p className="text-[10px] text-military-100 leading-relaxed font-mono font-bold">
                         {prop.prodesAlert}
                       </p>
                     </div>
                   </div>
 
                   {/* Actions button for this specific property card */}
-                  <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-military-800">
+                  <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-military-750">
                     <button
                       onClick={() => handleDownloadLaudoPDF(prop)}
                       className="col-span-2 py-3.5 bg-amber-500 hover:bg-amber-600 text-military-950 font-black tracking-wider uppercase text-xs rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 cursor-pointer border border-amber-600/50"
@@ -1649,7 +1676,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                         navigator.clipboard.writeText(JSON.stringify(prop, null, 2));
                         alert(`Dossiê de ${prop.name} copiado com sucesso.`);
                       }}
-                      className="py-3 bg-military-850 hover:bg-military-800 border border-military-750 text-military-200 font-black uppercase text-[10px] tracking-wider rounded-xl transition-all active:scale-95 cursor-pointer"
+                      className="py-3 bg-military-850 hover:bg-military-800 border border-military-750 text-military-100 font-black uppercase text-[10px] tracking-wider rounded-xl transition-all active:scale-95 cursor-pointer"
                     >
                       Copiar Dossiê
                     </button>
@@ -1659,20 +1686,16 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                         setCurrentProp(prop);
                         setActiveTab('mapa');
                       }}
-                      className={`py-3 border font-black uppercase text-[10px] tracking-wider rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
-                        isSelectedOnMap
-                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                          : 'bg-military-850 hover:bg-military-800 border-military-750 text-military-200'
-                      }`}
+                      className="py-3 bg-amber-500/20 text-amber-850 border border-amber-500/40 font-black uppercase text-[10px] tracking-wider rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
                       title="Focar este polígono de coordenadas no Mapa Tático"
                     >
-                      <Map className="w-3.5 h-3.5 text-amber-400" />
-                      <span>{isSelectedOnMap ? "Focado" : "Focar no Mapa"}</span>
+                      <Map className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Focado no Mapa</span>
                     </button>
                   </div>
                 </div>
               );
-            })}
+            })()}
           </div>
         )}
 
