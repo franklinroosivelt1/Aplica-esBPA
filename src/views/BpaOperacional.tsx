@@ -978,7 +978,87 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
   }, [currentProp, foundProperties, zoomLevel, panX, panY, showProperty, showAlerts, satImage]);
 
-  // Touch & Drag Handling for Web-GIS Simulator (supporting Mouse and robust absolute multitouch zoom and drag gestures)
+  // Set up robust non-passive touch listeners directly on the canvas element to prevent document zoom/bounce during pinch or drag!
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        dragStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        panStartRef.current = { x: panX, y: panY };
+        touchStartDistRef.current = null;
+      } else if (e.touches.length >= 2) {
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        touchStartDistRef.current = dist;
+        initialZoomRef.current = zoomLevel;
+        
+        const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        dragStartRef.current = { x: centerX, y: centerY };
+        panStartRef.current = { x: panX, y: panY };
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+      if (!dragStartRef.current) return;
+
+      if (e.touches.length === 1) {
+        const dx = e.touches[0].clientX - dragStartRef.current.x;
+        const dy = e.touches[0].clientY - dragStartRef.current.y;
+        setPanX(panStartRef.current.x + dx);
+        setPanY(panStartRef.current.y + dy);
+      } else if (e.touches.length >= 2 && touchStartDistRef.current) {
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        );
+        const factor = dist / touchStartDistRef.current;
+        const targetZoom = initialZoomRef.current * factor;
+        // Allows virtually infinite responsive zooming based on user needs
+        setZoomLevel(Math.max(0.0001, Math.min(10000.0, targetZoom)));
+
+        const currentCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const currentCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        const dx = currentCenterX - dragStartRef.current.x;
+        const dy = currentCenterY - dragStartRef.current.y;
+        setPanX(panStartRef.current.x + dx);
+        setPanY(panStartRef.current.y + dy);
+      }
+    };
+
+    const onTouchEnd = () => {
+      dragStartRef.current = null;
+      touchStartDistRef.current = null;
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.25 : 1 / 1.25;
+      setZoomLevel(prev => Math.max(0.0001, Math.min(10000.0, prev * zoomFactor)));
+    };
+
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+    canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', onTouchEnd);
+      canvas.removeEventListener('touchcancel', onTouchEnd);
+      canvas.removeEventListener('wheel', onWheel);
+    };
+  }, [panX, panY, zoomLevel]);
+
   const handleDragStart = (e: React.MouseEvent<HTMLCanvasElement>) => {
     dragStartRef.current = { x: e.clientX, y: e.clientY };
     panStartRef.current = { x: panX, y: panY };
@@ -996,72 +1076,6 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     dragStartRef.current = null;
   };
 
-  // Robust touch event handlers for mobile devices
-  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (e.touches.length === 1) {
-      dragStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-      panStartRef.current = { x: panX, y: panY };
-      touchStartDistRef.current = null;
-    } else if (e.touches.length >= 2) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      touchStartDistRef.current = dist;
-      initialZoomRef.current = zoomLevel;
-      
-      const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      dragStartRef.current = { x: centerX, y: centerY };
-      panStartRef.current = { x: panX, y: panY };
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    // Prevent normal browser scrolling/zooming while dragging on active canvas area
-    if (e.cancelable) {
-      e.preventDefault();
-    }
-    if (!dragStartRef.current) return;
-
-    if (e.touches.length === 1) {
-      const dx = e.touches[0].clientX - dragStartRef.current.x;
-      const dy = e.touches[0].clientY - dragStartRef.current.y;
-      setPanX(panStartRef.current.x + dx);
-      setPanY(panStartRef.current.y + dy);
-    } else if (e.touches.length >= 2 && touchStartDistRef.current) {
-      // Calculate active distance for pinch zoom
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      // Zoom ratio change factor absolute from gesture start
-      const factor = dist / touchStartDistRef.current;
-      const targetZoom = initialZoomRef.current * factor;
-      setZoomLevel(Math.max(0.00001, Math.min(10000.0, targetZoom)));
-
-      // Combined dragging translation centering
-      const currentCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-      const currentCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      const dx = currentCenterX - dragStartRef.current.x;
-      const dy = currentCenterY - dragStartRef.current.y;
-      setPanX(panStartRef.current.x + dx);
-      setPanY(panStartRef.current.y + dy);
-    }
-  };
-
-  const handleTouchEnd = () => {
-    dragStartRef.current = null;
-    touchStartDistRef.current = null;
-  };
-
-  // Modern desktop mouse wheel zooming support
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    setZoomLevel(prev => Math.max(0.00001, Math.min(10000.0, prev * zoomFactor)));
-  };
-
   const resetMapOffset = () => {
     setPanX(0);
     setPanY(0);
@@ -1069,7 +1083,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
   };
 
   // --- PDF EXPORTER ---
-  const handleDownloadLaudoPDF = () => {
+  const handleDownloadLaudoPDF = (propToUse = currentProp) => {
     const doc = new jsPDF();
     
     // Borders
@@ -1087,7 +1101,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
-    doc.text("CONVÊNIO SENSORIAMENTO REMOTO & SISTEMA SÍRGEO", 105, 24, { align: "center" });
+    doc.text("DIVISÃO DE RECURSOS TECNOLÓGICOS - BPA", 105, 24, { align: "center" });
     
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
@@ -1105,14 +1119,14 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     doc.setTextColor(40, 40, 40);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text(`Denominação Rural: ${currentProp.name}`, 15, 65);
-    doc.text(`Código do CAR: ${currentProp.carCode}`, 15, 72);
-    doc.text(`Detentor do Posse/Domínio: ${currentProp.owner}`, 15, 79);
-    doc.text(`Município Correspondente: ${currentProp.municipio} - Acre`, 15, 86);
+    doc.text(`Denominação Rural: ${propToUse.name}`, 15, 65);
+    doc.text(`Código do CAR: ${propToUse.carCode}`, 15, 72);
+    doc.text(`Detentor do Posse/Domínio: ${propToUse.owner}`, 15, 79);
+    doc.text(`Município Correspondente: ${propToUse.municipio} - Acre`, 15, 86);
     doc.text(`Coordenadas de Pesquisa Central:`, 15, 93);
-    doc.text(`- Latitude DMS: ${decimalToDMS(currentProp.lat, 'lat')} (${currentProp.lat.toFixed(6)} DD)`, 15, 100);
-    doc.text(`- Longitude DMS: ${decimalToDMS(currentProp.lng, 'lng')} (${currentProp.lng.toFixed(6)} DD)`, 15, 107);
-    doc.text(`- Projeção UTM: ${decimalToUTM(currentProp.lat, currentProp.lng)}`, 15, 114);
+    doc.text(`- Latitude DMS: ${decimalToDMS(propToUse.lat, 'lat')} (${propToUse.lat.toFixed(6)} DD)`, 15, 100);
+    doc.text(`- Longitude DMS: ${decimalToDMS(propToUse.lng, 'lng')} (${propToUse.lng.toFixed(6)} DD)`, 15, 107);
+    doc.text(`- Projeção UTM: ${decimalToUTM(propToUse.lat, propToUse.lng)}`, 15, 114);
 
     // Section 2: Forest Indexes
     doc.setTextColor(31, 46, 32);
@@ -1122,11 +1136,11 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
     doc.setTextColor(40, 40, 40);
     doc.setFont("helvetica", "normal");
-    doc.text(`Dimensão Consolidada (Hectares): ${currentProp.area} ha`, 15, 136);
-    doc.text(`Exigência Legal (Amazônia Legal): 80.00% (${(currentProp.area * 0.8).toFixed(2)} ha)`, 15, 143);
-    doc.text(`Reserva Legal Declarada (CAR): ${currentProp.rlActual}% (${((currentProp.rlActual * currentProp.area) / 100).toFixed(2)} ha)`, 15, 150);
-    doc.text(`Área de Proteção Permanente Hidrográfica (APP): ${currentProp.appArea} ha`, 15, 157);
-    doc.text(`Status de Integridade da Faixa Marginal (APP Furos/Ramais): ${currentProp.appPreserved ? "CONSERVADO" : "DEPRECIADO COM PASSIVO AMBIENTAL"}`, 15, 164);
+    doc.text(`Dimensão Consolidada (Hectares): ${propToUse.area} ha`, 15, 136);
+    doc.text(`Exigência Legal (Amazônia Legal): 80.00% (${(propToUse.area * 0.8).toFixed(2)} ha)`, 15, 143);
+    doc.text(`Reserva Legal Declarada (CAR): ${propToUse.rlActual}% (${((propToUse.rlActual * propToUse.area) / 100).toFixed(2)} ha)`, 15, 150);
+    doc.text(`Área de Proteção Permanente Hidrográfica (APP): ${propToUse.appArea} ha`, 15, 157);
+    doc.text(`Status de Integridade da Faixa Marginal (APP Furos/Ramais): ${propToUse.appPreserved ? "CONSERVADO" : "DEPRECIADO COM PASSIVO AMBIENTAL"}`, 15, 164);
 
     // Section 3: Risk Summary
     doc.setTextColor(31, 46, 32);
@@ -1138,22 +1152,22 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     doc.setFont("helvetica", "bold");
     doc.text(`- Alerta Prodes / Deter: `, 15, 185);
     doc.setFont("helvetica", "normal");
-    doc.text(`${currentProp.prodesAlert}`, 58, 185);
+    doc.text(`${propToUse.prodesAlert}`, 58, 185);
 
     doc.setFont("helvetica", "bold");
     doc.text(`- Situação do Cadastro: `, 15, 192);
     doc.setFont("helvetica", "normal");
-    doc.text(`${currentProp.status}`, 55, 192);
+    doc.text(`${propToUse.status}`, 55, 192);
 
     doc.setFont("helvetica", "bold");
     doc.text(`- Restrição Territorial TI: `, 15, 199);
     doc.setFont("helvetica", "normal");
-    doc.text(`${currentProp.overlap}`, 62, 199);
+    doc.text(`${propToUse.overlap}`, 62, 199);
 
     doc.setFont("helvetica", "bold");
     doc.text(`- Atos de Embargos (IBAMA/IMAC): `, 15, 206);
     doc.setFont("helvetica", "normal");
-    doc.text(`${currentProp.embargo}`, 78, 206);
+    doc.text(`${propToUse.embargo}`, 78, 206);
 
     // Section 4: Opinions
     doc.setTextColor(31, 46, 32);
@@ -1164,10 +1178,10 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     doc.setTextColor(40, 40, 40);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.5);
-    const textConclusion = `Fica autuado e documentado o imóvel rural denominado ${currentProp.name}. ` +
+    const textConclusion = `Fica autuado e documentado o imóvel rural denominado ${propToUse.name}. ` +
       `Os dados geoespaciais foram consultados em tempo real através do algoritmo inteligente de fatiamento do modulo de Aplicações BPA, ` +
-      `identificando grau de conformidade e passivos ambientais classificados como RISCO ${currentProp.riskLevel}. ` +
-      `${currentProp.history} Este laudo constitui peça informativa para averiguação fotográfica georreferenciada em campo, para devida lavratura de multas ou regularização (PRA) se aplicável.`;
+      `identificando grau de conformidade e passivos ambientais classificados como RISCO ${propToUse.riskLevel}. ` +
+      `${propToUse.history} Este laudo constitui peça informativa para averiguação fotográfica georreferenciada em campo, para devida lavratura de multas ou regularização (PRA) se aplicável.`;
 
     const wrapConclusion = doc.splitTextToSize(textConclusion, 175);
     doc.text(wrapConclusion, 15, 228);
@@ -1184,7 +1198,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     doc.line(120, 272, 170, 272);
     doc.text("Coordenador de Monitoramento Geográfico", 145, 277, { align: "center" });
 
-    doc.save(`LAUDO-BPA-CAR-${currentProp.carCode}.pdf`);
+    doc.save(`LAUDO-BPA-CAR-${propToUse.carCode}.pdf`);
   };
 
   return (
@@ -1460,196 +1474,205 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
         )}
 
         {activeTab === 'ficha' && (
-          <div className="p-4 space-y-4 max-w-md mx-auto w-full flex-1">
-            {/* Header Badge */}
-            <div className="flex items-center justify-between bg-military-950/80 p-4 border border-military-800 rounded-2xl animate-fade-in">
-              <div>
-                <span className="text-[8.5px] font-black font-mono uppercase tracking-widest text-military-400">IMÓVEL LOCALIZADO</span>
-                <h4 className="font-extrabold text-sm text-military-100 uppercase tracking-normal mt-0.5 leading-tight">{currentProp.name}</h4>
-              </div>
-              <span className={`px-2.5 py-1 text-[9px] font-black rounded-lg bg-military-900 border ${
-                currentProp.status === 'SUSPENSO' ? 'border-red-500 text-red-400' :
-                currentProp.status === 'PENDENTE' ? 'border-orange-500 text-orange-400' :
-                'border-emerald-500 text-emerald-400'
-              }`}>
-                CAR {currentProp.status}
-              </span>
+          <div className="p-4 space-y-5 max-w-md mx-auto w-full flex-1">
+            {/* Header Title describing the found properties count */}
+            <div className="bg-military-850 p-4 border border-military-750 rounded-2xl animate-fade-in text-center shadow-md">
+              <span className="text-[9px] font-black font-mono uppercase tracking-widest text-amber-400">RESULTADO DO MAPEAMENTO</span>
+              <h4 className="font-extrabold text-sm text-military-100 uppercase tracking-normal mt-1 leading-tight">
+                {foundProperties && foundProperties.length > 1 
+                  ? `${foundProperties.length} IMÓVEIS IDENTIFICADOS NO PONTO`
+                  : `1 IMÓVEL IDENTIFICADO NO PONTO`
+                }
+              </h4>
+              <p className="text-[8.5px] text-military-400 uppercase tracking-wide mt-1 font-mono">
+                Abaixo estão listados os dossiês completos de cada propriedade sobreposta.
+              </p>
             </div>
 
-            {/* Overlap CAR Selector pill bar to switch dossier files */}
-            {foundProperties && foundProperties.length > 1 && (
-              <div className="bg-military-950/85 p-3.5 border border-military-800 rounded-2xl space-y-2 animate-fade-in text-xs">
-                <span className="text-[8.5px] font-black uppercase tracking-widest text-military-400 block">
-                  Selecione o Imóvel Encontrado ({foundProperties.length} CARs sobrepostos na coordenada):
-                </span>
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                  {foundProperties.map((prop, idx) => (
+            {/* Loop through each property to present them elegantly */}
+            {((foundProperties && foundProperties.length > 0) ? foundProperties : [currentProp]).map((prop, idx) => {
+              const isSelectedOnMap = currentProp.carCode === prop.carCode;
+              return (
+                <div 
+                  key={prop.carCode || idx}
+                  className={`bg-military-950 border-2 rounded-2xl p-5 space-y-4 shadow-xl transition-all relative ${
+                    isSelectedOnMap 
+                      ? 'border-amber-500/80 ring-2 ring-amber-500/25' 
+                      : 'border-military-800'
+                  }`}
+                >
+                  {/* Selected Indicator Badge on Map */}
+                  {isSelectedOnMap && (
+                    <div className="absolute -top-3 left-4 bg-amber-500 text-military-950 font-black text-[8px] uppercase tracking-widest px-2.5 py-1 rounded-full shadow-sm">
+                      Focado no Mapa Tático
+                    </div>
+                  )}
+
+                  {/* Property Header with high-contrast Name & CAR status */}
+                  <div className="flex items-start justify-between gap-2.5 border-b border-military-800 pb-3">
+                    <div>
+                      <span className="text-[8.5px] font-black font-mono text-military-450 uppercase tracking-widest">
+                        IMÓVEL RURAL #{idx + 1}
+                      </span>
+                      <h4 className="font-extrabold text-base text-white uppercase tracking-tight leading-tight mt-0.5">
+                        {prop.name}
+                      </h4>
+                    </div>
+                    <span className={`px-2.5 py-1 text-[9.5px] font-black rounded-lg border shrink-0 ${
+                      prop.status === 'SUSPENSO' ? 'bg-red-950/80 border-red-500 text-red-300' :
+                      prop.status === 'PENDENTE' ? 'bg-orange-950/80 border-orange-500 text-orange-300' :
+                      'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                    }`}>
+                      {prop.status}
+                    </span>
+                  </div>
+
+                  {/* Risk Badge */}
+                  <div className={`p-3.5 border rounded-xl flex items-center gap-3 bg-military-900/60 ${
+                    prop.riskLevel === 'ALTO' ? 'border-red-500/40 text-red-300' :
+                    prop.riskLevel === 'MÉDIO' ? 'border-orange-500/40 text-orange-300' :
+                    'border-emerald-500/40 text-emerald-350'
+                  }`}>
+                    <div className="p-2 bg-black/50 rounded-lg shrink-0">
+                      {prop.riskLevel === 'ALTO' ? <XCircle className="w-4 h-4 text-red-400" /> :
+                       prop.riskLevel === 'MÉDIO' ? <AlertTriangle className="w-4 h-4 text-orange-400" /> :
+                       <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[7.5px] font-black uppercase tracking-widest text-military-400">Grau de Infração Estimado</span>
+                      <span className="text-xs font-bold uppercase tracking-wider mt-0.5">Risco de Multas: {prop.riskLevel}</span>
+                    </div>
+                  </div>
+
+                  {/* Specifications Details List - Styled to be extremely pleasant, high-contrast, readable */}
+                  <div className="space-y-2.5 text-xs">
+                    {/* CAR Code row */}
+                    <div className="bg-military-900 p-3 rounded-xl border border-military-850 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono">Código do CAR</span>
+                      <span className="text-white font-black font-mono select-all break-all sm:text-right">{prop.carCode}</span>
+                    </div>
+
+                    {/* Owner row */}
+                    <div className="bg-military-900 p-3 rounded-xl border border-military-850 flex justify-between items-center gap-2">
+                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono">Detentor</span>
+                      <span className="text-white font-black text-right">{prop.owner}</span>
+                    </div>
+
+                    {/* Municipality row */}
+                    <div className="bg-military-900 p-3 rounded-xl border border-military-850 flex justify-between items-center">
+                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono">Município / UF</span>
+                      <span className="text-white font-black">{prop.municipio} - AC</span>
+                    </div>
+
+                    {/* Total Area row */}
+                    <div className="bg-military-900 p-3 rounded-xl border border-military-850 flex justify-between items-center">
+                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono">Área Declarada</span>
+                      <span className="text-amber-300 font-extrabold font-mono">{prop.area} ha</span>
+                    </div>
+
+                    {/* Legal Reserve row */}
+                    <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-1.5">
+                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono block">Déficit Reserva Legal (Exigência: 80%)</span>
+                      <div className="flex items-center justify-between bg-black/30 p-2 rounded-lg border border-military-800">
+                        <div className="text-[10px] text-military-300 font-mono">
+                          Declarado: <span className="text-white font-extrabold">{prop.rlActual}%</span>
+                        </div>
+                        {prop.rlActual < 80 ? (
+                          <span className="text-[9.5px] font-black text-red-400 uppercase">Déficit de {(80 - prop.rlActual).toFixed(1)}%</span>
+                        ) : (
+                          <span className="text-[9.5px] font-black text-emerald-400 uppercase">Conforme</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* APP Margin row */}
+                    <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-1.5">
+                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono block">Área de Preservação Permanente (APP)</span>
+                      <div className="flex items-center justify-between bg-black/30 p-2 rounded-lg border border-military-800">
+                        <span className="text-[10px] text-military-300 font-mono">Total: {prop.appArea} ha</span>
+                        {prop.appPreserved ? (
+                          <span className="text-[9px] font-black text-emerald-400 uppercase flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Preservada
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-black text-red-400 uppercase flex items-center gap-1 animate-pulse">
+                            <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> Passivo APP
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Fundiary restrictions */}
+                    <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-1">
+                      <span className="text-military-400 uppercase font-black text-[8px] tracking-widest font-mono block">Restrições Territoriais / TI</span>
+                      <p className="text-[10px] text-military-200 leading-relaxed font-mono">
+                        {prop.overlap}
+                      </p>
+                    </div>
+
+                    {/* Embargo rows */}
+                    <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-2">
+                      <div className="flex items-center justify-between border-b border-military-800 pb-1.5 text-[8.5px] font-mono">
+                        <span className="text-military-400 uppercase font-black">Embargos Ativos</span>
+                        <span className="font-black text-red-400 uppercase">{prop.embargoOrgao || "IMAC / IBAMA"}</span>
+                      </div>
+                      <p className="text-[10px] text-military-200 leading-relaxed font-mono font-bold">
+                        {prop.embargo}
+                      </p>
+                    </div>
+
+                    {/* Satellite Alerts row */}
+                    <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-2">
+                      <div className="flex items-center justify-between border-b border-military-800 pb-1.5 text-[8.5px] font-mono">
+                        <span className="text-military-400 uppercase font-black">Imagens de Satélite</span>
+                        <span className="font-black text-amber-400 uppercase">{prop.alertOrgao || "DETER / INPE"} ({prop.alertData || "15/05/2026"})</span>
+                      </div>
+                      <span className="text-[9px] font-black text-red-400 uppercase block">{prop.alertTipo || "DESMATAMENTO RECENTE"}</span>
+                      <p className="text-[10px] text-military-200 leading-relaxed font-mono font-bold">
+                        {prop.prodesAlert}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Actions button for this specific property card */}
+                  <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-military-800">
                     <button
-                      key={idx}
-                      onClick={() => setCurrentProp(prop)}
-                      className={`px-3 py-1.5 rounded-xl text-[9.5px] font-black uppercase tracking-wide whitespace-nowrap border transition-all cursor-pointer ${
-                        currentProp.carCode === prop.carCode
-                          ? 'bg-yellow-500 text-military-950 border-yellow-500 font-bold scale-[1.01]'
-                          : 'bg-military-850 text-military-400 border-military-750 hover:bg-military-800 hover:text-military-200'
-                      }`}
+                      onClick={() => handleDownloadLaudoPDF(prop)}
+                      className="col-span-2 py-3.5 bg-amber-500 hover:bg-amber-600 text-military-950 font-black tracking-wider uppercase text-xs rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 cursor-pointer border border-amber-600/50"
                     >
-                      {prop.name} ({prop.status})
+                      <Download className="w-4 h-4 text-military-950" />
+                      <span>Gerar Laudo PDF Autuado</span>
                     </button>
-                  ))}
-                </div>
-                <p className="text-[8px] text-military-450 uppercase font-mono tracking-widest leading-normal">
-                  * Clique acima para alternar e analisar o respectivo dossiê de divergências ambientais do imóvel rural correspondente.
-                </p>
-              </div>
-            )}
-
-            {/* Risk Indicator Panel with high accessibility dark contrast background and bright outlines */}
-            <div className={`p-4 border rounded-2xl flex items-center gap-3.5 relative overflow-hidden bg-military-950/40 ${
-              currentProp.riskLevel === 'ALTO' ? 'border-red-500/60 text-red-400' :
-              currentProp.riskLevel === 'MÉDIO' ? 'border-orange-500/60 text-orange-400' :
-              'border-emerald-500/60 text-emerald-400'
-            }`}>
-              <div className="p-2.5 bg-black/40 rounded-xl relative z-10">
-                {currentProp.riskLevel === 'ALTO' ? <XCircle className="w-5 h-5 text-red-500 animate-pulse" /> :
-                 currentProp.riskLevel === 'MÉDIO' ? <AlertTriangle className="w-5 h-5 text-orange-400 cursor-pointer" /> :
-                 <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-              </div>
-              <div className="relative z-10 flex flex-col">
-                <span className="text-[8px] font-black uppercase tracking-widest block leading-tight opacity-75">Grau de Infração Estimado</span>
-                <span className="text-xs font-black uppercase tracking-wider block mt-0.5">Risco de Multas: {currentProp.riskLevel}</span>
-              </div>
-            </div>
-
-            {/* Specifications Details List */}
-            <div className="bg-white p-4 border border-slate-100 shadow-sm rounded-2xl text-xs font-mono space-y-3.5 text-slate-800">
-              <div className="border-b border-slate-100 pb-2.5 flex justify-between gap-2.5">
-                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest">Código CAR:</span>
-                <span className="text-slate-900 font-extrabold select-all break-all text-right">{currentProp.carCode}</span>
-              </div>
-              <div className="border-b border-slate-100 pb-2.5 flex justify-between gap-4">
-                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest">Proprietário:</span>
-                <span className="text-slate-800 font-extrabold text-right">{currentProp.owner}</span>
-              </div>
-              <div className="border-b border-slate-100 pb-2.5 flex justify-between">
-                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest">Município / UF:</span>
-                <span className="text-slate-800 font-extrabold">{currentProp.municipio} - AC</span>
-              </div>
-              <div className="border-b border-slate-100 pb-2.5 flex justify-between">
-                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest">Área Total:</span>
-                <span className="text-slate-900 font-extrabold">{currentProp.area} Hectares</span>
-              </div>
-              <div className="border-b border-slate-100 pb-2.5">
-                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest block mb-1">Déficit Reserva Legal:</span>
-                <div className="flex justify-between items-center bg-[#f8fafc] border border-slate-200 p-2.5 rounded-xl">
-                  <div className="flex gap-2.5 text-slate-600">
-                    <span className="text-[10px] uppercase">Declarado: <span className="text-slate-900 font-extrabold">{currentProp.rlActual}%</span></span>
-                    <span className="text-[10px] uppercase">Exigido: <span className="font-extrabold text-emerald-700">80%</span></span>
+                    
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(prop, null, 2));
+                        alert(`Dossiê de ${prop.name} copiado com sucesso.`);
+                      }}
+                      className="py-3 bg-military-850 hover:bg-military-800 border border-military-750 text-military-200 font-black uppercase text-[10px] tracking-wider rounded-xl transition-all active:scale-95 cursor-pointer"
+                    >
+                      Copiar Dossiê
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setCurrentProp(prop);
+                        setActiveTab('mapa');
+                      }}
+                      className={`py-3 border font-black uppercase text-[10px] tracking-wider rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer ${
+                        isSelectedOnMap
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                          : 'bg-military-850 hover:bg-military-800 border-military-750 text-military-200'
+                      }`}
+                      title="Focar este polígono de coordenadas no Mapa Tático"
+                    >
+                      <Map className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{isSelectedOnMap ? "Focado" : "Focar no Mapa"}</span>
+                    </button>
                   </div>
-                  {currentProp.rlActual < 80 ? (
-                    <span className="text-[9.5px] font-black text-red-600 uppercase">Déficit de {(80 - currentProp.rlActual).toFixed(1)}%</span>
-                  ) : (
-                    <span className="text-[9.5px] font-black text-emerald-600 uppercase">Conforme</span>
-                  )}
                 </div>
-              </div>
-              <div className="border-b border-slate-100 pb-1.5">
-                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest block mb-1">Área da Faixa de Margem (APP):</span>
-                <div className="flex justify-between items-center bg-[#f8fafc] border border-slate-200 p-2.5 rounded-xl">
-                  <span className="text-[10px] text-slate-600">Total estimada: {currentProp.appArea} ha</span>
-                  {currentProp.appPreserved ? (
-                    <span className="text-[9.5px] font-black text-emerald-600 uppercase flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Preservada
-                    </span>
-                  ) : (
-                    <span className="text-[9.5px] font-black text-red-600 uppercase flex items-center gap-1 animate-pulse">
-                      <AlertTriangle className="w-3.5 h-3.5 text-red-500" /> Desflorestamento
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Geographical constraints */}
-              <div className="border-b border-slate-100 pb-2">
-                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest block mb-1">Restrições Fundiárias:</span>
-                <p className="text-[10px] text-slate-700 leading-relaxed bg-[#f8fafc] border border-slate-200 p-2.5 rounded-xl">
-                  {currentProp.overlap}
-                </p>
-              </div>
-
-              {/* Embargo verification with explicit issuing body */}
-              <div className="border-b border-slate-100 pb-2 space-y-1">
-                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest block font-sans">Embargos Ativos:</span>
-                <div className="bg-[#f8fafc] border border-slate-200 p-2.5 rounded-xl text-[10px] space-y-1.5">
-                  <div className="flex justify-between font-mono text-[9px] border-b border-slate-150 pb-1.5 text-slate-500">
-                    <span className="font-extrabold uppercase">Órgão Emissor do Embargo:</span>
-                    <span className="font-extrabold uppercase text-red-600">{currentProp.embargoOrgao || "IMAC / IBAMA"}</span>
-                  </div>
-                  <p className="text-slate-700 leading-relaxed font-extrabold">
-                    {currentProp.embargo}
-                  </p>
-                </div>
-              </div>
-
-              {/* Prodes alert detail with satellite agency, alert type, and date */}
-              <div className="pb-1 space-y-1">
-                <span className="text-slate-400 uppercase font-extrabold text-[9px] tracking-widest block mb-1">Constatações por Imagens de Satélite (Alertas Recentes):</span>
-                <div className={`p-3 rounded-xl border text-[10px] leading-relaxed ${
-                  currentProp.prodesAlert.includes('Alerta') || currentProp.prodesAlert.includes('Deficit') || currentProp.prodesAlert.includes('Supressão') || currentProp.prodesAlert.includes('Inconsis') || currentProp.prodesAlert.includes('Desmatamento')
-                    ? 'bg-[#fef2f2] border-red-200 text-slate-800' 
-                    : 'bg-[#f0fdf4] border-emerald-200 text-slate-800'
-                }`}>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border-b border-dashed border-slate-200 pb-2 mb-2 font-mono text-[9px] text-slate-500">
-                    <div>
-                      <span className="font-extrabold text-slate-400 uppercase block leading-none mb-1">Órgão Emissor:</span>
-                      <span className="font-extrabold text-slate-700">{currentProp.alertOrgao || "DETER / INPE"}</span>
-                    </div>
-                    <div>
-                      <span className="font-extrabold text-slate-400 uppercase block leading-none mb-1">Data do Alerta:</span>
-                      <span className="font-extrabold text-[#d97706]">{currentProp.alertData || "15/05/2026"}</span>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <span className="font-extrabold text-slate-400 uppercase block leading-none mb-1">Tipo de Alerta:</span>
-                      <span className="font-extrabold text-red-600 uppercase">{currentProp.alertTipo || "ALERTA DE DESMATAMENTO ATIVO"}</span>
-                    </div>
-                  </div>
-                  <p className="font-extrabold leading-normal text-slate-700">
-                    {currentProp.prodesAlert}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions button */}
-            <div className="grid grid-cols-2 gap-3 pb-8">
-              <button
-                onClick={handleDownloadLaudoPDF}
-                className="col-span-2 py-4 bg-military-300 hover:bg-military-200 text-military-950 font-black tracking-wider uppercase text-xs rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Download className="w-4 h-4 text-military-950" />
-                <span>Gerar Laudo PDF Autuado</span>
-              </button>
-              
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(JSON.stringify(currentProp, null, 2));
-                  alert("Dossiê geográfico copiado com sucesso para a área de transferência.");
-                }}
-                className="py-3 bg-military-800 hover:bg-military-750 border border-military-750 text-military-200 font-bold uppercase text-[10px] tracking-wider rounded-xl transition-all active:scale-95"
-              >
-                Copiar Dossiê
-              </button>
-              
-              <button
-                onClick={() => {
-                  setActiveTab('mapa');
-                }}
-                className="py-3 bg-military-800 hover:bg-military-750 border border-military-750 text-military-200 font-bold uppercase text-[10px] tracking-wider rounded-xl transition-all active:scale-95 flex items-center justify-center gap-1.5"
-                title="Mapear polígono de coordenadas"
-              >
-                <Map className="w-3.5 h-3.5 text-yellow-500" />
-                <span>Ver Vetorização</span>
-              </button>
-            </div>
+              );
+            })}
           </div>
         )}
 
@@ -1691,32 +1714,32 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                 </span>
               </div>
 
-              {/* Tactile Zoom Buttons on Bottom Right (styled directly matching your image overlay) */}
-              <div className="absolute bottom-4 right-4 z-10 flex flex-col bg-military-800 border border-military-750 rounded-lg overflow-hidden shadow-md w-10">
+              {/* Tactile Zoom Buttons on Bottom Right - Enlarged for flawless, comfortable triggering */}
+              <div className="absolute bottom-4 right-4 z-10 flex flex-col bg-military-800 border border-military-750 rounded-xl overflow-hidden shadow-md w-12">
                 <button 
                   onClick={() => setZoomLevel(prev => Math.min(10000.0, prev * 1.35))}
-                  className="h-10 w-full flex items-center justify-center hover:bg-military-850 text-military-100 transition-colors active:scale-90 border-b border-military-750 cursor-pointer"
+                  className="h-12 w-full flex items-center justify-center hover:bg-military-850 text-military-100 transition-colors active:scale-90 border-b border-military-750 cursor-pointer"
                   title="Aumentar Zoom"
                 >
-                  <Plus className="w-4 h-4 text-military-300" />
+                  <Plus className="w-5 h-5 text-military-300" />
                 </button>
                 <button 
                   onClick={() => setZoomLevel(prev => Math.max(0.00001, prev / 1.35))}
-                  className="h-10 w-full flex items-center justify-center hover:bg-military-850 text-military-100 transition-colors active:scale-90 border-b border-military-750 cursor-pointer"
+                  className="h-12 w-full flex items-center justify-center hover:bg-military-850 text-military-100 transition-colors active:scale-90 border-b border-military-750 cursor-pointer"
                   title="Diminuir Zoom"
                 >
-                  <Minus className="w-4 h-4 text-military-300" />
+                  <Minus className="w-5 h-5 text-military-300" />
                 </button>
                 <button 
                   onClick={resetMapOffset}
-                  className="h-9 w-full flex items-center justify-center hover:bg-military-850 text-military-500 hover:text-military-205 transition-colors active:scale-90 cursor-pointer"
+                  className="h-11 w-full flex items-center justify-center hover:bg-military-850 text-military-500 hover:text-military-200 transition-colors active:scale-90 cursor-pointer"
                   title="Centralizar Coordenadas"
                 >
-                  <Maximize className="w-3.5 h-3.5" />
+                  <Maximize className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Canvas element */}
+              {/* Canvas element - No manual touch listeners in JSX since useEffect attaches non-passive event listeners cleanly */}
               <div className="flex-1 w-full bg-military-950 relative overflow-hidden">
                 <canvas 
                   ref={canvasRef}
@@ -1725,11 +1748,6 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                   onMouseMove={handleDragMove}
                   onMouseUp={handleDragEnd}
                   onMouseLeave={handleDragEnd}
-                  onTouchStart={handleTouchStart}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
-                  onTouchCancel={handleTouchEnd}
-                  onWheel={handleWheel}
                 />
               </div>
             </div>
@@ -1755,41 +1773,58 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
         {activeTab === 'historico' && (
           <div className="p-4 space-y-4 max-w-md mx-auto w-full flex-1 pb-16">
             <div className="space-y-1 text-center mt-1">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-military-100">Consultas Recentes da Fiscalização</h3>
-              <p className="text-[10px] text-military-400 uppercase font-mono tracking-widest">Histórico armazenado localmente para averiguação offline</p>
+              <h3 className="text-sm font-black uppercase tracking-wider text-military-100">Consultas Recentes da Fiscalização</h3>
+              <p className="text-[9px] text-military-450 uppercase font-mono tracking-widest">Histórico armazenado localmente para averiguação offline</p>
             </div>
 
             {historyList.length === 0 ? (
               <div className="text-center py-16 bg-military-950 rounded-3xl border border-military-800 p-6">
                 <History className="w-10 h-10 text-military-600 mx-auto mb-3" />
-                <p className="text-xs text-military-500 uppercase font-bold tracking-widest">Nenhuma propriedade consultada.</p>
+                <p className="text-xs text-military-500 uppercase font-black tracking-widest">Nenhuma propriedade consultada.</p>
                 <button
                   onClick={() => setActiveTab('consultas')}
-                  className="mt-6 px-4 py-2 bg-yellow-500 text-military-950 font-black tracking-widest rounded-xl text-[10px] uppercase"
+                  className="mt-6 px-4 py-2 bg-yellow-500 text-military-950 font-black tracking-widest rounded-xl text-[10px] uppercase cursor-pointer"
                 >
                   Ir para Pesquisa
                 </button>
               </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {historyList.map((item, idx) => {
-                  const isSuspended = item.status === 'SUSPENSO';
-                  const isPending = item.status === 'PENDENTE';
                   return (
                     <div 
                       key={idx}
-                      className="bg-military-950 border border-military-800/80 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-3 relative overflow-hidden group"
+                      className="bg-military-950 border-2 border-military-800/85 hover:border-military-750 rounded-2xl p-4 flex flex-col items-stretch gap-3 relative overflow-hidden transition-all shadow-md"
                     >
-                      <div className="space-y-1 text-center md:text-left flex-1">
-                        <span className="font-extrabold text-xs text-white block leading-snug">{item.name}</span>
-                        <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-2 text-[9px] font-mono text-military-400">
-                          <span>{item.municipio} • {item.area} ha</span>
-                          <span>•</span>
-                          <span className="text-yellow-500">{item.lat.toFixed(4)}, {item.lng.toFixed(4)}</span>
+                      {/* Left vertical color accent bar based on Risk */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-2 ${
+                        item.riskLevel === 'ALTO' ? 'bg-red-500' :
+                        item.riskLevel === 'MÉDIO' ? 'bg-orange-500' :
+                        'bg-emerald-500'
+                      }`} />
+
+                      <div className="pl-2.5 flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-extrabold text-sm text-white uppercase tracking-tight line-clamp-1">{item.name}</span>
+                          <span className={`px-2 py-0.5 text-[8px] font-black rounded border shrink-0 ${
+                            item.status === 'SUSPENSO' ? 'bg-red-950/40 border-red-500/40 text-red-300' :
+                            item.status === 'PENDENTE' ? 'bg-orange-950/40 border-orange-500/40 text-orange-300' :
+                            'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                          }`}>
+                            CAR {item.status}
+                          </span>
+                        </div>
+                        
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] font-mono text-military-400">
+                          <span className="text-military-300 font-bold">{item.municipio}</span>
+                          <span className="text-military-600">•</span>
+                          <span className="text-amber-300 font-black">{item.area} ha</span>
+                          <span className="text-military-600">•</span>
+                          <span className="text-sky-300 font-bold">{item.lat.toFixed(5)}, {item.lng.toFixed(5)}</span>
                         </div>
                       </div>
 
-                      <div className="flex gap-2 shrink-0">
+                      <div className="pl-2.5 flex gap-2 pt-1 border-t border-military-900/50">
                         <button
                           onClick={() => {
                             setCurrentProp(item);
@@ -1797,9 +1832,9 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                             setLngInput(item.lng.toFixed(6));
                             setActiveTab('ficha');
                           }}
-                          className="px-3.5 py-1.5 bg-military-800 hover:bg-military-750 text-military-200 border border-military-700 rounded-xl text-[9px] font-black uppercase tracking-wider active:scale-95 transition-all"
+                          className="flex-1 py-2.5 bg-military-850 hover:bg-military-800 text-military-100 border border-military-750 hover:border-military-700 rounded-xl text-[9.5px] font-black uppercase tracking-wider active:scale-95 transition-all cursor-pointer text-center"
                         >
-                          Ficha
+                          Ficha Técnica
                         </button>
                         <button
                           onClick={() => {
@@ -1808,19 +1843,12 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                             setLngInput(item.lng.toFixed(6));
                             setActiveTab('mapa');
                           }}
-                          className="px-3.5 py-1.5 bg-military-800 hover:bg-military-750 text-yellow-500/80 hover:text-yellow-500 border border-military-700 rounded-xl text-[9px] font-black uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1"
+                          className="flex-1 py-2.5 bg-military-850 hover:bg-military-800 text-amber-400 border border-military-750 hover:border-military-700 rounded-xl text-[9.5px] font-black uppercase tracking-wider active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <Map className="w-3 h-3" />
-                          <span>Mapa</span>
+                          <Map className="w-3 h-3 text-amber-400" />
+                          <span>Mapear</span>
                         </button>
                       </div>
-
-                      {/* Side vertical accent badge based on Risk */}
-                      <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${
-                        item.riskLevel === 'ALTO' ? 'bg-red-500' :
-                        item.riskLevel === 'MÉDIO' ? 'bg-orange-500' :
-                        'bg-green-500'
-                      }`} />
                     </div>
                   );
                 })}
@@ -1833,7 +1861,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                       setHistoryList([]);
                     }
                   }}
-                  className="w-full text-center py-2.5 text-red-400/80 hover:text-red-400 uppercase text-[9px] font-black tracking-widest border border-red-500/10 hover:border-red-500/20 rounded-xl bg-red-500/[0.02]"
+                  className="w-full text-center py-3 text-red-400 hover:text-red-300 uppercase text-[9.5px] font-black tracking-widest border border-red-500/20 hover:border-red-500/40 rounded-xl bg-red-500/[0.04] transition-all cursor-pointer mt-4"
                 >
                   Limpar Histórico Local
                 </button>
