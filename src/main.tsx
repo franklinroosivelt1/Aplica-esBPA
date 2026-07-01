@@ -1,8 +1,3 @@
-import React, {StrictMode, ErrorInfo, ReactNode} from 'react';
-import {createRoot} from 'react-dom/client';
-import App from './App.tsx';
-import './index.css';
-
 // Global error display helper
 function displayFatalError(error: Error | string) {
   const root = document.getElementById('root');
@@ -24,6 +19,12 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   displayFatalError(event.reason);
 });
+
+import React, {StrictMode, ErrorInfo, ReactNode} from 'react';
+import {createRoot} from 'react-dom/client';
+import App from './App.tsx';
+import './index.css';
+
 
 interface ErrorBoundaryProps {
   children: ReactNode;

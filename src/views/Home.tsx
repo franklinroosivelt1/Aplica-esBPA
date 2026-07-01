@@ -103,12 +103,12 @@ export default function Home({ onNavigate }: HomeProps) {
 
         {/* Modules Navigation Grid */}
         <div className="w-full space-y-4 px-1">
-          <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#0E7490] px-2 mb-2 flex items-center justify-between">
+          <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#0E7490] px-2 mb-1 flex items-center justify-between">
             <span>Módulos Operacionais</span>
             <span>Estação de Trabalho</span>
           </div>
 
-          <div className="space-y-3.5">
+          <div className="grid grid-cols-2 gap-3.5">
             {menuItems.map((item, index) => {
               const IconComp = item.icon;
               return (
@@ -118,40 +118,29 @@ export default function Home({ onNavigate }: HomeProps) {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.03, duration: 0.15 }}
-                  whileHover={{ y: -1, scale: 1.005 }}
-                  whileTap={{ scale: 0.99 }}
-                  className="w-full text-left bg-white border border-[#E5E7EB] hover:border-[#0E7490] rounded-[16px] p-5 flex items-start gap-4 transition-all duration-150 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0E7490] shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+                  whileHover={{ y: -2, scale: 1.01, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.04), 0 4px 6px -2px rgba(0, 0, 0, 0.01)" }}
+                  whileTap={{ scale: 0.98 }}
+                  className="w-full text-left bg-white border border-[#E5E7EB] hover:border-[#0E7490] rounded-[20px] p-4 flex flex-col justify-between min-h-[175px] transition-all duration-150 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0E7490] shadow-[0_1px_3px_rgba(0,0,0,0.02)] group"
                   id={`btn-menu-${item.id}`}
                 >
-                  {/* Heavy, Minimalist Filled Icon Wrapper */}
-                  <div className={`flex-shrink-0 p-3 rounded-xl ${item.offline ? 'bg-[#DCFCE7] text-[#14532D]' : 'bg-[#DBEAFE] text-[#1E3A8A]'} transition-colors`}>
-                    <IconComp className="w-6 h-6" fill="currentColor" strokeWidth={1.5} />
-                  </div>
-
-                  {/* Text Details with High Contrast */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5 justify-between">
-                      <h3 className="font-extrabold text-[15px] text-[#111827] uppercase tracking-wide leading-tight">
-                        {item.label}
-                      </h3>
-                      {/* Connection Badge */}
-                      {item.offline ? (
-                        <span className="inline-flex items-center text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#DCFCE7] text-[#14532D] border border-[#BBF7D0]">
-                          [ ⚡ Offline Disponível ]
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-[#DBEAFE] text-[#1E3A8A] border border-[#BFDBFE]">
-                          [ 🌐 Requer Internet ]
-                        </span>
-                      )}
+                  <div className="w-full">
+                    {/* Modern, Minimalist Outline Icon Wrapper */}
+                    <div className="inline-flex items-center justify-center p-2.5 bg-[#F1F5F9] text-[#0E7490] rounded-xl mb-3.5 transition-colors group-hover:bg-[#E0F2FE] group-hover:text-[#0E7490]">
+                      <IconComp className="w-5.5 h-5.5" strokeWidth={2} />
                     </div>
-                    <h4 className="text-[12px] text-[#0E7490] font-extrabold font-sans mt-1">
+
+                    <h3 className="font-extrabold text-[12.5px] text-[#111827] uppercase tracking-wide leading-snug">
+                      {item.label}
+                    </h3>
+                    
+                    <h4 className="text-[10px] text-[#0E7490] font-bold font-sans mt-0.5">
                       {item.subtitle}
                     </h4>
-                    <p className="text-[11px] text-[#374151] mt-1.5 leading-relaxed font-semibold">
-                      {item.description}
-                    </p>
                   </div>
+
+                  <p className="text-[9.5px] text-[#4B5563] mt-2 leading-snug font-semibold line-clamp-3">
+                    {item.description}
+                  </p>
                 </motion.button>
               );
             })}
@@ -160,15 +149,15 @@ export default function Home({ onNavigate }: HomeProps) {
       </div>
 
       {/* Modern, high-visibility Footer */}
-      <footer className="pt-8 pb-4 text-center">
-        <div className="flex items-center justify-center gap-2 mb-1.5">
+      <footer className="pt-8 pb-4 text-center" id="footer">
+        <div className="flex items-center justify-center gap-2 mb-1">
           <div className="w-1.5 h-1.5 bg-[#0E7490] rounded-full animate-pulse" />
-          <span className="text-[10px] font-mono tracking-widest uppercase text-[#111827] font-bold">
-            POLÍCIA MILITAR DO ESTADO DO ACRE
+          <span className="text-[10px] font-mono tracking-widest uppercase text-[#111827] font-extrabold">
+            Batalhão de Policiamento Ambiental - PMAC
           </span>
         </div>
-        <p className="text-[9px] font-mono text-[#4B5563] tracking-widest uppercase font-bold">
-          Batalhão de Policiamento Ambiental • BPA • v1.6
+        <p className="text-[9px] font-mono text-[#4B5563] tracking-wider uppercase font-bold">
+          Divisão de Recursos Tecnológicos • v1.6
         </p>
       </footer>
     </div>

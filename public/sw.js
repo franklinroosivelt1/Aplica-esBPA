@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bpa-app-cache-v1';
+const CACHE_NAME = 'bpa-app-cache-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -19,34 +19,54 @@ self.addEventListener('fetch', (event) => {
   
   // Cache requests to our own origin
   if (url.origin === self.location.origin) {
-    event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          // Fetch new version in background to update cache for next load
-          fetch(event.request).then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-            }
-          }).catch(() => {});
-          return cachedResponse;
-        }
+    // For navigation/HTML requests, always use a Network-First strategy
+    // to prevent caching broken or outdated bundle HTML files.
+    const isHtml = event.request.mode === 'navigate' || 
+                   url.pathname === '/' || 
+                   url.pathname === '/index.html' || 
+                   url.pathname.endsWith('.html');
 
-        return fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+    if (isHtml) {
+      event.respondWith(
+        fetch(event.request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const responseToCache = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
+            }
+            return networkResponse;
+          })
+          .catch(() => {
+            // Fallback to cache only if network is completely unavailable
+            return caches.match(event.request) || caches.match('/index.html') || caches.match('/');
+          })
+      );
+    } else {
+      // For static assets (JS, CSS, images), use Stale-While-Revalidate
+      event.respondWith(
+        caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            // Fetch new version in background to update cache for next load
+            fetch(event.request).then((networkResponse) => {
+              if (networkResponse && networkResponse.status === 200) {
+                caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
+              }
+            }).catch(() => {});
+            return cachedResponse;
           }
-          return networkResponse;
-        }).catch((err) => {
-          if (event.request.mode === 'navigate') {
-            return caches.match('/index.html') || caches.match('/');
-          }
-          throw err;
-        });
-      })
-    );
+
+          return fetch(event.request).then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const responseToCache = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, responseToCache);
+              });
+            }
+            return networkResponse;
+          });
+        })
+      );
+    }
   } else if (
     url.hostname.includes('tile.openstreetmap.org') ||
     url.hostname.includes('google.com') ||
