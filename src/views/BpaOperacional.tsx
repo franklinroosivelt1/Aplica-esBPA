@@ -1597,6 +1597,31 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                       <span className="text-amber-800 font-extrabold font-mono">{prop.area} ha</span>
                     </div>
 
+                    {/* Coordenadas Declaradas row */}
+                    <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-2">
+                      <div className="flex justify-between items-center border-b border-military-800 pb-1.5">
+                        <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono">Coordenadas Declaradas</span>
+                        <span className="text-[7.5px] font-black text-amber-500 uppercase font-mono tracking-widest">SAD69 / SIRGAS</span>
+                      </div>
+                      <div className="space-y-1.5 font-mono text-[10px]">
+                        <div className="flex justify-between items-center bg-military-950 p-2 rounded border border-military-800">
+                          <span className="text-military-400 uppercase text-[7.5px] font-black">GMS:</span>
+                          <span className="text-military-100 font-black select-all">{decimalToDMS(prop.lat, 'lat')} / {decimalToDMS(prop.lng, 'lng')}</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-military-950 p-2 rounded border border-military-800">
+                          <span className="text-military-400 uppercase text-[7.5px] font-black">UTM:</span>
+                          <span className="text-military-100 font-black select-all">{decimalToUTM(prop.lat, prop.lng)}</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-military-950 p-2 rounded border border-military-800">
+                          <span className="text-military-400 uppercase text-[7.5px] font-black">DECIMAL:</span>
+                          <span className="text-amber-700 font-extrabold select-all">{prop.lat.toFixed(6)}, {prop.lng.toFixed(6)}</span>
+                        </div>
+                      </div>
+                      <p className="text-[7.5px] text-military-450 leading-relaxed font-mono uppercase mt-1">
+                        * Coordenadas geográficas que criam a propriedade de quem declarou a área.
+                      </p>
+                    </div>
+
                     {/* Legal Reserve row */}
                     <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-1.5">
                       <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono block">Déficit Reserva Legal (Exigência: 80%)</span>
