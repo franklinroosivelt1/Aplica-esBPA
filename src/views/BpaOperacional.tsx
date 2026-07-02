@@ -1123,10 +1123,20 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     doc.text(`Código do CAR: ${propToUse.carCode}`, 15, 72);
     doc.text(`Detentor do Posse/Domínio: ${propToUse.owner}`, 15, 79);
     doc.text(`Município Correspondente: ${propToUse.municipio} - Acre`, 15, 86);
-    doc.text(`Coordenadas de Pesquisa Central:`, 15, 93);
-    doc.text(`- Latitude DMS: ${decimalToDMS(propToUse.lat, 'lat')} (${propToUse.lat.toFixed(6)} DD)`, 15, 100);
-    doc.text(`- Longitude DMS: ${decimalToDMS(propToUse.lng, 'lng')} (${propToUse.lng.toFixed(6)} DD)`, 15, 107);
-    doc.text(`- Projeção UTM: ${decimalToUTM(propToUse.lat, propToUse.lng)}`, 15, 114);
+    doc.text(`Coordenadas Declaradas do Imóvel (GMS / SAD69 / SIRGAS):`, 15, 93);
+    
+    const pdfVertices = getPropertyPolygon(propToUse.lat, propToUse.lng, propToUse.area);
+    let yPos = 100;
+    for (let i = 0; i < pdfVertices.length; i += 2) {
+      const p1 = pdfVertices[i];
+      const p2 = pdfVertices[i + 1];
+      let lineText = `- PONTO ${i + 1}: ${decimalToDMS(p1.lat, 'lat')} / ${decimalToDMS(p1.lng, 'lng')}`;
+      if (p2) {
+        lineText += `   |   - PONTO ${i + 2}: ${decimalToDMS(p2.lat, 'lat')} / ${decimalToDMS(p2.lng, 'lng')}`;
+      }
+      doc.text(lineText, 18, yPos);
+      yPos += 6;
+    }
 
     // Section 2: Forest Indexes
     doc.setTextColor(31, 46, 32);
@@ -1600,25 +1610,21 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                     {/* Coordenadas Declaradas row */}
                     <div className="bg-military-900 p-3.5 rounded-xl border border-military-850 space-y-2">
                       <div className="flex justify-between items-center border-b border-military-800 pb-1.5">
-                        <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono">Coordenadas Declaradas</span>
+                        <span className="text-military-450 uppercase font-black text-[8px] tracking-widest font-mono">Coordenadas Declaradas (GMS)</span>
                         <span className="text-[7.5px] font-black text-amber-500 uppercase font-mono tracking-widest">SAD69 / SIRGAS</span>
                       </div>
-                      <div className="space-y-1.5 font-mono text-[10px]">
-                        <div className="flex justify-between items-center bg-military-950 p-2 rounded border border-military-800">
-                          <span className="text-military-400 uppercase text-[7.5px] font-black">GMS:</span>
-                          <span className="text-military-100 font-black select-all">{decimalToDMS(prop.lat, 'lat')} / {decimalToDMS(prop.lng, 'lng')}</span>
-                        </div>
-                        <div className="flex justify-between items-center bg-military-950 p-2 rounded border border-military-800">
-                          <span className="text-military-400 uppercase text-[7.5px] font-black">UTM:</span>
-                          <span className="text-military-100 font-black select-all">{decimalToUTM(prop.lat, prop.lng)}</span>
-                        </div>
-                        <div className="flex justify-between items-center bg-military-950 p-2 rounded border border-military-800">
-                          <span className="text-military-400 uppercase text-[7.5px] font-black">DECIMAL:</span>
-                          <span className="text-amber-700 font-extrabold select-all">{prop.lat.toFixed(6)}, {prop.lng.toFixed(6)}</span>
-                        </div>
+                      <div className="space-y-1.5 font-mono text-[10px] max-h-48 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-military-700 scrollbar-track-military-900">
+                        {getPropertyPolygon(prop.lat, prop.lng, prop.area).map((v, idx) => (
+                          <div key={idx} className="flex justify-between items-center bg-military-950 p-2 rounded border border-military-800 gap-2">
+                            <span className="text-military-400 uppercase text-[7.5px] font-black shrink-0">PONTO {idx + 1}:</span>
+                            <span className="text-military-100 font-black select-all text-right text-[8.5px] break-all">
+                              {decimalToDMS(v.lat, 'lat')} / {decimalToDMS(v.lng, 'lng')}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                       <p className="text-[7.5px] text-military-450 leading-relaxed font-mono uppercase mt-1">
-                        * Coordenadas geográficas que criam a propriedade de quem declarou a área.
+                        * Pontos (coordenadas geográficas) declarados pelo responsável pelo CAR que delimitam o imóvel rural.
                       </p>
                     </div>
 

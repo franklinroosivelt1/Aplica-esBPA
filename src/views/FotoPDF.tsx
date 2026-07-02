@@ -25,6 +25,15 @@ interface FotoPDFProps {
 
 type Mode = 'selection' | 'camera' | 'review' | 'pdf';
 
+const loadImage = (src: string): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = src;
+  });
+};
+
 export default function FotoPDF({ onBack }: FotoPDFProps) {
   const [images, setImages] = useState<string[]>([]);
   const [mode, setMode] = useState<Mode>('selection');
@@ -179,25 +188,36 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
       format: 'a4'
     });
 
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = pdf.internal.pageSize.getHeight();
+
     for (let i = 0; i < images.length; i++) {
       if (i > 0) pdf.addPage();
       
       const img = images[i];
-      // Simple logic to fit image in A4
-      const imgProps = pdf.getImageProperties(img);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const ratio = imgProps.width / imgProps.height;
-      
-      let width = pdfWidth - 20;
-      let height = width / ratio;
-      
-      if (height > pdfHeight - 20) {
-        height = pdfHeight - 20;
-        width = height * ratio;
-      }
+      try {
+        const loadedImg = await loadImage(img);
+        const naturalWidth = loadedImg.naturalWidth || loadedImg.width || 1280;
+        const naturalHeight = loadedImg.naturalHeight || loadedImg.height || 720;
+        const ratio = naturalWidth / naturalHeight;
+        
+        let width = pdfWidth - 20;
+        let height = width / ratio;
+        
+        if (height > pdfHeight - 20) {
+          height = pdfHeight - 20;
+          width = height * ratio;
+        }
 
-      pdf.addImage(img, 'JPEG', 10, 10, width, height);
+        const x = (pdfWidth - width) / 2;
+        const y = (pdfHeight - height) / 2;
+        
+        const format = img.toLowerCase().includes('png') ? 'PNG' : 'JPEG';
+        pdf.addImage(img, format, x, y, width, height);
+      } catch (err) {
+        console.error('Failed to load image for PDF', err);
+        pdf.addImage(img, 'JPEG', 10, 10, pdfWidth - 20, pdfHeight - 20);
+      }
     }
 
     const blob = pdf.output('blob');
@@ -242,74 +262,63 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
 
   if (mode === 'camera') {
     return (
-      <div className="fixed inset-0 z-[100] bg-black flex flex-col overflow-hidden">
-        <div className="flex-1 relative overflow-hidden flex items-center justify-center">
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            className="w-full h-full object-contain transition-transform duration-200" 
-            style={{ transform: `scale(${zoom})` }}
-          />
-          
-          {/* Floating Back Button */}
-          <div className="absolute top-6 left-6 z-[110]">
-            <button 
-              onClick={() => setMode('selection')}
-              className="p-3 bg-black/40 backdrop-blur-md rounded-full text-white pointer-events-auto active:scale-95 transition-transform flex items-center gap-1.5 shadow border border-white/10"
-            >
-              <ChevronLeft className="w-6 h-6" />
-              <span className="text-xs font-mono font-bold tracking-wider pr-1">VOLTAR</span>
-            </button>
-          </div>
-
-          {/* Focus Ring Mock */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-2 border-military-300 rounded-full opacity-30 animate-pulse pointer-events-none" />
-          
-          {/* Zoom Controls at bottom middle of screen */}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-4 bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-white/10 shadow-2xl">
-            <button 
-              onClick={() => setZoom(z => Math.max(z - 0.2, 1))} 
-              className="w-10 h-10 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer border border-white/5"
-              title="Diminuir Zoom (-)"
-            >
-              <Minus size={18} />
-            </button>
-            <span className="text-xs font-black font-mono text-military-300 tracking-wider min-w-[36px] text-center">
-              {zoom.toFixed(1)}x
-            </span>
-            <button 
-              onClick={() => setZoom(z => Math.min(z + 0.2, 3))} 
-              className="w-10 h-10 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer border border-white/5"
-              title="Aumentar Zoom (+)"
-            >
-              <Plus size={18} />
-            </button>
-          </div>
+      <div className="fixed inset-0 z-[100] bg-black overflow-hidden flex items-center justify-center">
+        <video 
+          ref={videoRef} 
+          autoPlay 
+          playsInline 
+          className="w-full h-full object-cover transition-transform duration-200" 
+          style={{ transform: `scale(${zoom})` }}
+        />
+        
+        {/* Floating Back Button */}
+        <div className="absolute top-6 left-6 z-[110]">
+          <button 
+            onClick={() => setMode('selection')}
+            className="p-3 bg-black/40 backdrop-blur-md rounded-full text-white pointer-events-auto active:scale-95 transition-transform flex items-center gap-1.5 shadow border border-white/10 cursor-pointer"
+          >
+            <ChevronLeft className="w-6 h-6" />
+            <span className="text-xs font-mono font-bold tracking-wider pr-1">VOLTAR</span>
+          </button>
         </div>
 
-        <div className="h-32 bg-military-950 flex items-center justify-around px-8 border-t border-military-900">
+        {/* Focus Ring Mock */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-2 border-military-300 rounded-full opacity-30 animate-pulse pointer-events-none" />
+        
+        {/* Zoom Controls floating in lower-middle */}
+        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-4 bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-white/10 shadow-2xl">
           <button 
-            onClick={() => setMode('selection')} 
-            className="p-4 text-white hover:bg-military-800 rounded-full flex items-center gap-1.5 transition-colors"
-            title="Voltar"
+            onClick={() => setZoom(z => Math.max(z - 0.2, 1))} 
+            className="w-10 h-10 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer border border-white/5"
+            title="Diminuir Zoom (-)"
           >
-            <ChevronLeft size={28} />
+            <Minus size={18} />
           </button>
-          
-          {/* Capture button matching Foto Georreferenciada */}
+          <span className="text-xs font-black font-mono text-military-300 tracking-wider min-w-[36px] text-center">
+            {zoom.toFixed(1)}x
+          </span>
+          <button 
+            onClick={() => setZoom(z => Math.min(z + 0.2, 3))} 
+            className="w-10 h-10 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer border border-white/5"
+            title="Aumentar Zoom (+)"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+
+        {/* Floating Capture Button (No bottom bar) */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[110]">
           <button 
             onClick={handleTakePhoto}
-            className="w-16 h-16 bg-white/90 hover:bg-white rounded-full p-1 shadow-xl active:scale-90 transition-transform relative pointer-events-auto"
+            className="w-18 h-18 bg-white hover:bg-neutral-100 rounded-full p-1 shadow-2xl active:scale-90 transition-transform relative cursor-pointer"
             title="Capturar Foto"
           >
             <div className="w-full h-full rounded-full border border-black/10 flex items-center justify-center">
-              <div className="w-10 h-10 rounded-full bg-military-800 transition-colors" />
+              <div className="w-12 h-12 rounded-full bg-military-300 hover:bg-military-200 transition-colors" />
             </div>
           </button>
-          
-          <div className="w-14" />
         </div>
+        
         <canvas ref={canvasRef} className="hidden" />
       </div>
     );
@@ -324,18 +333,18 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
           <img src={currentPhoto!} className="max-w-full max-h-full object-contain" alt="Review" />
         </div>
 
-        {/* Rotate controls row */}
-        <div className="flex justify-center gap-4 mt-4 mb-2">
+        {/* Rotate controls row - High Contrast Style */}
+        <div className="flex justify-center gap-4 mt-5 mb-2">
           <button
             onClick={() => rotateImage('left')}
-            className="flex items-center gap-2 px-4 py-3 bg-military-900 border border-military-800 text-military-100 rounded-xl font-bold text-xs hover:bg-military-800 active:scale-95 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-5 py-3.5 bg-military-300 hover:bg-military-200 text-military-950 rounded-xl font-black text-xs active:scale-95 transition-all cursor-pointer shadow-md border border-military-450"
             title="Girar para Esquerda"
           >
             <RotateCcw size={16} /> GIRAR ESQUERDA
           </button>
           <button
             onClick={() => rotateImage('right')}
-            className="flex items-center gap-2 px-4 py-3 bg-military-900 border border-military-800 text-military-100 rounded-xl font-bold text-xs hover:bg-military-800 active:scale-95 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-5 py-3.5 bg-military-300 hover:bg-military-200 text-military-950 rounded-xl font-black text-xs active:scale-95 transition-all cursor-pointer shadow-md border border-military-450"
             title="Girar para Direita"
           >
             <RotateCw size={16} /> GIRAR DIREITA
@@ -345,7 +354,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
         <div className="py-4 grid grid-cols-2 gap-4">
           <button 
             onClick={() => { setCurrentPhoto(null); setMode('camera'); }}
-            className="flex items-center justify-center gap-2 bg-red-500/10 border-2 border-red-500/50 text-red-500 p-4 rounded-2xl font-bold"
+            className="flex items-center justify-center gap-2 bg-red-500/10 border-2 border-red-500/50 text-red-500 p-4 rounded-2xl font-bold cursor-pointer hover:bg-red-500/20 active:scale-95 transition-transform"
           >
             <Trash2 size={20} /> EXCLUIR
           </button>
@@ -526,7 +535,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
             </span>
             <button 
               onClick={() => { setSelectedPageImageIndex(null); setSelectedPageImageUrl(null); }}
-              className="p-2 bg-military-900 hover:bg-military-850 text-white rounded-lg cursor-pointer"
+              className="p-2 bg-military-300 hover:bg-military-200 text-military-950 rounded-lg cursor-pointer transition-colors"
             >
               <X size={20} />
             </button>
@@ -536,11 +545,11 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
             <img src={selectedPageImageUrl} className="max-w-full max-h-[65vh] object-contain rounded-xl" alt="Page Detail" />
           </div>
 
-          {/* Controls next to delete button */}
+          {/* Controls next to delete button - Beautiful High Contrast style */}
           <div className="mt-6 grid grid-cols-4 gap-2.5 w-full max-w-md mx-auto">
             <button
               onClick={() => handleRotatePageImage(selectedPageImageIndex, 'left')}
-              className="py-3 bg-military-900 hover:bg-military-850 text-white font-bold rounded-xl flex flex-col items-center justify-center gap-1 border border-military-800 active:scale-95 transition-all text-[10px] cursor-pointer"
+              className="py-3 bg-military-300 hover:bg-military-200 text-military-950 font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-military-450 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
               title="Girar para Esquerda"
             >
               <RotateCcw size={16} />
@@ -548,7 +557,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
             </button>
             <button
               onClick={() => handleRotatePageImage(selectedPageImageIndex, 'right')}
-              className="py-3 bg-military-900 hover:bg-military-850 text-white font-bold rounded-xl flex flex-col items-center justify-center gap-1 border border-military-800 active:scale-95 transition-all text-[10px] cursor-pointer"
+              className="py-3 bg-military-300 hover:bg-military-200 text-military-950 font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-military-450 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
               title="Girar para Direita"
             >
               <RotateCw size={16} />

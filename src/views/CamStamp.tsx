@@ -15,7 +15,9 @@ import {
   Trash2,
   FolderOpen,
   Download,
-  Share2
+  Share2,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { decimalToDMS, decimalToUTM } from '../utils/coords';
 import { CameraSettings, DEFAULT_SETTINGS, CoordFormat, InfoPosition, FontSize } from '../types/settings';
@@ -43,6 +45,68 @@ export default function CamStamp({ onBack }: CamStampProps) {
   const [isSimulated, setIsSimulated] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   
+  const [zoom, setZoom] = useState<number>(1);
+  const zoomRef = useRef<number>(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  // Touch-pinch zoom support with browser zoom prevention
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let startDistance = 0;
+    let startZoom = 1;
+
+    const getDistance = (touches: TouchList) => {
+      if (touches.length < 2) return 0;
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        startDistance = getDistance(e.touches);
+        startZoom = zoomRef.current;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const distance = getDistance(e.touches);
+        if (distance > 0 && startDistance > 0) {
+          const ratio = distance / startDistance;
+          const targetZoom = startZoom * ratio;
+          // Clamp between 1.0x and 4.0x, rounding to avoid performance issues on minor jitter
+          const roundedZoom = Math.min(Math.max(Math.round(targetZoom * 10) / 10, 1), 4);
+          setZoom(roundedZoom);
+        }
+      }
+    };
+
+    const handleGesture = (e: Event) => {
+      e.preventDefault();
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('gesturestart', handleGesture, { passive: false });
+    container.addEventListener('gesturechange', handleGesture, { passive: false });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('gesturestart', handleGesture);
+      container.removeEventListener('gesturechange', handleGesture);
+    };
+  }, []);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -125,6 +189,13 @@ export default function CamStamp({ onBack }: CamStampProps) {
       canvas.width = 1280;
       canvas.height = 720;
 
+      ctx.save();
+      if (zoom > 1) {
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(zoom, zoom);
+        ctx.translate(-canvas.width / 2, -canvas.height / 2);
+      }
+
       // High quality local abstract forest profile canvas painting offline fallback
       // Sky
       ctx.fillStyle = '#0f140e';
@@ -193,12 +264,23 @@ export default function CamStamp({ onBack }: CamStampProps) {
       ctx.font = 'bold 16px monospace';
       ctx.fillText('BPA GPS SIMULATOR v2.5 ONSITE', 40, 50);
       ctx.fillText('● MODO SEGURO OFFLINE', 40, 80);
+      ctx.restore();
     } else if (video) {
-      // Set canvas dimensions to match video
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
-      // Draw video frame
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const vWidth = video.videoWidth || 1280;
+      const vHeight = video.videoHeight || 720;
+      canvas.width = vWidth;
+      canvas.height = vHeight;
+      
+      // Draw video frame with zoom crop
+      if (zoom > 1) {
+        const sWidth = vWidth / zoom;
+        const sHeight = vHeight / zoom;
+        const sx = (vWidth - sWidth) / 2;
+        const sy = (vHeight - sHeight) / 2;
+        ctx.drawImage(video, sx, sy, sWidth, sHeight, 0, 0, vWidth, vHeight);
+      } else {
+        ctx.drawImage(video, 0, 0, vWidth, vHeight);
+      }
     }
 
     // Prepare overlay data
@@ -365,7 +447,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
   return (
     <div className="fixed inset-0 h-screen w-screen bg-black overflow-hidden">
       {/* Full Screen Camera */}
-      <div className="absolute inset-0">
+      <div ref={containerRef} className="absolute inset-0 touch-none">
         {hasPermission === false ? (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center bg-military-900">
             <ShieldAlert className="w-12 h-12 text-red-500 mb-4" />
@@ -383,7 +465,10 @@ export default function CamStamp({ onBack }: CamStampProps) {
         ) : (
           <>
             {isSimulated ? (
-              <div className="w-full h-full relative select-none bg-black">
+              <div 
+                className="w-full h-full relative select-none bg-black transition-transform duration-100 ease-out origin-center"
+                style={{ transform: `scale(${zoom})` }}
+              >
                 {/* SVG Beautiful Offline-friendly Forest Landscape */}
                 <svg className="w-full h-full object-cover" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
                   {/* Sky / Ambient background */}
@@ -455,12 +540,34 @@ export default function CamStamp({ onBack }: CamStampProps) {
                 autoPlay 
                 playsInline 
                 muted
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover transition-transform duration-100 ease-out origin-center"
+                style={{ transform: `scale(${zoom})` }}
               />
             )}
 
             {renderOverlay()}
             <canvas ref={canvasRef} className="hidden" />
+
+            {/* Floating Zoom Controls (Plus/Minus buttons) */}
+            <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-4 bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto">
+              <button 
+                onClick={() => setZoom(z => Math.max(z - 0.2, 1))} 
+                className="w-10 h-10 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer border border-white/5"
+                title="Diminuir Zoom (-)"
+              >
+                <Minus size={18} />
+              </button>
+              <span className="text-xs font-black font-mono text-military-300 tracking-wider min-w-[36px] text-center">
+                {zoom.toFixed(1)}x
+              </span>
+              <button 
+                onClick={() => setZoom(z => Math.min(z + 0.2, 4))} 
+                className="w-10 h-10 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer border border-white/5"
+                title="Aumentar Zoom (+)"
+              >
+                <Plus size={18} />
+              </button>
+            </div>
           </>
         )}
 
