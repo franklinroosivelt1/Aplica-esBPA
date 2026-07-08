@@ -548,24 +548,24 @@ export default function CamStamp({ onBack }: CamStampProps) {
             {renderOverlay()}
             <canvas ref={canvasRef} className="hidden" />
 
-            {/* Floating Zoom Controls (Plus/Minus buttons) */}
-            <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-4 bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto">
+            {/* Floating Zoom Controls (Plus/Minus buttons) - Vertical on the Right Side, Smaller */}
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 z-[110] flex flex-col items-center gap-2.5 bg-black/65 px-2 py-3.5 rounded-full backdrop-blur-md border border-white/10 shadow-2xl pointer-events-auto">
               <button 
-                onClick={() => setZoom(z => Math.max(z - 0.2, 1))} 
-                className="w-10 h-10 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer border border-white/5"
-                title="Diminuir Zoom (-)"
+                onClick={() => setZoom(z => Math.min(z + 0.2, 4))} 
+                className="w-8 h-8 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black transition-all cursor-pointer border border-white/5"
+                title="Aumentar Zoom (+)"
               >
-                <Minus size={18} />
+                <Plus size={14} />
               </button>
-              <span className="text-xs font-black font-mono text-military-300 tracking-wider min-w-[36px] text-center">
+              <span className="text-[10px] font-black font-mono text-military-300 tracking-tighter w-8 text-center select-none leading-none">
                 {zoom.toFixed(1)}x
               </span>
               <button 
-                onClick={() => setZoom(z => Math.min(z + 0.2, 4))} 
-                className="w-10 h-10 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer border border-white/5"
-                title="Aumentar Zoom (+)"
+                onClick={() => setZoom(z => Math.max(z - 0.2, 1))} 
+                className="w-8 h-8 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black transition-all cursor-pointer border border-white/5"
+                title="Diminuir Zoom (-)"
               >
-                <Plus size={18} />
+                <Minus size={14} />
               </button>
             </div>
           </>

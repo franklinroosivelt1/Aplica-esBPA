@@ -913,23 +913,84 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       const gx = gpsPixel.x - centerPixel.x;
       const gy = gpsPixel.y - centerPixel.y;
 
-      // Pulse accuracy ring
+      // 1. Draw thin discrete dashed line connecting GPS position to map center (0,0)
+      const distKm = calculateHaversineDistance(positionToShow, center);
+      const distM = distKm * 1000;
+      
+      if (distM > 5) { // Only show line if user is at least 5m away from map center
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(gx, gy);
+        ctx.lineTo(0, 0);
+        ctx.strokeStyle = 'rgba(59, 130, 246, 0.65)'; // Discrete tactical blue line
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 5]); // Dashed line
+        ctx.stroke();
+        ctx.restore();
+
+        // Draw modern distance badge in the center of the dashed line
+        const mx = gx / 2;
+        const my = gy / 2;
+        const label = distM < 1000 ? `${Math.round(distM)} m` : `${distKm.toFixed(2)} km`;
+        
+        ctx.save();
+        ctx.font = 'bold 9.5px monospace';
+        const textWidth = ctx.measureText(label).width;
+        const padX = 6;
+        const bW = textWidth + padX * 2;
+        const bH = 16;
+        const bx = mx - bW / 2;
+        const by = my - bH / 2;
+        
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(bx, by, bW, bH, 4);
+        } else {
+          ctx.rect(bx, by, bW, bH);
+        }
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)'; // Sleek dark slate
+        ctx.fill();
+        ctx.strokeStyle = '#3b82f6'; // Clean blue border
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, mx, my + 0.5);
+        ctx.restore();
+      }
+
+      // 2. Draw the new vivid blue arrowhead reticle always pointing in device heading direction
+      ctx.save();
+      ctx.translate(gx, gy);
+      
+      const headingRad = (smoothHeading * Math.PI) / 180;
+      ctx.rotate(headingRad);
+
+      // Soft blue glow ring
       ctx.beginPath();
-      ctx.arc(gx, gy, 18, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
-      ctx.strokeStyle = '#3b82f6';
-      ctx.lineWidth = 1;
+      ctx.arc(0, 0, 15, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.15)';
       ctx.fill();
+
+      // Sharp arrowhead path (vivid blue)
+      ctx.beginPath();
+      ctx.moveTo(0, -15);         // Top apex
+      ctx.lineTo(11, 11);         // Bottom-right wing
+      ctx.lineTo(0, 3);           // Bottom-center indentation
+      ctx.lineTo(-11, 11);        // Bottom-left wing
+      ctx.closePath();
+
+      ctx.fillStyle = '#0066ff';  // Vivid blue
+      ctx.fill();
+
+      // Sharp white outline for high contrast
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
       ctx.stroke();
 
-      // Main inner circle
-      ctx.beginPath();
-      ctx.arc(gx, gy, 6, 0, Math.PI * 2);
-      ctx.fillStyle = '#3b82f6';
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.fill();
-      ctx.stroke();
+      ctx.restore();
     }
 
     // 4b. DRAW SAVED POINTS
@@ -938,68 +999,75 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       const px = ptPixel.x - centerPixel.x;
       const py = ptPixel.y - centerPixel.y;
 
-      // Pulse circle
+      // Subtle outer blue glow ring
       ctx.beginPath();
-      ctx.arc(px, py, 18, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(239, 68, 68, 0.25)';
-      ctx.lineWidth = 1.5;
+      ctx.arc(px, py, 14, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.15)';
+      ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Classic pin marker pointing at (px, py)
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(-rotation);
 
-      // Draw pin shadow
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 5, 2, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.fill();
+      // Draw beautiful, discrete, tactical crosshair marker (modern style)
+      const cx = 0;
+      const cy = 0;
+      const r = 5.5;
 
-      // Pin Path pointing down to 0,0
+      // Outer ring
       ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.bezierCurveTo(-6, -6, -7, -12, -7, -16);
-      ctx.arc(0, -16, 7, Math.PI, 0, false);
-      ctx.bezierCurveTo(7, -12, 6, -6, 0, 0);
-      ctx.closePath();
-      ctx.fillStyle = '#ef4444'; // Red teardrop pin
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.2;
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.2)';
       ctx.fill();
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 1.2;
       ctx.stroke();
 
-      // Inside white dot
+      // Crosshair tick marks
       ctx.beginPath();
-      ctx.arc(0, -16, 2.5, 0, Math.PI * 2);
+      // Top
+      ctx.moveTo(cx, cy - r - 2); ctx.lineTo(cx, cy - r);
+      // Bottom
+      ctx.moveTo(cx, cy + r); ctx.lineTo(cx, cy + r + 2);
+      // Left
+      ctx.moveTo(cx - r - 2, cy); ctx.lineTo(cx - r, cy);
+      // Right
+      ctx.moveTo(cx + r, cy); ctx.lineTo(cx + r + 2, cy);
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+
+      // Center solid core dot
+      ctx.beginPath();
+      ctx.arc(cx, cy, 2, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
 
-      // --- DRAW THE WHITE BANNER WITH RED BORDER ABOVE THE PIN ---
+      // Draw modern slate/blue badge above the marker
       const labelText = pt.name || 'Ponto';
-      ctx.font = 'bold 9.5px sans-serif';
+      ctx.font = 'bold 9px monospace';
       const textWidth = ctx.measureText(labelText).width;
       
       const badgeW = textWidth + 10;
       const badgeH = 15;
       const bx = -badgeW / 2;
-      const by = -36; // Positioned above the pin which is 16px high + spacing
+      const by = -21; // Positioned neatly just above the marker
 
-      // Draw badge back
       ctx.beginPath();
       if (ctx.roundRect) {
-        ctx.roundRect(bx, by, badgeW, badgeH, 3);
+        ctx.roundRect(bx, by, badgeW, badgeH, 4);
       } else {
         ctx.rect(bx, by, badgeW, badgeH);
       }
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)'; // Dark tactical slate
       ctx.fill();
-      ctx.strokeStyle = '#ef4444'; // Red border
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = '#3b82f6'; // Tactical blue border
+      ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Draw badge text inside
-      ctx.fillStyle = '#ef4444'; // Red text in the banner
+      // Text inside badge
+      ctx.fillStyle = '#ffffff';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(labelText, 0, by + badgeH / 2 + 0.5);

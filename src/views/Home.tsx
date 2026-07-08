@@ -66,7 +66,7 @@ export default function Home({ onNavigate }: HomeProps) {
   ];
 
   return (
-    <div className="flex flex-col min-h-[92vh] justify-between py-4 bg-[#F8F9FA]" id="home-container">
+    <div className="flex flex-col min-h-[92vh] justify-between py-4 bg-white" id="home-container">
       {/* Pristine, light-themed high-contrast header */}
       <div className="w-full">
         <motion.div 
@@ -103,11 +103,6 @@ export default function Home({ onNavigate }: HomeProps) {
 
         {/* Modules Navigation Grid */}
         <div className="w-full space-y-4 px-1">
-          <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#0E7490] px-2 mb-1 flex items-center justify-between">
-            <span>Módulos Operacionais</span>
-            <span>Estação de Trabalho</span>
-          </div>
-
           <div className="grid grid-cols-2 gap-3.5">
             {menuItems.map((item, index) => {
               const IconComp = item.icon;

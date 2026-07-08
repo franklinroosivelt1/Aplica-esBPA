@@ -87,7 +87,7 @@ export default function App() {
   const isHome = currentView === 'home';
 
   return (
-    <div className={`min-h-screen ${isHome ? 'bg-[#F8F9FA] text-[#111827]' : 'bg-military-900 text-military-100'} font-sans selection:bg-[#0E7490] selection:text-white transition-colors duration-200`}>
+    <div className={`min-h-screen ${isHome ? 'bg-white text-[#111827]' : 'bg-military-900 text-military-100'} font-sans selection:bg-[#0E7490] selection:text-white transition-colors duration-200`}>
       {/* App Header (Sticky when not in home, camstamp, view maps, fotopdf, cubagem, or bpaoperacional) */}
       {currentView !== 'home' && currentView !== 'camstamp' && currentView !== 'mapas' && currentView !== 'fotopdf' && currentView !== 'cubagem' && currentView !== 'bpaoperacional' && currentView !== 'mandados' && (
         <header className="sticky top-0 z-50 bg-military-800/80 backdrop-blur-md border-b border-military-700 px-4 py-3 flex items-center justify-between">
