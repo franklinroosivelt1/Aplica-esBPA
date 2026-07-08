@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react';
 import { 
   FileImage, 
   Upload, 
@@ -44,6 +44,41 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleGalleryImport = (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const fileList = Array.from(files) as File[];
+    
+    // Convert all selected images to base64 data URLs
+    const readPromises = fileList.map((file: File) => {
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target?.result && typeof event.target.result === 'string') {
+            resolve(event.target.result);
+          } else {
+            reject(new Error('Falha ao ler arquivo'));
+          }
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(readPromises)
+      .then(base64Images => {
+        setImages(prev => [...prev, ...base64Images]);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''; // Reset input so the same file can be chosen again
+        }
+      })
+      .catch(err => {
+        console.error('Erro ao importar imagens da galeria:', err);
+      });
+  };
 
   // Start/Stop Camera
   useEffect(() => {
@@ -285,24 +320,24 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
         {/* Focus Ring Mock */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 border-2 border-military-300 rounded-full opacity-30 animate-pulse pointer-events-none" />
         
-        {/* Zoom Controls floating in lower-middle */}
-        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-4 bg-black/60 px-4 py-2 rounded-full backdrop-blur-md border border-white/10 shadow-2xl">
+        {/* Zoom Controls floating vertically on the right side */}
+        <div className="absolute right-6 top-1/2 -translate-y-1/2 z-[110] flex flex-col items-center gap-2 bg-black/65 px-2 py-3 rounded-2xl backdrop-blur-md border border-white/10 shadow-2xl">
           <button 
-            onClick={() => setZoom(z => Math.max(z - 0.2, 1))} 
-            className="w-10 h-10 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer border border-white/5"
-            title="Diminuir Zoom (-)"
+            onClick={() => setZoom(z => Math.min(z + 0.2, 3))} 
+            className="w-8 h-8 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black transition-all cursor-pointer border border-white/5"
+            title="Aumentar Zoom (+)"
           >
-            <Minus size={18} />
+            <Plus size={14} />
           </button>
-          <span className="text-xs font-black font-mono text-military-300 tracking-wider min-w-[36px] text-center">
+          <span className="text-[10px] font-black font-mono text-military-300 tracking-tight min-w-[28px] text-center">
             {zoom.toFixed(1)}x
           </span>
           <button 
-            onClick={() => setZoom(z => Math.min(z + 0.2, 3))} 
-            className="w-10 h-10 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black text-xl transition-all cursor-pointer border border-white/5"
-            title="Aumentar Zoom (+)"
+            onClick={() => setZoom(z => Math.max(z - 0.2, 1))} 
+            className="w-8 h-8 bg-white/10 hover:bg-white/20 active:scale-90 text-white rounded-full flex items-center justify-center font-black transition-all cursor-pointer border border-white/5"
+            title="Diminuir Zoom (-)"
           >
-            <Plus size={18} />
+            <Minus size={14} />
           </button>
         </div>
 
@@ -426,17 +461,40 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
         </button>
       </div>
 
-      <div 
-        onClick={() => setMode('camera')}
-        className="cursor-pointer text-center px-4 py-8 bg-military-800/30 border-2 border-dashed border-military-700 rounded-3xl group hover:border-military-500 transition-all active:scale-95"
-      >
-        <div className="w-20 h-20 bg-military-800 rounded-full flex items-center justify-center mx-auto mb-4 border border-military-700 shadow-xl group-hover:scale-110 transition-transform">
-          <Camera className="w-8 h-8 text-military-400 group-hover:text-military-300" />
+      <div className="grid grid-cols-2 gap-4">
+        <div 
+          onClick={() => setMode('camera')}
+          className="cursor-pointer text-center px-4 py-6 bg-military-800/30 border-2 border-dashed border-military-700 rounded-3xl group hover:border-military-500 transition-all active:scale-95 flex flex-col justify-center items-center"
+        >
+          <div className="w-14 h-14 bg-military-800 rounded-full flex items-center justify-center mb-3 border border-military-700 shadow-xl group-hover:scale-110 transition-transform">
+            <Camera className="w-5 h-5 text-military-400 group-hover:text-military-300" />
+          </div>
+          <h3 className="text-xs font-black mb-1 uppercase tracking-tight">CÂMERA PDF</h3>
+          <p className="text-[9px] text-military-500 max-w-[150px] mx-auto uppercase tracking-widest font-mono">
+            Escanear
+          </p>
         </div>
-        <h3 className="text-xl font-bold mb-2 uppercase tracking-tighter">CÂMERA PDF</h3>
-        <p className="text-xs text-military-500 mb-6 max-w-[200px] mx-auto uppercase tracking-widest font-mono">
-          Toque para escanear
-        </p>
+
+        <div 
+          onClick={() => fileInputRef.current?.click()}
+          className="cursor-pointer text-center px-4 py-6 bg-military-800/30 border-2 border-dashed border-military-700 rounded-3xl group hover:border-military-500 transition-all active:scale-95 flex flex-col justify-center items-center relative"
+        >
+          <input 
+            type="file"
+            ref={fileInputRef}
+            onChange={handleGalleryImport}
+            accept="image/*"
+            multiple
+            className="hidden"
+          />
+          <div className="w-14 h-14 bg-military-800 rounded-full flex items-center justify-center mb-3 border border-military-700 shadow-xl group-hover:scale-110 transition-transform">
+            <Upload className="w-5 h-5 text-military-400 group-hover:text-military-300" />
+          </div>
+          <h3 className="text-xs font-black mb-1 uppercase tracking-tight">IMPORTAR GALERIA</h3>
+          <p className="text-[9px] text-military-500 max-w-[150px] mx-auto uppercase tracking-widest font-mono">
+            smartphone
+          </p>
+        </div>
       </div>
 
       <div className="bg-military-800 rounded-3xl p-6 border border-military-700 shadow-xl">
