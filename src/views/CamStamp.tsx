@@ -17,7 +17,9 @@ import {
   Download,
   Share2,
   Plus,
-  Minus
+  Minus,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import { decimalToDMS, decimalToUTM } from '../utils/coords';
 import { CameraSettings, DEFAULT_SETTINGS, CoordFormat, InfoPosition, FontSize } from '../types/settings';
@@ -37,6 +39,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [sharingPhotoUrl, setSharingPhotoUrl] = useState<string | null>(null);
   const [gallery, setGallery] = useState<{ id: string; url: string; timestamp: string }[]>(() => {
     const saved = localStorage.getItem('bpa_camera_gallery');
     return saved ? JSON.parse(saved) : [];
@@ -381,11 +384,49 @@ export default function CamStamp({ onBack }: CamStampProps) {
     setTimeout(() => setToastMsg(null), 2000);
   }, [coords, settings, timestamp]);
 
+  const copyImageToClipboard = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      
+      const img = new Image();
+      img.src = url;
+      await new Promise((resolve) => { img.onload = resolve; });
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Could not get 2D context');
+      
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(async (pngBlob) => {
+        if (!pngBlob) {
+          setToastMsg('Erro ao processar imagem para cópia.');
+          return;
+        }
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': pngBlob })
+          ]);
+          setToastMsg('Copiado! Basta colar no WhatsApp ou outro app.');
+        } catch (clipErr) {
+          console.error(clipErr);
+          setToastMsg('Erro ao copiar automaticamente. Use Abrir em Nova Guia ou Baixar.');
+        }
+      }, 'image/png');
+    } catch (err) {
+      console.error(err);
+      setToastMsg('Erro ao copiar imagem.');
+    }
+  };
+
   const handleSharePhoto = async (photoUrl: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    try {
-      if (navigator.share) {
-        // Convert base64 dataUrl to File object for native sharing
+    
+    // Try native share first
+    if (navigator.share) {
+      try {
         const response = await fetch(photoUrl);
         const blob = await response.blob();
         const file = new File([blob], `BPA_PHOTO_${Date.now()}.jpeg`, { type: 'image/jpeg' });
@@ -398,17 +439,13 @@ export default function CamStamp({ onBack }: CamStampProps) {
           });
           return;
         }
+      } catch (err) {
+        console.log('Compartilhamento nativo falhou, abrindo painel personalizado:', err);
       }
-      
-      // Fallback: download and alert
-      const link = document.createElement('a');
-      link.download = `BPA_PHOTO_${Date.now()}.jpeg`;
-      link.href = photoUrl;
-      link.click();
-      alert('Seu navegador não suporta compartilhamento direto de arquivos. A foto foi salva e baixada no dispositivo.');
-    } catch (err) {
-      console.log('Compartilhamento cancelado ou indisponível:', err);
     }
+    
+    // Open the custom high-fidelity share drawer
+    setSharingPhotoUrl(photoUrl);
   };
 
   const renderOverlay = () => {
@@ -833,6 +870,157 @@ export default function CamStamp({ onBack }: CamStampProps) {
             >
               <Check size={20} /> SALVAR CONFIGURAÇÕES
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* High-Fidelity Custom Share Drawer */}
+      {sharingPhotoUrl && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[400] flex items-end justify-center transition-all duration-300 animate-fade-in"
+          onClick={() => setSharingPhotoUrl(null)}
+        >
+          <div 
+            className="bg-[#121318] border-t border-zinc-800 rounded-t-[2.5rem] w-full max-w-md p-6 pb-8 text-white shadow-2xl transition-transform duration-300 transform translate-y-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Pull tab handle */}
+            <div className="w-12 h-1 bg-zinc-600 rounded-full mx-auto mb-5" />
+            
+            {/* Header */}
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-base font-black tracking-tight text-zinc-100 uppercase">Compartilhar imagem</h3>
+              <button 
+                onClick={() => setSharingPhotoUrl(null)}
+                className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-full transition-all"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Info card of photo */}
+            <div className="bg-zinc-800/40 border border-zinc-800/50 rounded-2xl p-3 flex items-center gap-3.5 mb-6">
+              <div className="relative w-12 h-12 bg-black rounded-xl overflow-hidden border border-zinc-700 flex-shrink-0">
+                <img src={sharingPhotoUrl} className="w-full h-full object-cover" alt="Compartilhamento" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-zinc-200 truncate">Foto Georreferenciada BPA</p>
+                <p className="text-[10px] font-mono text-zinc-400 mt-0.5">BPA_PHOTO_GEORREF.jpeg</p>
+              </div>
+            </div>
+
+            {/* Subtitle */}
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-4">Enviar Diretamente para</p>
+
+            {/* Grid of Apps (Simulated Native Experience) */}
+            <div className="grid grid-cols-4 gap-y-5 gap-x-2 mb-6 pb-6 border-b border-zinc-800/60">
+              {[
+                { name: 'WhatsApp', color: '#25D366', icon: '💬', url: 'whatsapp://send' },
+                { name: 'Telegram', color: '#0088cc', icon: '✈️', url: 'tg://msg' },
+                { name: 'Quick Share', color: '#0066ff', icon: '⚡' },
+                { name: 'Gmail', color: '#EA4335', icon: '✉️', url: 'mailto:' },
+                { name: 'Instagram', color: '#E1306C', icon: '📸' },
+                { name: 'Bluetooth', color: '#0082FC', icon: '📡' },
+                { name: 'Mensagens', color: '#0b84ff', icon: '💬' },
+                { name: 'Google Drive', color: '#34A853', icon: '📁' },
+              ].map((app) => (
+                <button
+                  key={app.name}
+                  onClick={async () => {
+                    await copyImageToClipboard(sharingPhotoUrl);
+                    if (app.url) {
+                      setTimeout(() => {
+                        window.open(app.url, '_blank');
+                      }, 1000);
+                    }
+                  }}
+                  className="flex flex-col items-center gap-1.5 group active:scale-95 transition-transform"
+                >
+                  <div 
+                    style={{ backgroundColor: `${app.color}20`, borderColor: `${app.color}35` }}
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl border transition-all group-hover:scale-105"
+                  >
+                    <span className="filter drop-shadow-sm">{app.icon}</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-400 font-bold text-center truncate w-full">{app.name}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Direct Tactical Actions */}
+            <div className="space-y-3">
+              {/* Copy button */}
+              <button
+                onClick={() => {
+                  copyImageToClipboard(sharingPhotoUrl);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-100 rounded-2xl border border-zinc-700/40 text-sm font-bold active:scale-[0.98] transition-all"
+              >
+                <Copy size={16} className="text-blue-400" />
+                <div className="text-left min-w-0 flex-1">
+                  <p className="text-xs font-black">Copiar Imagem</p>
+                  <p className="text-[10px] text-zinc-400 font-normal">Copia para colar no WhatsApp ou Telegram</p>
+                </div>
+              </button>
+
+              {/* New Tab button */}
+              <button
+                onClick={() => {
+                  const newWindow = window.open();
+                  if (newWindow) {
+                    newWindow.document.write(`<img src="${sharingPhotoUrl}" style="max-width:100%; height:auto; display:block; margin:20px auto; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.5);" />`);
+                    newWindow.document.title = "Foto Georreferenciada BPA";
+                    newWindow.document.body.style.backgroundColor = "#000000";
+                    newWindow.document.body.style.margin = "0";
+                    newWindow.document.body.style.padding = "10px";
+                  } else {
+                    setToastMsg("Bloqueador de popups ativo. Permita popups para abrir a imagem.");
+                  }
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-100 rounded-2xl border border-zinc-700/40 text-sm font-bold active:scale-[0.98] transition-all"
+              >
+                <ExternalLink size={16} className="text-teal-400" />
+                <div className="text-left min-w-0 flex-1">
+                  <p className="text-xs font-black">Abrir em Nova Guia</p>
+                  <p className="text-[10px] text-zinc-400 font-normal">Ativa o menu de compartilhamento nativo do sistema</p>
+                </div>
+              </button>
+
+              {/* Direct Download button */}
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await fetch(sharingPhotoUrl);
+                    const blob = await response.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    
+                    const link = document.createElement('a');
+                    link.download = `BPA_PHOTO_${Date.now()}.jpeg`;
+                    link.href = objectUrl;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    
+                    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+                    setToastMsg("Imagem baixada com sucesso!");
+                  } catch (err) {
+                    console.error(err);
+                    const link = document.createElement('a');
+                    link.download = `BPA_PHOTO_${Date.now()}.jpeg`;
+                    link.href = sharingPhotoUrl;
+                    link.click();
+                    setToastMsg("Imagem baixada com sucesso!");
+                  }
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-100 rounded-2xl border border-zinc-700/40 text-sm font-bold active:scale-[0.98] transition-all"
+              >
+                <Download size={16} className="text-emerald-400" />
+                <div className="text-left min-w-0 flex-1">
+                  <p className="text-xs font-black">Baixar Foto</p>
+                  <p className="text-[10px] text-zinc-400 font-normal">Salva a foto no dispositivo</p>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       )}
