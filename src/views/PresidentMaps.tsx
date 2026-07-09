@@ -48,6 +48,7 @@ export interface KmlData {
   name: string;
   visible: boolean;
   color?: string;
+  thickness?: 'grossa' | 'media' | 'fina';
   features: Array<{
     type: 'Point' | 'LineString' | 'Polygon';
     name: string;
@@ -873,7 +874,15 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
         ctx.strokeStyle = strokeColor;
         ctx.fillStyle = fillColor;
-        ctx.lineWidth = 3;
+
+        // Custom line thickness based on user preference
+        let lineWidth = 3; // Default (Grossa)
+        if (layer.thickness === 'fina') {
+          lineWidth = 1;
+        } else if (layer.thickness === 'media') {
+          lineWidth = 2;
+        }
+        ctx.lineWidth = lineWidth;
 
         const pts = feat.coordinates.map(pt => {
           const wPx = latLngToWorldPixel(pt.lat, pt.lng, zoom);
@@ -2245,6 +2254,17 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       if (k.id === id) {
         dbSaveKml({ ...k, color });
         return { ...k, color };
+      }
+      return k;
+    });
+    setKmlLayers(updated);
+  };
+
+  const changeKmlThickness = async (id: string, thickness: 'grossa' | 'media' | 'fina') => {
+    const updated = kmlLayers.map(k => {
+      if (k.id === id) {
+        dbSaveKml({ ...k, thickness });
+        return { ...k, thickness };
       }
       return k;
     });
@@ -3651,6 +3671,33 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                                   />
                                 </label>
+                              </div>
+                            </div>
+
+                            {/* Dynamic Thickness Selector Section */}
+                            <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-military-750/10">
+                              <span className="font-mono text-[8px] text-military-400 uppercase tracking-wider font-bold">Espessura:</span>
+                              <div className="flex bg-military-900/60 p-0.5 rounded-lg border border-military-700/40">
+                                {[
+                                  { name: 'Fina', value: 'fina' },
+                                  { name: 'Média', value: 'media' },
+                                  { name: 'Grossa', value: 'grossa' },
+                                ].map(thicknessOption => {
+                                  const isActive = (k.thickness || 'grossa') === thicknessOption.value;
+                                  return (
+                                    <button
+                                      key={thicknessOption.value}
+                                      onClick={() => changeKmlThickness(k.id, thicknessOption.value as 'grossa' | 'media' | 'fina')}
+                                      className={`px-2 py-0.5 rounded-md font-mono text-[8px] font-bold uppercase transition-all ${
+                                        isActive
+                                          ? 'bg-military-700 text-white shadow-sm font-black'
+                                          : 'text-military-400 hover:text-military-200'
+                                      }`}
+                                    >
+                                      {thicknessOption.name}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
