@@ -47,6 +47,7 @@ export interface KmlData {
   id: string;
   name: string;
   visible: boolean;
+  color?: string;
   features: Array<{
     type: 'Point' | 'LineString' | 'Polygon';
     name: string;
@@ -519,7 +520,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
   // Lists of maps and layers
   const [importedMaps, setImportedMaps] = useState<ImportedMap[]>([]);
-  const [activeMapId, setActiveMapId] = useState<string | null>(null);
+  const [activeMapIds, setActiveMapIds] = useState<string[]>([]);
   const [kmlLayers, setKmlLayers] = useState<KmlData[]>([]);
   const [baseMap, setBaseMap] = useState<BaseMapType>(() => {
     const saved = localStorage.getItem('president_base_map');
@@ -600,7 +601,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     dbGetMaps().then(maps => {
       setImportedMaps(maps);
       if (maps.length > 0) {
-        setActiveMapId(maps[0].id);
+        setActiveMapIds([maps[0].id]);
         const hasSavedLocation = localStorage.getItem('president_map_center');
         if (!hasSavedLocation) {
           setCenter({ lat: maps[0].topLeft.lat + (maps[0].bottomRight.lat - maps[0].topLeft.lat) / 2, lng: maps[0].topLeft.lng + (maps[0].bottomRight.lng - maps[0].topLeft.lng) / 2 });
@@ -652,7 +653,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       triggerRedraw();
     });
     return () => cancelAnimationFrame(frameId);
-  }, [center, zoom, rotation, activeMapId, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, dimensions, importedMaps]);
+  }, [center, zoom, rotation, activeMapIds, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, dimensions, importedMaps]);
 
   // Handle drawing operation over HTML5 Canvas
   useEffect(() => {
@@ -818,9 +819,10 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       }
     }
 
-    // 2. RENDER THE ACTIVE GEOPDF IMAGE
-    const activeMap = importedMaps.find(m => m.id === activeMapId);
-    if (activeMap) {
+    // 2. RENDER THE ACTIVE GEOPDF IMAGES (MULTIPLE SUPPORTED)
+    importedMaps.forEach(activeMap => {
+      if (!activeMapIds.includes(activeMap.id)) return;
+
       let mapImg = mapImageCache.current.get(activeMap.id);
       if (!mapImg) {
         mapImg = new Image();
@@ -850,7 +852,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         ctx.strokeRect(targetX, targetY, targetW, targetH);
         ctx.setLineDash([]);
       }
-    }
+    });
 
     // 3. RENDER KML VECTOR LAYERS
     kmlLayers.forEach(layer => {
@@ -859,8 +861,18 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       layer.features.forEach(feat => {
         if (feat.coordinates.length === 0) return;
 
-        ctx.strokeStyle = '#3b82f6'; // Bright field-blue
-        ctx.fillStyle = 'rgba(59, 130, 246, 0.15)';
+        const strokeColor = layer.color || '#3b82f6';
+        let fillColor = 'rgba(59, 130, 246, 0.15)';
+        if (layer.color) {
+          const hex = layer.color.replace('#', '');
+          const r = parseInt(hex.substring(0, 2), 16) || 59;
+          const g = parseInt(hex.substring(2, 4), 16) || 130;
+          const b = parseInt(hex.substring(4, 6), 16) || 246;
+          fillColor = `rgba(${r}, ${g}, ${b}, 0.15)`;
+        }
+
+        ctx.strokeStyle = strokeColor;
+        ctx.fillStyle = fillColor;
         ctx.lineWidth = 3;
 
         const pts = feat.coordinates.map(pt => {
@@ -1256,7 +1268,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
     // 5. DRAW COMPASS ACCENT (Static decal)
     ctx.lineWidth = 2;
-  }, [paintCount, dimensions, center, zoom, rotation, activeMapId, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, savedPoints, savedDistances, savedAreas, measurePoints, areaPoints, measuringMode]);
+  }, [paintCount, dimensions, center, zoom, rotation, activeMapIds, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, savedPoints, savedDistances, savedAreas, measurePoints, areaPoints, measuringMode]);
 
   // Helpers for locating screen coordinate of lat/lng
   const getScreenPos = (lat: number, lng: number) => {
@@ -1939,7 +1951,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           await dbSaveMap(newMap);
           const maps = await dbGetMaps();
           setImportedMaps(maps);
-          setActiveMapId(newMap.id);
+          setActiveMapIds(prev => [...new Set([...prev, newMap.id])]);
           setCenter({
             lat: newMap.topLeft.lat + (newMap.bottomRight.lat - newMap.topLeft.lat) / 2,
             lng: newMap.topLeft.lng + (newMap.bottomRight.lng - newMap.topLeft.lng) / 2
@@ -2069,7 +2081,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       await dbSaveMap(newMap);
       const maps = await dbGetMaps();
       setImportedMaps(maps);
-      setActiveMapId(newMap.id);
+      setActiveMapIds(prev => [...new Set([...prev, newMap.id])]);
       
       // Navigate center to loaded map bounds
       setCenter({
@@ -2204,9 +2216,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     await dbDeleteMap(id);
     const maps = await dbGetMaps();
     setImportedMaps(maps);
-    if (activeMapId === id) {
-      setActiveMapId(maps.length > 0 ? maps[0].id : null);
-    }
+    setActiveMapIds(prev => prev.filter(mid => mid !== id));
     mapImageCache.current.delete(id);
     showTemporaryStatus(`Mapa "${name}" excluído.`);
   };
@@ -2224,6 +2234,17 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         const nextVis = !k.visible;
         dbSaveKml({ ...k, visible: nextVis });
         return { ...k, visible: nextVis };
+      }
+      return k;
+    });
+    setKmlLayers(updated);
+  };
+
+  const changeKmlColor = async (id: string, color: string) => {
+    const updated = kmlLayers.map(k => {
+      if (k.id === id) {
+        dbSaveKml({ ...k, color });
+        return { ...k, color };
       }
       return k;
     });
@@ -3444,7 +3465,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     </div>
 
                     {/* List of imported GeoPDF maps */}
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {importedMaps.length === 0 ? (
                         <div className="text-center p-3 border border-military-800/50 rounded-lg bg-military-800/10">
                           <p className="font-mono text-[9px] text-military-400 tracking-wider">NENHUM MAPA GEO ANEXADO</p>
@@ -3453,42 +3474,42 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                         importedMaps.map(m => (
                           <div 
                             key={m.id}
-                            className={`flex flex-col border p-3 rounded-xl transition-all ${activeMapId === m.id ? 'border-blue-500 bg-blue-900/15 shadow-md shadow-blue-500/5' : 'border-military-750 bg-military-850/60 hover:border-military-600'}`}
+                            className={`flex flex-col border p-2 rounded-xl transition-all ${activeMapIds.includes(m.id) ? 'border-blue-500 bg-blue-900/15 shadow-md shadow-blue-500/5' : 'border-military-750 bg-military-850/60 hover:border-military-600'}`}
                           >
-                            {/* Nome do mapa: Letreiro Digital contínuo com destaque discreto */}
-                            <div className="bg-[#f1f5f9] border border-slate-200/60 rounded-lg px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2.5">
-                              <div className="inline-block animate-[marquee_18s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11.5px] font-black uppercase tracking-normal text-slate-800 pr-12">
+                            {/* Nome do mapa: Letreiro Digital contínuo com destaque discreto (slower marquee, smaller padding/text) */}
+                            <div className="bg-[#f1f5f9] border border-slate-200/60 rounded-md px-2 py-1 overflow-hidden whitespace-nowrap relative mb-1.5">
+                              <div className="inline-block animate-[marquee_45s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[10px] font-black uppercase tracking-normal text-slate-800 pr-8">
                                 {m.name} &nbsp;&bull;&nbsp; {m.name} &nbsp;&bull;&nbsp; {m.name}
                               </div>
                             </div>
                             
-                            {/* Três botões de ações bem separados e expressivos */}
-                            <div className="grid grid-cols-3 gap-2 border-t border-military-750/30 pt-3 mt-1">
+                            {/* Três botões de ações mais compactos e com menor espaçamento */}
+                            <div className="grid grid-cols-3 gap-1.5 border-t border-military-750/15 pt-1.5 mt-0.5">
                               {/* Botão 1: Exibir / Ocultar */}
                               <button
                                 onClick={() => {
-                                  if (activeMapId === m.id) {
-                                    setActiveMapId(null);
+                                  if (activeMapIds.includes(m.id)) {
+                                    setActiveMapIds(prev => prev.filter(id => id !== m.id));
                                   } else {
-                                    setActiveMapId(m.id);
+                                    setActiveMapIds(prev => [...prev, m.id]);
                                     setCenter({
                                       lat: m.topLeft.lat + (m.bottomRight.lat - m.topLeft.lat)/2,
                                       lng: m.topLeft.lng + (m.bottomRight.lng - m.topLeft.lng)/2
                                     });
                                   }
                                 }}
-                                className={`flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-lg border transition-all ${activeMapId === m.id ? 'bg-blue-600/20 border-blue-500 text-blue-200 shadow-sm shadow-blue-500/10' : 'bg-military-800/40 border-military-700/60 text-military-300 hover:bg-military-800'}`}
+                                className={`flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border transition-all ${activeMapIds.includes(m.id) ? 'bg-blue-600/20 border-blue-500 text-blue-200 shadow-sm shadow-blue-500/10' : 'bg-military-800/40 border-military-700/60 text-military-300 hover:bg-military-800'}`}
                                 id={`btn-view-${m.id}`}
                               >
-                                {activeMapId === m.id ? (
+                                {activeMapIds.includes(m.id) ? (
                                   <>
-                                    <Eye className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                                    <span className="font-mono text-[9px] font-bold uppercase tracking-wider">Ocultar</span>
+                                    <Eye className="w-3 h-3 text-blue-400 shrink-0" />
+                                    <span className="font-mono text-[8px] font-bold uppercase tracking-wider">Ocultar</span>
                                   </>
                                 ) : (
                                   <>
-                                    <EyeOff className="w-3.5 h-3.5 text-military-400 shrink-0" />
-                                    <span className="font-mono text-[9px] font-bold uppercase tracking-wider font-semibold">Exibir</span>
+                                    <EyeOff className="w-3 h-3 text-military-400 shrink-0" />
+                                    <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Exibir</span>
                                   </>
                                 )}
                               </button>
@@ -3496,23 +3517,23 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                               {/* Botão 2: Compartilhar */}
                               <button
                                 onClick={() => handleShareMap(m)}
-                                className="flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-lg border bg-military-800/40 border-military-700/60 text-military-300 hover:bg-military-800 hover:border-emerald-500/40 hover:text-emerald-300 transition-all"
+                                className="flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border bg-military-800/40 border-military-700/60 text-military-300 hover:bg-military-800 hover:border-emerald-500/40 hover:text-emerald-300 transition-all"
                                 title="Compartilhar Mapa"
                                 id={`btn-share-${m.id}`}
                               >
-                                <Share2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                <span className="font-mono text-[9px] font-bold uppercase tracking-wider font-semibold">Enviar</span>
+                                <Share2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Enviar</span>
                               </button>
 
                               {/* Botão 3: Excluir */}
                               <button
                                 onClick={() => removeMap(m.id, m.name)}
-                                className="flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-lg border bg-military-800/40 border-military-700/60 text-military-300 hover:bg-red-950/30 hover:border-red-500/40 hover:text-red-300 transition-all"
+                                className="flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border bg-military-800/40 border-military-700/60 text-military-300 hover:bg-red-950/30 hover:border-red-500/40 hover:text-red-300 transition-all"
                                 title="Excluir Permanentemente"
                                 id={`btn-delete-${m.id}`}
                               >
-                                <Trash2 className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                                <span className="font-mono text-[9px] font-bold uppercase tracking-wider font-semibold">Excluir</span>
+                                <Trash2 className="w-3 h-3 text-red-400 shrink-0" />
+                                <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Excluir</span>
                               </button>
                             </div>
                           </div>
@@ -3565,9 +3586,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                             key={k.id}
                             className="flex flex-col border border-military-750 bg-military-850/60 hover:border-military-600 p-3 rounded-xl transition-all"
                           >
-                            {/* Nome com letreiro eletrônico com destaque discreto */}
+                            {/* Nome com letreiro eletrônico com destaque discreto (slower marquee) */}
                             <div className="bg-[#f0fdf4] border border-emerald-200/60 rounded-lg px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2.5">
-                              <div className="inline-block animate-[marquee_18s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11.5px] font-black uppercase tracking-normal text-slate-800 pr-12">
+                              <div className="inline-block animate-[marquee_45s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11.5px] font-black uppercase tracking-normal text-slate-800 pr-12">
                                 {k.name} &nbsp;&bull;&nbsp; {k.name} &nbsp;&bull;&nbsp; {k.name}
                               </div>
                             </div>
@@ -3599,6 +3620,37 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                 >
                                   <Trash2 className="w-3.5 h-3.5 shrink-0" />
                                 </button>
+                              </div>
+                            </div>
+
+                            {/* Dynamic Color Selector Section */}
+                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-military-750/20">
+                              <span className="font-mono text-[8px] text-military-400 uppercase tracking-wider font-bold">Alterar Cor:</span>
+                              <div className="flex items-center gap-1.5">
+                                {[
+                                  { name: 'Azul', hex: '#3b82f6' },
+                                  { name: 'Verde', hex: '#22c55e' },
+                                  { name: 'Vermelho', hex: '#ef4444' },
+                                  { name: 'Amarelo', hex: '#eab308' },
+                                  { name: 'Roxo', hex: '#a855f7' },
+                                ].map(colorOption => (
+                                  <button
+                                    key={colorOption.hex}
+                                    onClick={() => changeKmlColor(k.id, colorOption.hex)}
+                                    style={{ backgroundColor: colorOption.hex }}
+                                    className={`w-4 h-4 rounded-full border transition-all hover:scale-125 ${ (k.color || '#3b82f6') === colorOption.hex ? 'border-white scale-110 shadow-sm shadow-white/60' : 'border-transparent opacity-80 hover:opacity-100' }`}
+                                    title={colorOption.name}
+                                  />
+                                ))}
+                                {/* Custom picker */}
+                                <label className="relative cursor-pointer w-4 h-4 rounded-full border border-military-500/50 flex items-center justify-center overflow-hidden bg-gradient-to-tr from-red-500 via-green-500 to-blue-500 hover:scale-125 transition-transform" title="Cor Personalizada">
+                                  <input 
+                                    type="color"
+                                    value={k.color || '#3b82f6'}
+                                    onChange={(e) => changeKmlColor(k.id, e.target.value)}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                  />
+                                </label>
                               </div>
                             </div>
                           </div>
