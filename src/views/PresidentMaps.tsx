@@ -521,7 +521,14 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
   // Lists of maps and layers
   const [importedMaps, setImportedMaps] = useState<ImportedMap[]>([]);
-  const [activeMapIds, setActiveMapIds] = useState<string[]>([]);
+  const [activeMapIds, setActiveMapIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('president_active_map_ids');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [kmlLayers, setKmlLayers] = useState<KmlData[]>([]);
   const [baseMap, setBaseMap] = useState<BaseMapType>(() => {
     const saved = localStorage.getItem('president_base_map');
@@ -597,12 +604,28 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     localStorage.setItem('president_base_map', baseMap);
   }, [baseMap]);
 
+  useEffect(() => {
+    localStorage.setItem('president_active_map_ids', JSON.stringify(activeMapIds));
+  }, [activeMapIds]);
+
   // Initialize and load saved maps and layers
   useEffect(() => {
     dbGetMaps().then(maps => {
       setImportedMaps(maps);
       if (maps.length > 0) {
-        setActiveMapIds([maps[0].id]);
+        const savedActiveIdsStr = localStorage.getItem('president_active_map_ids');
+        if (savedActiveIdsStr) {
+          try {
+            const savedActiveIds = JSON.parse(savedActiveIdsStr) as string[];
+            // Filter to only include valid, existing map IDs
+            const validActiveIds = savedActiveIds.filter(id => maps.some(m => m.id === id));
+            setActiveMapIds(validActiveIds);
+          } catch (e) {
+            setActiveMapIds([maps[0].id]);
+          }
+        } else {
+          setActiveMapIds([maps[0].id]);
+        }
         const hasSavedLocation = localStorage.getItem('president_map_center');
         if (!hasSavedLocation) {
           setCenter({ lat: maps[0].topLeft.lat + (maps[0].bottomRight.lat - maps[0].topLeft.lat) / 2, lng: maps[0].topLeft.lng + (maps[0].bottomRight.lng - maps[0].topLeft.lng) / 2 });
@@ -949,9 +972,14 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         ctx.stroke();
         ctx.restore();
 
-        // Draw modern distance badge in the center of the dashed line
-        const mx = gx / 2;
-        const my = gy / 2;
+        // Draw modern distance badge close to the central reticle (0, 0)
+        const len = Math.sqrt(gx * gx + gy * gy);
+        let mx = gx / 2;
+        let my = gy / 2;
+        if (len > 40) {
+          mx = (gx / len) * 40;
+          my = (gy / len) * 40;
+        }
         const label = distM < 1000 ? `${Math.round(distM)} m` : `${distKm.toFixed(2)} km`;
         
         ctx.save();

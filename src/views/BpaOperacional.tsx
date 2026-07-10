@@ -33,7 +33,7 @@ const ACRE_PRESETS = [
     name: "Seringal Santa Maria",
     lat: -9.0658,
     lng: -68.6572,
-    carCode: "AC-1200401-A482B8C9D384E90B1E63DFF8C1935821",
+    carCode: "AC-1200500-A482B8C9D384E90B1E63DFF8C1935821",
     owner: "Francisco Mendes de Oliveira",
     municipio: "Sena Madureira",
     area: 342.50,
@@ -52,7 +52,7 @@ const ACRE_PRESETS = [
     name: "Fazenda Rio Acre",
     lat: -9.5842,
     lng: -67.5451,
-    carCode: "AC-1200351-F2913A8846C492795B5B876FAF6B2C98",
+    carCode: "AC-1200807-F2913A8846C492795B5B876FAF6B2C98",
     owner: "Sebastião Souza Pinheiro",
     municipio: "Porto Acre",
     area: 618.20,
@@ -90,7 +90,7 @@ const ACRE_PRESETS = [
     name: "Gleba Humaitá",
     lat: -8.2674,
     lng: -72.7431,
-    carCode: "AC-1200427-E945CB81D235F8E24C19AEEF118C5263",
+    carCode: "AC-1200393-E945CB81D235F8E24C19AEEF118C5263",
     owner: "Zilda Pereira Mendes",
     municipio: "Porto Walter",
     area: 215.80,
@@ -112,6 +112,24 @@ const ACRE_MUNICIPIOS = [
   "Feijó", "Epitaciolândia", "Brasiléia", "Senador Guiomard", 
   "Mâncio Lima", "Porto Walter", "Assis Brasil", "Plácido de Castro", "Xapuri", "Porto Acre"
 ];
+
+// Official IBGE codes mapping for Acre municipalities
+const ACRE_MUNICIPIOS_DATA: Record<string, string> = {
+  "Rio Branco": "1200401",
+  "Sena Madureira": "1200500",
+  "Cruzeiro do Sul": "1200203",
+  "Tarauacá": "1200609",
+  "Feijó": "1200302",
+  "Epitaciolândia": "1200252",
+  "Brasiléia": "1200104",
+  "Senador Guiomard": "1200450",
+  "Mâncio Lima": "1200336",
+  "Porto Walter": "1200393",
+  "Assis Brasil": "1200054",
+  "Plácido de Castro": "1200385",
+  "Xapuri": "1200708",
+  "Porto Acre": "1200807"
+};
 
 // --- INTERACTIVE MAP CONSTANTS AND POLYGON GENERATOR ---
 function getPropertyPolygon(centerLat: number, centerLng: number, area: number) {
@@ -172,6 +190,15 @@ function getOrGenerateProperty(lat: number, lng: number, index = 0) {
     };
   }
 
+  // Calculate base seed derived only from lat/lng to ensure ALL overlapping properties on the same coordinate get the same municipality!
+  const baseCoordHash = Math.abs(Math.sin(lat) * 1234.56 + Math.cos(lng) * 7890.12);
+  const baseSeed = (baseCoordHash - Math.floor(baseCoordHash));
+
+  const municipios = ACRE_MUNICIPIOS;
+  const municipio = municipios[Math.floor(baseSeed * municipios.length)];
+  const ibgeCode = ACRE_MUNICIPIOS_DATA[municipio] || "1200401";
+
+  // Individual seed for other elements (name, status, area) so they stay varied per index
   const coordHash = Math.abs(Math.sin(lat) * 1234.56 + Math.cos(lng) * 7890.12) + index * 42.17;
   const seed = (coordHash - Math.floor(coordHash));
 
@@ -183,9 +210,6 @@ function getOrGenerateProperty(lat: number, lng: number, index = 0) {
   const name1 = sub1[Math.floor((seed * 17) % sub1.length)];
   const name2 = (seed > 0.45) ? " " + sub2[Math.floor((seed * 31) % sub2.length)] : "";
   const name = `${prefix} ${name1}${name2}` + (index > 0 ? ` (Lote ${index + 1})` : "");
-
-  const municipios = ACRE_MUNICIPIOS;
-  const municipio = municipios[Math.floor(seed * municipios.length)];
 
   const area = Math.round((60 + seed * 850) * 10) / 10;
   const rlRequirement = 80;
@@ -237,7 +261,10 @@ function getOrGenerateProperty(lat: number, lng: number, index = 0) {
     embargoOrgao = "Nenhum";
   }
 
-  const carCode = `AC-1200${Math.floor(10 + seed * 89)}-${Math.floor(1000 + seed * 8999)}-${Math.floor(seed * 9999999).toString(16).toUpperCase().substring(0, 16)}`;
+  // Generate an authentic 16-character hexadecimal hash matching the seed
+  const hashPart = Math.floor(seed * 9999999999).toString(16).toUpperCase().padStart(16, '0').substring(0, 16);
+  // Ensure the CAR code is structurally valid and binds directly to the municipality's real IBGE code!
+  const carCode = `AC-${ibgeCode}-${hashPart}`;
 
   const owners = [
     "Antonio da Silva Ramos",
