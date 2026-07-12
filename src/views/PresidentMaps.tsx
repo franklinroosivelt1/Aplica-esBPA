@@ -317,6 +317,10 @@ interface SavedPoint {
   lat: number;
   lng: number;
   createdAt: number;
+  isTrack?: boolean;
+  points?: Array<{ lat: number; lng: number }>;
+  distance?: number;
+  duration?: number;
 }
 
 interface SavedDistance {
@@ -540,6 +544,75 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
   const [simulatedGps, setSimulatedGps] = useState<boolean>(true); // Start simulated in Rio Branco Acre
   const [simGpsCoords, setSimGpsCoords] = useState({ lat: -9.0445, lng: -68.6540 });
 
+  // GPS Track Recording States (loaded from localStorage to survive background suspension)
+  const [isRecordingGpsTrack, setIsRecordingGpsTrack] = useState<boolean>(() => {
+    return localStorage.getItem('president_recording_active') === 'true';
+  });
+  const [recordedTrackPoints, setRecordedTrackPoints] = useState<Array<{ lat: number; lng: number }>>(() => {
+    const saved = localStorage.getItem('president_recorded_points');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [recordedTrackDistance, setRecordedTrackDistance] = useState<number>(() => {
+    const saved = localStorage.getItem('president_recorded_distance');
+    return saved ? parseFloat(saved) : 0;
+  });
+  const [recordedTrackElapsedTime, setRecordedTrackElapsedTime] = useState<number>(() => {
+    const saved = localStorage.getItem('president_recorded_elapsed_time');
+    return saved ? parseInt(saved) : 0;
+  });
+  const [recordedTrackStartTime, setRecordedTrackStartTime] = useState<number | null>(() => {
+    const saved = localStorage.getItem('president_recorded_start_time');
+    return saved ? parseInt(saved) : null;
+  });
+  const [trackName, setTrackName] = useState<string>(() => {
+    return localStorage.getItem('president_recorded_track_name') || '';
+  });
+
+  // Synchronize active GPS recording states to localStorage for complete offline / background survival
+  useEffect(() => {
+    localStorage.setItem('president_recording_active', isRecordingGpsTrack ? 'true' : 'false');
+    if (!isRecordingGpsTrack) {
+      localStorage.removeItem('president_recorded_points');
+      localStorage.removeItem('president_recorded_distance');
+      localStorage.removeItem('president_recorded_elapsed_time');
+      localStorage.removeItem('president_recorded_start_time');
+      localStorage.removeItem('president_recorded_track_name');
+    }
+  }, [isRecordingGpsTrack]);
+
+  useEffect(() => {
+    if (isRecordingGpsTrack) {
+      localStorage.setItem('president_recorded_points', JSON.stringify(recordedTrackPoints));
+    }
+  }, [recordedTrackPoints, isRecordingGpsTrack]);
+
+  useEffect(() => {
+    if (isRecordingGpsTrack) {
+      localStorage.setItem('president_recorded_distance', recordedTrackDistance.toString());
+    }
+  }, [recordedTrackDistance, isRecordingGpsTrack]);
+
+  useEffect(() => {
+    if (isRecordingGpsTrack) {
+      localStorage.setItem('president_recorded_elapsed_time', recordedTrackElapsedTime.toString());
+    }
+  }, [recordedTrackElapsedTime, isRecordingGpsTrack]);
+
+  useEffect(() => {
+    if (isRecordingGpsTrack && recordedTrackStartTime !== null) {
+      localStorage.setItem('president_recorded_start_time', recordedTrackStartTime.toString());
+    }
+  }, [recordedTrackStartTime, isRecordingGpsTrack]);
+
+  useEffect(() => {
+    if (isRecordingGpsTrack) {
+      localStorage.setItem('president_recorded_track_name', trackName);
+    }
+  }, [trackName, isRecordingGpsTrack]);
+
+  // Local state for GPS track name input field
+  const [inputTrackName, setInputTrackName] = useState('');
+
   // Refs for tracking interactive elements
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -677,7 +750,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       triggerRedraw();
     });
     return () => cancelAnimationFrame(frameId);
-  }, [center, zoom, rotation, activeMapIds, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, dimensions, importedMaps]);
+  }, [center, zoom, rotation, activeMapIds, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, dimensions, importedMaps, isRecordingGpsTrack, recordedTrackPoints]);
 
   // Handle drawing operation over HTML5 Canvas
   useEffect(() => {
@@ -1301,11 +1374,86 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       }
     });
 
+    // 4g. DRAW SAVED GPS TRACKS/TRAILS
+    savedPoints.forEach(pt => {
+      if (pt.isTrack && pt.points && pt.points.length >= 2) {
+        ctx.beginPath();
+        const startPixel = latLngToWorldPixel(pt.points[0].lat, pt.points[0].lng, zoom);
+        ctx.moveTo(startPixel.x - centerPixel.x, startPixel.y - centerPixel.y);
+        for (let i = 1; i < pt.points.length; i++) {
+          const ptPixel = latLngToWorldPixel(pt.points[i].lat, pt.points[i].lng, zoom);
+          ctx.lineTo(ptPixel.x - centerPixel.x, ptPixel.y - centerPixel.y);
+        }
+        
+        // Draw path shadow/glow
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.4)'; // Glow purple
+        ctx.lineWidth = 6;
+        ctx.stroke();
+
+        ctx.strokeStyle = '#a855f7'; // Solid vibrant purple for saved track
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Draw green start dot and red end dot
+        const startPx = startPixel.x - centerPixel.x;
+        const startPy = startPixel.y - centerPixel.y;
+        ctx.beginPath();
+        ctx.arc(startPx, startPy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#10b981';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        const endPt = pt.points[pt.points.length - 1];
+        const endPixel = latLngToWorldPixel(endPt.lat, endPt.lng, zoom);
+        const endPx = endPixel.x - centerPixel.x;
+        const endPy = endPixel.y - centerPixel.y;
+        ctx.beginPath();
+        ctx.arc(endPx, endPy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    });
+
+    // 4h. DRAW ACTIVE RECORDING GPS TRACK
+    if (isRecordingGpsTrack && recordedTrackPoints.length >= 2) {
+      ctx.beginPath();
+      const startPixel = latLngToWorldPixel(recordedTrackPoints[0].lat, recordedTrackPoints[0].lng, zoom);
+      ctx.moveTo(startPixel.x - centerPixel.x, startPixel.y - centerPixel.y);
+      for (let i = 1; i < recordedTrackPoints.length; i++) {
+        const ptPixel = latLngToWorldPixel(recordedTrackPoints[i].lat, recordedTrackPoints[i].lng, zoom);
+        ctx.lineTo(ptPixel.x - centerPixel.x, ptPixel.y - centerPixel.y);
+      }
+
+      ctx.strokeStyle = 'rgba(236, 72, 153, 0.4)'; // Glow pink for recording
+      ctx.lineWidth = 6;
+      ctx.stroke();
+
+      ctx.strokeStyle = '#ec4899'; // Vibrant pink for active recording
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+
+      // Green start point
+      const startPx = startPixel.x - centerPixel.x;
+      const startPy = startPixel.y - centerPixel.y;
+      ctx.beginPath();
+      ctx.arc(startPx, startPy, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#10b981';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
     ctx.restore();
 
     // 5. DRAW COMPASS ACCENT (Static decal)
     ctx.lineWidth = 2;
-  }, [paintCount, dimensions, center, zoom, rotation, activeMapIds, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, savedPoints, savedDistances, savedAreas, measurePoints, areaPoints, measuringMode]);
+  }, [paintCount, dimensions, center, zoom, rotation, activeMapIds, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, savedPoints, savedDistances, savedAreas, measurePoints, areaPoints, measuringMode, isRecordingGpsTrack, recordedTrackPoints]);
 
   // Helpers for locating screen coordinate of lat/lng
   const getScreenPos = (lat: number, lng: number) => {
@@ -1853,6 +2001,24 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     return R * c;
   };
 
+  const formatElapsedTime = (sec: number) => {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    if (h > 0) {
+      return `${pad(h)}:${pad(m)}:${pad(s)}`;
+    }
+    return `${pad(m)}:${pad(s)}`;
+  };
+
+  const formatDistance = (meters: number) => {
+    if (meters < 1000) {
+      return `${Math.round(meters)} m`;
+    }
+    return `${(meters / 1000).toFixed(2)} km`;
+  };
+
   const screenToLatLng = (sx: number, sy: number) => {
     // Subtract center positioning screen translation offset
     const cx = sx - dimensions.width / 2;
@@ -1878,6 +2044,165 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       syncDECFromLatLng(center.lat, center.lng);
     }
   }, [center]);
+
+  // Start a completely fresh GPS track recording
+  const startNewRecording = (customName: string) => {
+    const finalName = customName.trim() || `TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`;
+    const startTime = Date.now();
+    
+    setRecordedTrackStartTime(startTime);
+    setRecordedTrackElapsedTime(0);
+    
+    const initialPos = simulatedGps ? simGpsCoords : gpsCoords;
+    const initialPoints = initialPos ? [initialPos] : [];
+    
+    setRecordedTrackPoints(initialPoints);
+    setRecordedTrackDistance(0);
+    setTrackName(finalName);
+    setIsRecordingGpsTrack(true);
+    
+    showTemporaryStatus(`Gravação de trilha tática iniciada: ${finalName}`);
+  };
+
+  // Keep-Alive background systems: Screen Wake Lock + Silent Audio Playback Loop
+  const wakeLockRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    let activeAudio: HTMLAudioElement | null = null;
+    
+    async function startKeepAlive() {
+      if (!isRecordingGpsTrack) return;
+      
+      // 1. Request Screen Wake Lock to prevent smartphone from turning off the screen or locking
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLockRef.current = await navigator.wakeLock.request('screen');
+          console.log("GPS Background: Wake Lock adquirido com sucesso.");
+        } catch (err) {
+          console.warn("GPS Background: Erro ao solicitar Screen Wake Lock:", err);
+        }
+      }
+      
+      // 2. Play a silent audio loop to keep the browser process alive in the background on mobile OS
+      try {
+        const audio = new Audio();
+        // 1-second silent WAV loop
+        audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
+        audio.loop = true;
+        audio.volume = 0.01; // Almost muted
+        await audio.play();
+        audioRef.current = audio;
+        activeAudio = audio;
+        console.log("GPS Background: Áudio silencioso em segundo plano ativado.");
+      } catch (err) {
+        console.warn("GPS Background: Bloqueio do navegador para áudio (necessita interação):", err);
+      }
+    }
+
+    function stopKeepAlive() {
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release()
+          .then(() => {
+            wakeLockRef.current = null;
+          })
+          .catch((e: any) => console.error(e));
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (activeAudio) {
+        activeAudio.pause();
+      }
+    }
+
+    if (isRecordingGpsTrack) {
+      startKeepAlive();
+    } else {
+      stopKeepAlive();
+    }
+
+    return () => {
+      stopKeepAlive();
+    };
+  }, [isRecordingGpsTrack]);
+
+  // Handle visibility changes to re-acquire wake lock when the tab becomes visible again
+  useEffect(() => {
+    const handleVisibility = async () => {
+      if (document.visibilityState === 'visible' && isRecordingGpsTrack) {
+        if ('wakeLock' in navigator && !wakeLockRef.current) {
+          try {
+            wakeLockRef.current = await navigator.wakeLock.request('screen');
+            console.log("GPS Background: Wake Lock re-adquirido com sucesso ao abrir a aba");
+          } catch (err) {
+            console.warn("GPS Background: Falha ao re-adquirir Wake Lock:", err);
+          }
+        }
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isRecordingGpsTrack]);
+
+  // Effect 1: Handle GPS recording time ticking & simulated movement
+  useEffect(() => {
+    if (!isRecordingGpsTrack) return;
+
+    const intervalId = setInterval(() => {
+      // Calculate elapsed time based on absolute start time to be completely immune to background thread sleep/throttling
+      if (recordedTrackStartTime) {
+        const elapsed = Math.floor((Date.now() - recordedTrackStartTime) / 1000);
+        setRecordedTrackElapsedTime(elapsed);
+      } else {
+        setRecordedTrackElapsedTime(prev => prev + 1);
+      }
+
+      // If simulated, update position to create realistic walking movement
+      if (simulatedGps) {
+        setSimGpsCoords(prev => {
+          // slight random walk in Acre (approx 5-10 meters, which is 0.00005 to 0.00010 degrees)
+          // consistent walking heading northeast with a bit of noise
+          const deltaLat = 0.00006 + (Math.random() - 0.4) * 0.00002;
+          const deltaLng = 0.00008 + (Math.random() - 0.4) * 0.00002;
+          return {
+            lat: prev.lat + deltaLat,
+            lng: prev.lng + deltaLng
+          };
+        });
+      }
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [isRecordingGpsTrack, simulatedGps, recordedTrackStartTime]);
+
+  // Effect 2: Watch current active position to append track points and calculate accumulated distance
+  const currentActivePos = simulatedGps ? simGpsCoords : gpsCoords;
+
+  useEffect(() => {
+    if (!isRecordingGpsTrack || !currentActivePos) return;
+
+    setRecordedTrackPoints(prev => {
+      if (prev.length === 0) {
+        return [currentActivePos];
+      }
+      const lastPt = prev[prev.length - 1];
+      // Calculate distance in km
+      const distKm = calculateHaversineDistance(lastPt, currentActivePos);
+      const distM = distKm * 1000;
+
+      // Append point and add to accumulated distance if moved at least 0.5 meters to capture fine paths
+      if (distM >= 0.5) {
+        setRecordedTrackDistance(d => d + distM);
+        return [...prev, currentActivePos];
+      }
+      return prev;
+    });
+  }, [isRecordingGpsTrack, currentActivePos]);
 
   // Center map on target coordinate
   const centerOnGps = () => {
@@ -3127,7 +3452,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               <div className="flex items-center gap-1.5">
                 <Navigation className="w-3 h-3 text-blue-400 rotate-45 shrink-0" />
                 <span className="text-[8.5px] font-black tracking-wider uppercase text-military-100">
-                  {editingPointId ? 'EDITAR MARCADOR' : 'ADICIONAR PONTO TÁTICO'}
+                  {editingPointId ? (savedPoints.find(p => p.id === editingPointId)?.isTrack ? 'EDITAR TRILHA GPS' : 'EDITAR MARCADOR') : 'ADICIONAR PONTO TÁTICO'}
                 </span>
               </div>
               <button 
@@ -3137,7 +3462,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   setPointName('');
                 }}
                 className="p-0.5 rounded bg-military-850 hover:bg-military-800 border border-military-750 text-military-400 hover:text-white transition-colors"
-                title="Fechar Painel"
+                title="Fechar Panel"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -3166,29 +3491,42 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               {/* Emerand Save/Check button mimicking Screenshot 2 */}
               <button
                 onClick={() => {
-                  const finalName = pointName.trim() || `PONTO ${savedPoints.length + 1}`;
+                  const editingItem = editingPointId ? savedPoints.find(p => p.id === editingPointId) : null;
+                  const isTrack = editingItem?.isTrack;
+                  const finalName = pointName.trim() || (isTrack ? `TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}` : `PONTO ${savedPoints.length + 1}`);
                   
-                  // Compute target latitude and longitude based on the format currently selected
-                  let savedLat = center.lat;
-                  let savedLng = center.lng;
-
-                  if (pointFormat === 'DMS') {
-                    const parsed = getLatLngFromDMS(latD, latM, latS, latH, lngD, lngM, lngS, lngH);
-                    savedLat = parsed.lat;
-                    savedLng = parsed.lng;
-                  }
-
                   if (editingPointId) {
-                    // Update point
-                    setSavedPoints(prev => prev.map(p => p.id === editingPointId ? {
-                      ...p,
-                      name: finalName,
-                      lat: savedLat,
-                      lng: savedLng
-                    } : p));
-                    showTemporaryStatus(`Ponto tático atualizado: ${finalName}`);
+                    // Update point or track name
+                    setSavedPoints(prev => prev.map(p => {
+                      if (p.id === editingPointId) {
+                        if (p.isTrack) {
+                          return { ...p, name: finalName };
+                        } else {
+                          let savedLat = center.lat;
+                          let savedLng = center.lng;
+                          if (pointFormat === 'DMS') {
+                            const parsed = getLatLngFromDMS(latD, latM, latS, latH, lngD, lngM, lngS, lngH);
+                            savedLat = parsed.lat;
+                            savedLng = parsed.lng;
+                          }
+                          return { ...p, name: finalName, lat: savedLat, lng: savedLng };
+                        }
+                      }
+                      return p;
+                    }));
+                    showTemporaryStatus(`${isTrack ? 'Trilha GPS' : 'Marcador'} atualizado com sucesso: ${finalName}`);
                     setEditingPointId(null);
                   } else {
+                    // Compute target latitude and longitude based on the format currently selected
+                    let savedLat = center.lat;
+                    let savedLng = center.lng;
+
+                    if (pointFormat === 'DMS') {
+                      const parsed = getLatLngFromDMS(latD, latM, latS, latH, lngD, lngM, lngS, lngH);
+                      savedLat = parsed.lat;
+                      savedLng = parsed.lng;
+                    }
+
                     // Add new point
                     const newPt: SavedPoint = {
                       id: 'point_' + Date.now(),
@@ -3211,168 +3549,173 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               </button>
             </div>
 
-            {/* Row 2: Tabs for input format selectors */}
-            <div className="grid grid-cols-2 bg-military-950 border border-military-850 rounded-lg p-0.5 text-center font-mono text-[8px] font-black uppercase">
-              <button
-                onClick={() => setPointFormat('DMS')}
-                className={`py-0.5 rounded transition-all ${pointFormat === 'DMS' ? 'bg-military-800 border border-military-700 text-blue-400 font-extrabold' : 'text-military-400 hover:text-military-205'}`}
-              >
-                G.M.S
-              </button>
-              <button
-                onClick={() => setPointFormat('DEC')}
-                className={`py-0.5 rounded transition-all ${pointFormat === 'DEC' ? 'bg-military-800 border border-military-700 text-blue-400 font-extrabold' : 'text-military-400 hover:text-military-205'}`}
-              >
-                DECIMAL
-              </button>
-            </div>
-
-            {/* Row 3: Configurable details coordinate segments */}
-            {pointFormat === 'DMS' ? (
-              <div id="dms-field-grid" className="flex flex-col gap-2 font-mono text-[10px]">
-                {/* Latitude Row */}
-                <div className="flex gap-2 items-center">
-                  <span className="w-10 text-military-400 font-black tracking-wider uppercase text-[8px]">LAT:</span>
-                  <div className="grid grid-cols-4 gap-1.5 flex-grow">
-                    <div className="flex flex-col items-center">
-                      <input 
-                        type="text" 
-                        value={latD} 
-                        onChange={(e) => {
-                          setLatD(e.target.value);
-                          updateCenterFromDMS(e.target.value, latM, latS, latH, lngD, lngM, lngS, lngH);
-                        }}
-                        className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
-                      />
-                      <span className="text-[7px] text-military-500 uppercase mt-0.5">Graus</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <input 
-                        type="text" 
-                        value={latM} 
-                        onChange={(e) => {
-                          setLatM(e.target.value);
-                          updateCenterFromDMS(latD, e.target.value, latS, latH, lngD, lngM, lngS, lngH);
-                        }}
-                        className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
-                      />
-                      <span className="text-[7px] text-military-500 uppercase mt-0.5">Minutos</span>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <input 
-                        type="text" 
-                        value={latS} 
-                        onChange={(e) => {
-                          setLatS(e.target.value);
-                          updateCenterFromDMS(latD, latM, e.target.value, latH, lngD, lngM, lngS, lngH);
-                        }}
-                        className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
-                      />
-                      <span className="text-[7px] text-military-500 uppercase mt-0.5">Segundos</span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        const nextH = latH === 'S' ? 'N' : 'S';
-                        setLatH(nextH);
-                        updateCenterFromDMS(latD, latM, latS, nextH, lngD, lngM, lngS, lngH);
-                      }}
-                      className="w-full bg-military-950 border border-blue-500/40 text-center rounded p-1 text-blue-400 font-extrabold hover:bg-military-850 transition-colors uppercase"
-                    >
-                      {latH}
-                    </button>
-                  </div>
+            {/* Only show coordinate inputs if we are NOT editing a GPS track */}
+            {!(editingPointId && savedPoints.find(p => p.id === editingPointId)?.isTrack) && (
+              <>
+                {/* Row 2: Tabs for input format selectors */}
+                <div className="grid grid-cols-2 bg-military-950 border border-military-850 rounded-lg p-0.5 text-center font-mono text-[8px] font-black uppercase">
+                  <button
+                    onClick={() => setPointFormat('DMS')}
+                    className={`py-0.5 rounded transition-all ${pointFormat === 'DMS' ? 'bg-military-800 border border-military-700 text-blue-400 font-extrabold' : 'text-military-400 hover:text-military-205'}`}
+                  >
+                    G.M.S
+                  </button>
+                  <button
+                    onClick={() => setPointFormat('DEC')}
+                    className={`py-0.5 rounded transition-all ${pointFormat === 'DEC' ? 'bg-military-800 border border-military-700 text-blue-400 font-extrabold' : 'text-military-400 hover:text-military-205'}`}
+                  >
+                    DECIMAL
+                  </button>
                 </div>
 
-                {/* Longitude Row */}
-                <div className="flex gap-2 items-center">
-                  <span className="w-10 text-military-400 font-black tracking-wider uppercase text-[8px]">LONG:</span>
-                  <div className="grid grid-cols-4 gap-1.5 flex-grow">
-                    <div className="flex flex-col items-center">
-                      <input 
-                        type="text" 
-                        value={lngD} 
-                        onChange={(e) => {
-                          setLngD(e.target.value);
-                          updateCenterFromDMS(latD, latM, latS, latH, e.target.value, lngM, lngS, lngH);
-                        }}
-                        className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
-                      />
-                      <span className="text-[7px] text-military-500 uppercase mt-0.5">Graus</span>
+                {/* Row 3: Configurable details coordinate segments */}
+                {pointFormat === 'DMS' ? (
+                  <div id="dms-field-grid" className="flex flex-col gap-2 font-mono text-[10px]">
+                    {/* Latitude Row */}
+                    <div className="flex gap-2 items-center">
+                      <span className="w-10 text-military-400 font-black tracking-wider uppercase text-[8px]">LAT:</span>
+                      <div className="grid grid-cols-4 gap-1.5 flex-grow">
+                        <div className="flex flex-col items-center">
+                          <input 
+                            type="text" 
+                            value={latD} 
+                            onChange={(e) => {
+                              setLatD(e.target.value);
+                              updateCenterFromDMS(e.target.value, latM, latS, latH, lngD, lngM, lngS, lngH);
+                            }}
+                            className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
+                          />
+                          <span className="text-[7px] text-military-500 uppercase mt-0.5">Graus</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <input 
+                            type="text" 
+                            value={latM} 
+                            onChange={(e) => {
+                              setLatM(e.target.value);
+                              updateCenterFromDMS(latD, e.target.value, latS, latH, lngD, lngM, lngS, lngH);
+                            }}
+                            className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
+                          />
+                          <span className="text-[7px] text-military-500 uppercase mt-0.5">Minutos</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <input 
+                            type="text" 
+                            value={latS} 
+                            onChange={(e) => {
+                              setLatS(e.target.value);
+                              updateCenterFromDMS(latD, latM, e.target.value, latH, lngD, lngM, lngS, lngH);
+                            }}
+                            className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
+                          />
+                          <span className="text-[7px] text-military-500 uppercase mt-0.5">Segundos</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const nextH = latH === 'S' ? 'N' : 'S';
+                            setLatH(nextH);
+                            updateCenterFromDMS(latD, latM, latS, nextH, lngD, lngM, lngS, lngH);
+                          }}
+                          className="w-full bg-military-950 border border-blue-500/40 text-center rounded p-1 text-blue-400 font-extrabold hover:bg-military-850 transition-colors uppercase"
+                        >
+                          {latH}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex flex-col items-center">
-                      <input 
-                        type="text" 
-                        value={lngM} 
-                        onChange={(e) => {
-                          setLngM(e.target.value);
-                          updateCenterFromDMS(latD, latM, latS, latH, lngD, e.target.value, lngS, lngH);
-                        }}
-                        className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
-                      />
-                      <span className="text-[7px] text-military-500 uppercase mt-0.5">Minutos</span>
+
+                    {/* Longitude Row */}
+                    <div className="flex gap-2 items-center">
+                      <span className="w-10 text-military-400 font-black tracking-wider uppercase text-[8px]">LONG:</span>
+                      <div className="grid grid-cols-4 gap-1.5 flex-grow">
+                        <div className="flex flex-col items-center">
+                          <input 
+                            type="text" 
+                            value={lngD} 
+                            onChange={(e) => {
+                              setLngD(e.target.value);
+                              updateCenterFromDMS(latD, latM, latS, latH, e.target.value, lngM, lngS, lngH);
+                            }}
+                            className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
+                          />
+                          <span className="text-[7px] text-military-500 uppercase mt-0.5">Graus</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <input 
+                            type="text" 
+                            value={lngM} 
+                            onChange={(e) => {
+                              setLngM(e.target.value);
+                              updateCenterFromDMS(latD, latM, latS, latH, lngD, e.target.value, lngS, lngH);
+                            }}
+                            className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
+                          />
+                          <span className="text-[7px] text-military-500 uppercase mt-0.5">Minutos</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <input 
+                            type="text" 
+                            value={lngS} 
+                            onChange={(e) => {
+                              setLngS(e.target.value);
+                              updateCenterFromDMS(latD, latM, latS, latH, lngD, lngM, e.target.value, lngH);
+                            }}
+                            className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
+                          />
+                          <span className="text-[7px] text-military-500 uppercase mt-0.5">Segundos</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const nextH = lngH === 'W' ? 'E' : 'W';
+                            setLngH(nextH);
+                            updateCenterFromDMS(latD, latM, latS, latH, lngD, lngM, lngS, nextH);
+                          }}
+                          className="w-full bg-military-950 border border-blue-500/40 text-center rounded p-1 text-blue-400 font-extrabold hover:bg-military-850 transition-colors uppercase"
+                        >
+                          {lngH}
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex flex-col items-center">
-                      <input 
-                        type="text" 
-                        value={lngS} 
-                        onChange={(e) => {
-                          setLngS(e.target.value);
-                          updateCenterFromDMS(latD, latM, latS, latH, lngD, lngM, e.target.value, lngH);
-                        }}
-                        className="w-full bg-military-950 border border-military-850 text-center rounded p-1 text-military-100 focus:outline-none" 
-                      />
-                      <span className="text-[7px] text-military-500 uppercase mt-0.5">Segundos</span>
-                    </div>
-                    <button
-                      onClick={() => {
-                        const nextH = lngH === 'W' ? 'E' : 'W';
-                        setLngH(nextH);
-                        updateCenterFromDMS(latD, latM, latS, latH, lngD, lngM, lngS, nextH);
-                      }}
-                      className="w-full bg-military-950 border border-blue-500/40 text-center rounded p-1 text-blue-400 font-extrabold hover:bg-military-850 transition-colors uppercase"
-                    >
-                      {lngH}
-                    </button>
                   </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2 font-mono text-[10px]">
-                {/* Decimal Latitude Input Row */}
-                <div className="flex gap-2 items-center">
-                  <span className="w-14 text-military-400 font-black tracking-wider uppercase text-[8px]">LAT DEC:</span>
-                  <input
-                    type="text"
-                    value={decLat}
-                    onChange={(e) => {
-                      setDecLat(e.target.value);
-                      const parsed = parseFloat(e.target.value);
-                      if (!isNaN(parsed)) {
-                        setCenter(prev => ({ ...prev, lat: parsed }));
-                      }
-                    }}
-                    className="flex-grow bg-military-950 border border-military-850 p-1.5 rounded text-military-100 font-mono text-center focus:outline-none focus:border-blue-500/60"
-                    placeholder="Ex: -9.043120"
-                  />
-                </div>
-                {/* Decimal Longitude Input Row */}
-                <div className="flex gap-2 items-center">
-                  <span className="w-14 text-military-400 font-black tracking-wider uppercase text-[8px]">LNG DEC:</span>
-                  <input
-                    type="text"
-                    value={decLng}
-                    onChange={(e) => {
-                      setDecLng(e.target.value);
-                      const parsed = parseFloat(e.target.value);
-                      if (!isNaN(parsed)) {
-                        setCenter(prev => ({ ...prev, lng: parsed }));
-                      }
-                    }}
-                    className="flex-grow bg-military-950 border border-military-850 p-1.5 rounded text-military-100 font-mono text-center focus:outline-none focus:border-blue-500/60"
-                    placeholder="Ex: -68.655810"
-                  />
-                </div>
-              </div>
+                ) : (
+                  <div className="flex flex-col gap-2 font-mono text-[10px]">
+                    {/* Decimal Latitude Input Row */}
+                    <div className="flex gap-2 items-center">
+                      <span className="w-14 text-military-400 font-black tracking-wider uppercase text-[8px]">LAT DEC:</span>
+                      <input
+                        type="text"
+                        value={decLat}
+                        onChange={(e) => {
+                          setDecLat(e.target.value);
+                          const parsed = parseFloat(e.target.value);
+                          if (!isNaN(parsed)) {
+                            setCenter(prev => ({ ...prev, lat: parsed }));
+                          }
+                        }}
+                        className="flex-grow bg-military-950 border border-military-850 p-1.5 rounded text-military-100 font-mono text-center focus:outline-none focus:border-blue-500/60"
+                        placeholder="Ex: -9.043120"
+                      />
+                    </div>
+                    {/* Decimal Longitude Input Row */}
+                    <div className="flex gap-2 items-center">
+                      <span className="w-14 text-military-400 font-black tracking-wider uppercase text-[8px]">LNG DEC:</span>
+                      <input
+                        type="text"
+                        value={decLng}
+                        onChange={(e) => {
+                          setDecLng(e.target.value);
+                          const parsed = parseFloat(e.target.value);
+                          if (!isNaN(parsed)) {
+                            setCenter(prev => ({ ...prev, lng: parsed }));
+                          }
+                        }}
+                        className="flex-grow bg-military-950 border border-military-850 p-1.5 rounded text-military-100 font-mono text-center focus:outline-none focus:border-blue-500/60"
+                        placeholder="Ex: -68.655810"
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -4150,138 +4493,388 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     <p className="font-mono text-[8px] text-military-500 mt-1 uppercase">Vá na aba "Recursos" para adicionar</p>
                   </div>
                 ) : (
-                  savedPoints.map(pt => (
-                    <div 
-                      key={pt.id} 
-                      className={`flex flex-col border rounded-xl p-3 transition-all ${editingPointId === pt.id ? 'border-amber-500 bg-amber-950/10' : 'border-military-750 bg-military-800 hover:border-military-500 hover:shadow-sm'}`}
-                    >
-                      {/* Base Point details */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 truncate max-w-[75%]">
-                          {/* Modern Left Icon Badge styled specifically like a high-end GPS device */}
-                          <div className="w-9 h-9 rounded-xl bg-military-900 border border-military-750 flex items-center justify-center text-military-300 shrink-0">
-                            <MapPin className="w-4 h-4 text-military-300 fill-military-300/10" />
+                  savedPoints.map(pt => {
+                    const isTrackItem = pt.isTrack;
+                    const firstPt = pt.points && pt.points.length > 0 ? pt.points[0] : { lat: pt.lat, lng: pt.lng };
+
+                    return (
+                      <div 
+                        key={pt.id} 
+                        className={`flex flex-col border rounded-xl p-3 transition-all ${editingPointId === pt.id ? 'border-amber-500 bg-amber-950/10' : 'border-military-750 bg-military-800 hover:border-military-500 hover:shadow-sm'}`}
+                      >
+                        {/* Base Point/Track details */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 truncate max-w-[75%]">
+                            {/* Left Icon Badge based on element type */}
+                            {isTrackItem ? (
+                              <div className="w-9 h-9 rounded-xl bg-purple-950/30 border border-purple-800/50 flex items-center justify-center text-purple-400 shrink-0" title="Trilha GPS">
+                                <Route className="w-4 h-4 text-purple-400" />
+                              </div>
+                            ) : (
+                              <div className="w-9 h-9 rounded-xl bg-military-900 border border-military-750 flex items-center justify-center text-military-300 shrink-0" title="Ponto Marcador">
+                                <MapPin className="w-4 h-4 text-military-300 fill-military-300/10" />
+                              </div>
+                            )}
+                            
+                            <div className="flex flex-col truncate">
+                              <span className="font-sans text-[11px] uppercase font-black text-military-100 tracking-wide truncate">
+                                {pt.name}
+                              </span>
+                              
+                              {isTrackItem ? (
+                                <div className="flex flex-col gap-0.5 mt-1 font-mono text-[8.5px] text-military-400">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[7px] font-black text-purple-400 uppercase bg-purple-950/40 border border-purple-900/50 px-1 py-0.2 rounded">DIST</span>
+                                    <span>{formatDistance(pt.distance || 0)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[7px] font-black text-purple-400 uppercase bg-purple-950/40 border border-purple-900/50 px-1 py-0.2 rounded">TEMPO</span>
+                                    <span>{formatElapsedTime(pt.duration || 0)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[7px] font-black text-purple-400 uppercase bg-purple-950/40 border border-purple-900/50 px-1 py-0.2 rounded">PTS</span>
+                                    <span>{pt.points ? pt.points.length : 0} coordenadas</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex items-center gap-1.5 mt-0.5 font-mono text-[8.5px] text-military-450">
+                                    <span className="bg-military-900 border border-military-750 px-1 py-0.2 rounded text-[7.5px] font-black text-military-400 uppercase">Lat</span>
+                                    <span>{decimalToDMS(pt.lat, 'lat')}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-0.5 font-mono text-[8.5px] text-military-450">
+                                    <span className="bg-military-900 border border-military-750 px-1 py-0.2 rounded text-[7.5px] font-black text-military-400 uppercase">Long</span>
+                                    <span>{decimalToDMS(pt.lng, 'lng')}</span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          
-                          <div className="flex flex-col truncate">
-                            <span className="font-sans text-[11px] uppercase font-black text-military-100 tracking-wide truncate">
-                              {pt.name}
-                            </span>
-                            <div className="flex items-center gap-1.5 mt-0.5 font-mono text-[8.5px] text-military-450">
-                              <span className="bg-military-900 border border-military-750 px-1 py-0.2 rounded text-[7.5px] font-black text-military-400 uppercase">Lat</span>
-                              <span>{decimalToDMS(pt.lat, 'lat')}</span>
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-0.5 font-mono text-[8.5px] text-military-450">
-                              <span className="bg-military-900 border border-military-750 px-1 py-0.2 rounded text-[7.5px] font-black text-military-400 uppercase">Long</span>
-                              <span>{decimalToDMS(pt.lng, 'lng')}</span>
-                            </div>
+
+                          {/* Fast Fly To and Expansion Controls */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Centrar (IR) Pill Badge */}
+                            <button
+                              onClick={() => {
+                                setCenter({ lat: firstPt.lat, lng: firstPt.lng });
+                                setZoom(14);
+                                setIsMenuOpen(false); // Close slider to let user view
+                                showTemporaryStatus(`Centrado em: ${pt.name}`);
+                              }}
+                              className="px-2.5 py-1 bg-military-900 border border-military-750 hover:bg-blue-600 hover:text-white hover:border-blue-600 text-military-350 text-[9px] font-black rounded-lg uppercase tracking-wider transition-all cursor-pointer"
+                              title="Ir ao local"
+                            >
+                              Ir
+                            </button>
+                            
+                            {/* Options Hamburger */}
+                            <button
+                              onClick={() => setExpandedPointMenuId(expandedPointMenuId === pt.id ? null : pt.id)}
+                              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${expandedPointMenuId === pt.id ? 'bg-military-950 text-military-100 border-military-600' : 'text-military-400 hover:text-military-200 hover:bg-military-900 border-transparent'}`}
+                              title="Ações do Ponto"
+                            >
+                              <Menu className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
 
-                        {/* Fast Fly To and Expansion Controls */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          {/* Centrar (IR) Pill Badge */}
-                          <button
-                            onClick={() => {
-                              setCenter({ lat: pt.lat, lng: pt.lng });
-                              setZoom(14);
-                              setIsMenuOpen(false); // Close slider to let user view
-                              showTemporaryStatus(`Centrado em: ${pt.name}`);
-                            }}
-                            className="px-2.5 py-1 bg-military-900 border border-military-750 hover:bg-blue-600 hover:text-white hover:border-blue-600 text-military-350 text-[9px] font-black rounded-lg uppercase tracking-wider transition-all cursor-pointer"
-                            title="Ir ao local"
-                          >
-                            Ir
-                          </button>
-                          
-                          {/* Options Hamburger */}
-                          <button
-                            onClick={() => setExpandedPointMenuId(expandedPointMenuId === pt.id ? null : pt.id)}
-                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${expandedPointMenuId === pt.id ? 'bg-military-950 text-military-100 border-military-600' : 'text-military-400 hover:text-military-200 hover:bg-military-900 border-transparent'}`}
-                            title="Ações do Ponto"
-                          >
-                            <Menu className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        {/* Expansible Actions Menu mimicking Screenshot 3 */}
+                        {expandedPointMenuId === pt.id && (
+                          <div className="grid grid-cols-4 gap-1.5 border-t border-military-800/80 pt-2.5 mt-2.5 animate-fadeIn">
+                            {/* Option 1: Visualizar */}
+                            <button
+                              onClick={() => {
+                                setCenter({ lat: firstPt.lat, lng: firstPt.lng });
+                                setZoom(14);
+                                setIsMenuOpen(false);
+                              }}
+                              className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white"
+                              title="Visualizar no mapa"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-blue-400 mb-0.5" />
+                              <span className="font-mono text-[7.5px] uppercase tracking-wide">Olhar</span>
+                            </button>
+
+                            {/* Option 2: Editar */}
+                            <button
+                              onClick={() => {
+                                setPointName(pt.name);
+                                setEditingPointId(pt.id);
+                                setMeasuringMode('add_point');
+                                setCenter({ lat: firstPt.lat, lng: firstPt.lng });
+                                if (!isTrackItem) {
+                                  syncDMSFromLatLng(pt.lat, pt.lng);
+                                }
+                                setIsMenuOpen(false); // Let them edit in coords box
+                              }}
+                              className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white"
+                              title={isTrackItem ? "Renomear Trilha" : "Editar coordenadas ou nome"}
+                            >
+                              <Pencil className="w-3.5 h-3.5 text-amber-400 mb-0.5" />
+                              <span className="font-mono text-[7.5px] uppercase tracking-wide">Editar</span>
+                            </button>
+
+                            {/* Option 3: Compartilhar */}
+                            <button
+                              onClick={() => {
+                                let clipboardText = "";
+                                if (isTrackItem) {
+                                  clipboardText = `Trilha GPS: ${pt.name} | Distância: ${formatDistance(pt.distance || 0)} | Tempo: ${formatElapsedTime(pt.duration || 0)} | Pontos: ${pt.points ? pt.points.length : 0}`;
+                                } else {
+                                  clipboardText = `Ponto Tático: ${pt.name} | Coordenadas: Lat ${decimalToDMS(pt.lat, 'lat')}, Lng ${decimalToDMS(pt.lng, 'lng')} (DEC: ${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)})`;
+                                }
+                                navigator.clipboard.writeText(clipboardText);
+                                showTemporaryStatus(`Informações de "${pt.name}" copiadas!`);
+                              }}
+                              className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white"
+                              title="Copiar informações"
+                            >
+                              <Share2 className="w-3.5 h-3.5 text-emerald-400 mb-0.5" />
+                              <span className="font-mono text-[7.5px] uppercase tracking-wide">Enviar</span>
+                            </button>
+
+                            {/* Option 4: Excluir */}
+                            <button
+                              onClick={() => {
+                                setSavedPoints(prev => prev.filter(p => p.id !== pt.id));
+                                showTemporaryStatus(`${isTrackItem ? 'Trilha GPS' : 'Marcador'} "${pt.name}" excluído.`);
+                              }}
+                              className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-red-950 transition-all text-military-300 hover:text-red-400"
+                              title="Remover ponto permanentemente"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-500 mb-0.5" />
+                              <span className="font-mono text-[7.5px] uppercase tracking-wide">Excluir</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
-
-                      {/* Expansible Actions Menu mimicking Screenshot 3 */}
-                      {expandedPointMenuId === pt.id && (
-                        <div className="grid grid-cols-4 gap-1.5 border-t border-military-800/80 pt-2.5 mt-2.5 animate-fadeIn">
-                          {/* Option 1: Visualizar */}
-                          <button
-                            onClick={() => {
-                              setCenter({ lat: pt.lat, lng: pt.lng });
-                              setZoom(14);
-                              setIsMenuOpen(false);
-                            }}
-                            className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white"
-                            title="Visualizar no mapa"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-blue-400 mb-0.5" />
-                            <span className="font-mono text-[7.5px] uppercase tracking-wide">Olhar</span>
-                          </button>
-
-                          {/* Option 2: Editar */}
-                          <button
-                            onClick={() => {
-                              setPointName(pt.name);
-                              setEditingPointId(pt.id);
-                              setMeasuringMode('add_point');
-                              setCenter({ lat: pt.lat, lng: pt.lng });
-                              syncDMSFromLatLng(pt.lat, pt.lng);
-                              setIsMenuOpen(false); // Let them edit in coords box
-                            }}
-                            className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white"
-                            title="Editar coordenadas ou nome"
-                          >
-                            <Pencil className="w-3.5 h-3.5 text-amber-400 mb-0.5" />
-                            <span className="font-mono text-[7.5px] uppercase tracking-wide">Editar</span>
-                          </button>
-
-                          {/* Option 3: Compartilhar */}
-                          <button
-                            onClick={() => {
-                              const clipboardText = `Ponto Tático: ${pt.name} | Coordenadas: Lat ${decimalToDMS(pt.lat, 'lat')}, Lng ${decimalToDMS(pt.lng, 'lng')} (DEC: ${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)})`;
-                              navigator.clipboard.writeText(clipboardText);
-                              showTemporaryStatus(`Coordenadas de "${pt.name}" copiadas!`);
-                            }}
-                            className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white"
-                            title="Copiar informações"
-                          >
-                            <Share2 className="w-3.5 h-3.5 text-emerald-400 mb-0.5" />
-                            <span className="font-mono text-[7.5px] uppercase tracking-wide">Enviar</span>
-                          </button>
-
-                          {/* Option 4: Excluir */}
-                          <button
-                            onClick={() => {
-                              setSavedPoints(prev => prev.filter(p => p.id !== pt.id));
-                              showTemporaryStatus(`Marcador "${pt.name}" excluído.`);
-                            }}
-                            className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-red-950 transition-all text-military-300 hover:text-red-400"
-                            title="Remover ponto permanentemente"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-red-500 mb-0.5" />
-                            <span className="font-mono text-[7.5px] uppercase tracking-wide">Excluir</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
           )}
 
           {activeTab === 'trajetos' && (
-            <div className="flex flex-col items-center justify-center p-8 border border-military-800 rounded-xl bg-military-800/20 text-center">
-              <Route className="w-12 h-12 text-military-500 mb-2" />
-              <h4 className="font-mono text-xs font-black uppercase text-military-205 mb-1">Tracker de Linha de Patrulha</h4>
-              <p className="font-mono text-[10px] text-military-400">Rastreamento de trajetórias e envio de trilhas via rádio satélite.</p>
-              <div className="mt-8 p-1 border border-military-700 border-dashed rounded font-mono text-[8px] text-blue-400 uppercase tracking-widest font-black bg-blue-500/5">
-                Módulo reservado para o BPA
+            <div className="flex flex-col gap-4 animate-fadeIn">
+              {/* Tactical GPS Header */}
+              <div className="border border-military-750 bg-military-850 rounded-xl p-4 shadow-sm">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-purple-950/40 border border-purple-800/50 flex items-center justify-center text-purple-400">
+                    <Route className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <div className="flex flex-col">
+                    <h4 className="font-sans text-xs font-black uppercase text-military-100 tracking-wide">Rastreador de Patrulha GPS</h4>
+                    <span className="font-mono text-[8px] text-military-450 uppercase">Gravação e Monitoramento de Trajetos</span>
+                  </div>
+                </div>
+                
+                {isRecordingGpsTrack && (
+                  <div className="mt-3.5 flex items-center gap-2.5 px-3 py-2 border border-red-900/50 bg-red-950/15 rounded-lg text-red-400">
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                    </span>
+                    <div className="flex flex-col leading-tight">
+                      <span className="font-sans text-[10px] font-black uppercase tracking-wider">GRAVAÇÃO TÁTICA EM SEGUNDO PLANO</span>
+                      <span className="font-mono text-[8px] text-red-500/80">
+                        Thread segura contra suspensão (Keep-Alive de áudio & Wake Lock ativo)
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Recording Stats (Only shown if actively recording) */}
+              {isRecordingGpsTrack ? (
+                <div className="flex flex-col gap-3.5">
+                  {/* Bento Grid Metrics */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {/* Time Elapsed */}
+                    <div className="border border-military-750 bg-military-800/80 rounded-xl p-3 flex flex-col justify-between">
+                      <span className="font-mono text-[8px] uppercase font-black text-military-450 tracking-wide">TEMPO DECORRIDO</span>
+                      <span className="font-mono text-lg font-black text-white mt-1 leading-none">{formatElapsedTime(recordedTrackElapsedTime)}</span>
+                    </div>
+
+                    {/* Distance */}
+                    <div className="border border-military-750 bg-military-800/80 rounded-xl p-3 flex flex-col justify-between">
+                      <span className="font-mono text-[8px] uppercase font-black text-military-450 tracking-wide">DISTÂNCIA TOTAL</span>
+                      <span className="font-mono text-lg font-black text-purple-400 mt-1 leading-none">{formatDistance(recordedTrackDistance)}</span>
+                    </div>
+
+                    {/* Point Count */}
+                    <div className="border border-military-750 bg-military-800/80 rounded-xl p-3 flex flex-col justify-between">
+                      <span className="font-mono text-[8px] uppercase font-black text-military-450 tracking-wide">PONTOS CAPTURADOS</span>
+                      <span className="font-mono text-lg font-black text-blue-400 mt-1 leading-none">{recordedTrackPoints.length}</span>
+                    </div>
+
+                    {/* Precision/Status */}
+                    <div className="border border-military-750 bg-military-800/80 rounded-xl p-3 flex flex-col justify-between">
+                      <span className="font-mono text-[8px] uppercase font-black text-military-450 tracking-wide">MODO / SINAL</span>
+                      <span className="font-mono text-[11px] font-black text-emerald-400 mt-1 leading-none uppercase truncate">
+                        {simulatedGps ? "⚡ SIMULADO (Acre)" : (gpsCoords ? `📡 REAL (~${gpsCoords.accuracy.toFixed(1)}m)` : "📡 REAL (Aguardando...)")}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Active coordinates debug line */}
+                  <div className="border border-military-750 bg-military-900/50 rounded-xl p-3">
+                    <span className="font-mono text-[7.5px] uppercase font-black text-military-450 block mb-1">ÚLTIMA COORDENADA REGISTRADA</span>
+                    {recordedTrackPoints.length > 0 ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 font-mono text-[9px] text-military-300">
+                          <span className="bg-military-800 border border-military-700 px-1 py-0.2 rounded text-[7px] font-black text-military-400 uppercase">LAT</span>
+                          <span>{decimalToDMS(recordedTrackPoints[recordedTrackPoints.length - 1].lat, 'lat')}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 font-mono text-[9px] text-military-300">
+                          <span className="bg-military-800 border border-military-700 px-1 py-0.2 rounded text-[7px] font-black text-military-400 uppercase">LNG</span>
+                          <span>{decimalToDMS(recordedTrackPoints[recordedTrackPoints.length - 1].lng, 'lng')}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="font-mono text-[9px] text-military-500 uppercase">Aguardando coordenadas GPS...</span>
+                    )}
+                  </div>
+
+                  {/* Instructions on Lock state */}
+                  <div className="border border-military-750/50 bg-military-850/40 rounded-xl p-3">
+                    <p className="font-sans text-[9px] text-military-400 leading-normal">
+                      <strong className="text-military-300">📱 PROTEÇÃO DE TELA ATIVA:</strong> Você pode desligar a tela ou bloquear o celular. O sistema mantém o GPS ativo em segundo plano utilizando um processo de áudio inaudível para prevenir suspensão pelo iOS/Android e sincronização de hora absoluta. Certifique-se de manter esta aba aberta no navegador.
+                    </p>
+                  </div>
+
+                  {/* Stop controls */}
+                  <div className="flex flex-col gap-2 mt-2">
+                    <button
+                      onClick={() => {
+                        if (recordedTrackPoints.length < 2) {
+                          showTemporaryStatus("Erro: Coordenadas insuficientes para gerar uma trilha (mínimo 2 pontos).");
+                          setIsRecordingGpsTrack(false);
+                          return;
+                        }
+                        const finalName = trackName || `TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`;
+                        const newTrack: SavedPoint = {
+                          id: 'track_' + Date.now(),
+                          name: finalName,
+                          lat: recordedTrackPoints[0].lat,
+                          lng: recordedTrackPoints[0].lng,
+                          isTrack: true,
+                          points: recordedTrackPoints,
+                          distance: recordedTrackDistance,
+                          duration: recordedTrackElapsedTime,
+                          createdAt: Date.now()
+                        };
+                        setSavedPoints(prev => [newTrack, ...prev]);
+                        setIsRecordingGpsTrack(false);
+                        showTemporaryStatus(`Trilha "${finalName}" salva com sucesso!`);
+                      }}
+                      className="w-full py-3 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 border border-purple-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      SALVAR TRILHA TÁTICA
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (window.confirm("Deseja realmente descartar a gravação atual? Todos os pontos coletados serão perdidos.")) {
+                          setIsRecordingGpsTrack(false);
+                          showTemporaryStatus("Gravação descartada.");
+                        }
+                      }}
+                      className="w-full py-2.5 bg-military-800 hover:bg-red-950/30 border border-military-750 hover:border-red-900/50 text-military-400 hover:text-red-400 font-sans text-[10px] font-black uppercase rounded-xl tracking-wider transition-all cursor-pointer"
+                    >
+                      DESCARTAR GRAVAÇÃO
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {/* GPS Mode Selector Card */}
+                  <div className="border border-military-750 bg-military-800/50 rounded-xl p-3">
+                    <span className="font-mono text-[8px] uppercase font-black text-military-450 block mb-2 tracking-wide">FONTE DE LOCALIZAÇÃO GPS</span>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          setSimulatedGps(true);
+                          showTemporaryStatus("GPS Simulado ativado (Acre). Perfeito para demonstrações em desktop.");
+                        }}
+                        className={`py-2 px-2.5 border rounded-lg font-sans text-[9px] font-black uppercase transition-all cursor-pointer ${simulatedGps ? 'bg-amber-950/20 border-amber-600/80 text-amber-400' : 'bg-military-900 border-military-750 text-military-400 hover:text-military-200'}`}
+                      >
+                        SIMULADO (WALK)
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          setSimulatedGps(false);
+                          showTemporaryStatus("GPS Real ativado. Conectando ao hardware do smartphone...");
+                          centerOnGps();
+                        }}
+                        className={`py-2 px-2.5 border rounded-lg font-sans text-[9px] font-black uppercase transition-all cursor-pointer ${!simulatedGps ? 'bg-blue-950/20 border-blue-600/80 text-blue-400' : 'bg-military-900 border-military-750 text-military-400 hover:text-military-200'}`}
+                      >
+                        REAL (CELULAR)
+                      </button>
+                    </div>
+
+                    <p className="font-mono text-[8px] text-military-400 mt-2.5 leading-normal uppercase">
+                      {simulatedGps 
+                        ? "⚠️ O GPS Simulado gera uma caminhada em Rio Branco-AC para demonstração fácil das linhas." 
+                        : "📡 Utiliza a geolocalização exata do navegador. Ideal para patrulhamento em campo aberto."}
+                    </p>
+                  </div>
+
+                  {/* Name field input card */}
+                  <div className="border border-military-750 bg-military-800/50 rounded-xl p-3">
+                    <label className="font-mono text-[8px] uppercase font-black text-military-450 block mb-1.5 tracking-wide">
+                      NOME DA TRILHA DE PATRULHA
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={`TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`}
+                      value={inputTrackName}
+                      onChange={(e) => setInputTrackName(e.target.value)}
+                      className="w-full px-3 py-2 bg-military-900 border border-military-750 focus:border-military-500 focus:outline-none rounded-lg text-military-100 font-sans text-xs"
+                    />
+                  </div>
+
+                  {/* Quick coordinates status */}
+                  <div className="border border-military-750 bg-military-850/60 rounded-xl p-3.5">
+                    <span className="font-mono text-[8px] uppercase font-black text-military-450 block mb-1.5 tracking-wide">STATUS ATUAL DO HARDWARE</span>
+                    
+                    <div className="flex flex-col gap-1 font-mono text-[9px] text-military-300">
+                      <div className="flex items-center gap-1.5">
+                        <span className="bg-military-800 border border-military-700 px-1 py-0.2 rounded text-[7px] font-black text-military-400 uppercase">POS</span>
+                        <span>
+                          {simulatedGps 
+                            ? `${simGpsCoords.lat.toFixed(6)}, ${simGpsCoords.lng.toFixed(6)}` 
+                            : (gpsCoords ? `${gpsCoords.lat.toFixed(6)}, ${gpsCoords.lng.toFixed(6)}` : "Não obtido")}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="bg-military-800 border border-military-700 px-1 py-0.2 rounded text-[7px] font-black text-military-400 uppercase">PREC</span>
+                        <span>
+                          {simulatedGps 
+                            ? "Simulação perfeita (0m)" 
+                            : (gpsCoords ? `± ${gpsCoords.accuracy.toFixed(1)} metros` : "Aguardando sinal")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Start Button */}
+                  <button
+                    onClick={() => {
+                      const nameToUse = inputTrackName.trim() || `TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`;
+                      startNewRecording(nameToUse);
+                      setInputTrackName(''); // Clear field
+                    }}
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 border border-emerald-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse"></span>
+                    INICIAR GRAVAÇÃO DE TRILHA
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
