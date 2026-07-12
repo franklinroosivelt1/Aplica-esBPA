@@ -25,7 +25,7 @@ function LoadingView({ message = "Carregando módulo..." }: { message?: string }
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 bg-military-900 border border-military-850 rounded-3xl m-4">
       <div className="w-12 h-12 border-4 border-military-800 border-t-military-300 rounded-full animate-spin mb-4" />
       <h2 className="text-lg font-bold uppercase tracking-wider text-military-100">{message}</h2>
-      <p className="text-[10px] text-military-450 uppercase tracking-widest font-mono mt-1">Sistemas BPA • Otimizado</p>
+      <p className="text-[10px] text-military-450 uppercase tracking-widest font-mono mt-1">Aplicações Ambientais • Otimizado</p>
     </div>
   );
 }
@@ -103,12 +103,12 @@ export default function App() {
             <div className="w-6 h-6 flex items-center justify-center overflow-hidden rounded-md border border-military-700">
               <img 
                 src={brandLogo} 
-                alt="Batalhão Ambiental Logo" 
+                alt="Aplicações Ambientais Logo" 
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer" 
               />
             </div>
-            <h1 className="text-sm font-bold tracking-tight uppercase">APLICAÇÕES BPA</h1>
+            <h1 className="text-sm font-bold tracking-tight uppercase">APLICAÇÕES AMBIENTAIS</h1>
           </div>
           
           <div className="w-10" /> {/* Spacer */}

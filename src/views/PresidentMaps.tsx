@@ -133,7 +133,7 @@ function dbCleanupOldTiles(): Promise<void> {
             cursor.continue();
           } else {
             if (deletedCount > 0) {
-              console.log(`[BPA] Limpeza de cache: ${deletedCount} tiles antigas removidas.`);
+              console.log(`[System] Limpeza de cache: ${deletedCount} tiles antigas removidas.`);
             }
             resolve();
           }
@@ -660,7 +660,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         }
       });
       mapImageCache.current.clear();
-      console.log("[BPA] Memória de texturas liberada com sucesso.");
+      console.log("[System] Memória de texturas liberada com sucesso.");
     };
   }, []);
 
@@ -1889,8 +1889,8 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     }
     
     // Generate valid KML string for download
-    const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>BPA Saved Points</name>\n`;
-    const kmlBody = savedPoints.map(pt => `    <Placemark>\n      <name>${pt.name}</name>\n      <description>Salvo via Aplicações BPA\nLatitude: ${decimalToDMS(pt.lat, 'lat')}\nLongitude: ${decimalToDMS(pt.lng, 'lng')}</description>\n      <Point>\n        <coordinates>${pt.lng},${pt.lat},0</coordinates>\n      </Point>\n    </Placemark>\n`).join('');
+    const kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">\n  <Document>\n    <name>Saved Points</name>\n`;
+    const kmlBody = savedPoints.map(pt => `    <Placemark>\n      <name>${pt.name}</name>\n      <description>Salvo via Aplicações Ambientais\nLatitude: ${decimalToDMS(pt.lat, 'lat')}\nLongitude: ${decimalToDMS(pt.lng, 'lng')}</description>\n      <Point>\n        <coordinates>${pt.lng},${pt.lat},0</coordinates>\n      </Point>\n    </Placemark>\n`).join('');
     const kmlFooter = `  </Document>\n</kml>`;
     const fullKml = kmlHeader + kmlBody + kmlFooter;
     
@@ -1898,7 +1898,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `bpa_pontos_${Date.now()}.kml`;
+    a.download = `pontos_${Date.now()}.kml`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1913,7 +1913,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     <name>${sd.name}</name>
     <Placemark>
       <name>${sd.name}</name>
-      <description>Trajeto medido via Aplicações BPA\nDistância Total: ${sd.distance.toFixed(2)} km</description>
+      <description>Trajeto medido via Aplicações Ambientais\nDistância Total: ${sd.distance.toFixed(2)} km</description>
       <LineString>
         <tessellate>1</tessellate>
         <coordinates>${sd.points.map(p => `${p.lng},${p.lat},0`).join(' ')}</coordinates>
@@ -1937,7 +1937,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     <name>${sa.name}</name>
     <Placemark>
       <name>${sa.name}</name>
-      <description>Área de terra medida via Aplicações BPA\nTamanho Total: ${sa.area.toFixed(2)} há</description>
+      <description>Área de terra medida via Aplicações Ambientais\nTamanho Total: ${sa.area.toFixed(2)} há</description>
       <Polygon>
         <outerBoundaryIs>
           <LinearRing>
@@ -2061,7 +2061,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     setTrackName(finalName);
     setIsRecordingGpsTrack(true);
     
-    showTemporaryStatus(`Gravação de trilha tática iniciada: ${finalName}`);
+    showTemporaryStatus(`Gravação de trilha iniciada: ${finalName}`);
   };
 
   // Keep-Alive background systems: Screen Wake Lock + Silent Audio Playback Loop
@@ -2262,12 +2262,12 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
   // Share georeferenced map
   const handleShareMap = async (map: ImportedMap) => {
-    const shareText = `Aplicações BPA - Mapa Georreferenciado\n\nNome: ${map.name}\nCoordenada Top-Left: ${map.topLeft.lat}, ${map.topLeft.lng}\nCoordenada Bottom-Right: ${map.bottomRight.lat}, ${map.bottomRight.lng}\n\nAbra no aplicativo para navegar georreferenciado!`;
+    const shareText = `Aplicações Ambientais - Mapa Georreferenciado\n\nNome: ${map.name}\nCoordenada Top-Left: ${map.topLeft.lat}, ${map.topLeft.lng}\nCoordenada Bottom-Right: ${map.bottomRight.lat}, ${map.bottomRight.lng}\n\nAbra no aplicativo para navegar georreferenciado!`;
     
     try {
       if (navigator.share) {
         await navigator.share({
-          title: `Aplicações BPA - ${map.name}`,
+          title: `Aplicações Ambientais - ${map.name}`,
           text: shareText
         });
         showTemporaryStatus("Opções de compartilhamento abertas!");
@@ -3330,7 +3330,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             </div>
 
             <p className="text-[8.5px] text-military-400 text-center uppercase tracking-wide">
-              Clique em múltiplos pontos na tela do mapa para desenhar o traçado tático.
+              Clique em múltiplos pontos na tela do mapa para desenhar o trajeto.
             </p>
 
             <div className="flex justify-center gap-4 mt-2">
@@ -3452,7 +3452,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               <div className="flex items-center gap-1.5">
                 <Navigation className="w-3 h-3 text-blue-400 rotate-45 shrink-0" />
                 <span className="text-[8.5px] font-black tracking-wider uppercase text-military-100">
-                  {editingPointId ? (savedPoints.find(p => p.id === editingPointId)?.isTrack ? 'EDITAR TRILHA GPS' : 'EDITAR MARCADOR') : 'ADICIONAR PONTO TÁTICO'}
+                  {editingPointId ? (savedPoints.find(p => p.id === editingPointId)?.isTrack ? 'EDITAR TRILHA GPS' : 'EDITAR MARCADOR') : 'REGISTRAR MARCADOR'}
                 </span>
               </div>
               <button 
@@ -3543,7 +3543,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   setMeasuringMode('none');
                 }}
                 className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-md shrink-0"
-                title="Salvar Ponto Tático"
+                title="Salvar Marcador"
               >
                 <Save className="w-4 h-4" />
               </button>
@@ -3743,7 +3743,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           <button
             onClick={() => {
               setActiveTab('ferramentas');
-              showTemporaryStatus("Painel 'Recursos' reservado para futura atualização militar.");
+              showTemporaryStatus("Painel 'Recursos' reservado para futura atualização do sistema.");
             }}
             className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-1 h-14 ${activeTab === 'ferramentas' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
@@ -3773,7 +3773,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           <button
             onClick={() => {
               setActiveTab('trajetos');
-              showTemporaryStatus("Painel 'Rotas Gravadas' reservado para futura atualização militar.");
+              showTemporaryStatus("Painel 'Rotas Gravadas' reservado para futura atualização do sistema.");
             }}
             className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'trajetos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
@@ -4085,7 +4085,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           {activeTab === 'ferramentas' && (
             <div className="space-y-4">
               <div className="p-1 border-b border-military-800 pb-2">
-                <span className="font-mono text-[9px] text-military-400 uppercase tracking-widest font-black">RECURSOS TÁTICOS</span>
+                <span className="font-mono text-[9px] text-military-400 uppercase tracking-widest font-black">RECURSOS DE MAPEAMENTO</span>
               </div>
 
               {/* Centered Large "ADICIONAR PONTO" Button as configured in Screenshot 1 */}
@@ -4621,7 +4621,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                 if (isTrackItem) {
                                   clipboardText = `Trilha GPS: ${pt.name} | Distância: ${formatDistance(pt.distance || 0)} | Tempo: ${formatElapsedTime(pt.duration || 0)} | Pontos: ${pt.points ? pt.points.length : 0}`;
                                 } else {
-                                  clipboardText = `Ponto Tático: ${pt.name} | Coordenadas: Lat ${decimalToDMS(pt.lat, 'lat')}, Lng ${decimalToDMS(pt.lng, 'lng')} (DEC: ${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)})`;
+                                  clipboardText = `Marcador: ${pt.name} | Coordenadas: Lat ${decimalToDMS(pt.lat, 'lat')}, Lng ${decimalToDMS(pt.lng, 'lng')} (DEC: ${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)})`;
                                 }
                                 navigator.clipboard.writeText(clipboardText);
                                 showTemporaryStatus(`Informações de "${pt.name}" copiadas!`);
@@ -4664,7 +4664,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     <Route className="w-4 h-4 text-purple-400" />
                   </div>
                   <div className="flex flex-col">
-                    <h4 className="font-sans text-xs font-black uppercase text-military-100 tracking-wide">Rastreador de Patrulha GPS</h4>
+                    <h4 className="font-sans text-xs font-black uppercase text-military-100 tracking-wide">Rastreador de Percurso GPS</h4>
                     <span className="font-mono text-[8px] text-military-450 uppercase">Gravação e Monitoramento de Trajetos</span>
                   </div>
                 </div>
@@ -4676,7 +4676,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                     </span>
                     <div className="flex flex-col leading-tight">
-                      <span className="font-sans text-[10px] font-black uppercase tracking-wider">GRAVAÇÃO TÁTICA EM SEGUNDO PLANO</span>
+                      <span className="font-sans text-[10px] font-black uppercase tracking-wider">GRAVAÇÃO CONTÍNUA EM SEGUNDO PLANO</span>
                       <span className="font-mono text-[8px] text-red-500/80">
                         Thread segura contra suspensão (Keep-Alive de áudio & Wake Lock ativo)
                       </span>
@@ -4771,7 +4771,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       className="w-full py-3 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 border border-purple-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                     >
                       <Save className="w-3.5 h-3.5" />
-                      SALVAR TRILHA TÁTICA
+                      SALVAR GRAVAÇÃO DE TRILHA
                     </button>
 
                     <button
@@ -4819,14 +4819,14 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     <p className="font-mono text-[8px] text-military-400 mt-2.5 leading-normal uppercase">
                       {simulatedGps 
                         ? "⚠️ O GPS Simulado gera uma caminhada em Rio Branco-AC para demonstração fácil das linhas." 
-                        : "📡 Utiliza a geolocalização exata do navegador. Ideal para patrulhamento em campo aberto."}
+                        : "📡 Utiliza a geolocalização exata do navegador. Ideal para monitoramento em campo aberto."}
                     </p>
                   </div>
 
                   {/* Name field input card */}
                   <div className="border border-military-750 bg-military-800/50 rounded-xl p-3">
                     <label className="font-mono text-[8px] uppercase font-black text-military-450 block mb-1.5 tracking-wide">
-                      NOME DA TRILHA DE PATRULHA
+                      NOME DO TRAJETO / TRILHA
                     </label>
                     <input
                       type="text"
@@ -4887,17 +4887,17 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               <div id="pm-avatar" className="w-10 h-10 rounded-full overflow-hidden bg-military-950 flex items-center justify-center shadow-md border border-military-700">
                 <img 
                   src={brandLogo} 
-                  alt="Aplicações BPA Logo" 
+                  alt="Aplicações Ambientais Logo" 
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer" 
                 />
               </div>
               <div className="flex flex-col">
                 <span className="font-sans text-[11px] font-bold text-military-100 uppercase tracking-wide">
-                  Aplicações BPA
+                  Aplicações Ambientais Pro
                 </span>
                 <span className="font-sans text-[9px] text-military-400 uppercase tracking-widest font-bold">
-                  Sistema Militar
+                  Geoprocessamento
                 </span>
               </div>
             </div>

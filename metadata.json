@@ -1,6 +1,6 @@
 {
   "name": "Remix: Aplicações BPA",
-  "description": "Plataforma unificada para serviços BPA: Foto Georreferenciada, Cubagem de Madeiras, e Conferidor de Cautelas.",
+  "description": "Plataforma unificada para serviços de monitoramento, fotos georreferenciadas, cubagem de madeiras, e conferidor de cautelas.",
   "requestFramePermissions": [
     "camera",
     "geolocation"

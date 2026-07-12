@@ -1124,16 +1124,16 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.text("BPA - BATALHÃO DE POLICIAMENTO AMBIENTAL", 105, 18, { align: "center" });
+    doc.text("APLICAÇÕES AMBIENTAIS - GEORREFERENCIAMENTO DE PRECISÃO", 105, 18, { align: "center" });
     
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
-    doc.text("DIVISÃO DE RECURSOS TECNOLÓGICOS - BPA", 105, 24, { align: "center" });
+    doc.text("DIVISÃO DE GEOTECNOLOGIA - APLICAÇÕES AMBIENTAIS", 105, 24, { align: "center" });
     
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(255, 215, 0); // Yellow gold
-    doc.text("RELATÓRIO DE CONSTATAÇÃO AMBIENTAL - APLICAÇÕES BPA", 105, 33, { align: "center" });
+    doc.text("RELATÓRIO DE ANÁLISE GEOGRÁFICA - APLICAÇÕES AMBIENTAIS", 105, 33, { align: "center" });
 
     // Section 1: Property Identification
     doc.setTextColor(31, 46, 32);
@@ -1209,16 +1209,16 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     // Section 4: Opinions
     doc.setTextColor(31, 46, 32);
     doc.setFont("helvetica", "bold");
-    doc.text("4. CONCLUSÃO E PARECER TÉCNICO DA FISCALIZAÇÃO", 15, 218);
+    doc.text("4. CONCLUSÃO E PARECER TÉCNICO DE CONSTATAÇÃO", 15, 218);
     doc.line(15, 220, 195, 220);
 
     doc.setTextColor(40, 40, 40);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.5);
     const textConclusion = `Fica autuado e documentado o imóvel rural denominado ${propToUse.name}. ` +
-      `Os dados geoespaciais foram consultados em tempo real através do algoritmo inteligente de fatiamento do modulo de Aplicações BPA, ` +
+      `Os dados geoespaciais foram consultados em tempo real através do algoritmo inteligente de fatiamento do sistema Aplicações Ambientais, ` +
       `identificando grau de conformidade e passivos ambientais classificados como RISCO ${propToUse.riskLevel}. ` +
-      `${propToUse.history} Este laudo constitui peça informativa para averiguação fotográfica georreferenciada em campo, para devida lavratura de multas ou regularização (PRA) se aplicável.`;
+      `${propToUse.history} Este relatório constitui peça informativa para averiguação fotográfica georreferenciada em campo, para devida lavratura ou regularização (PRA) se aplicável.`;
 
     const wrapConclusion = doc.splitTextToSize(textConclusion, 175);
     doc.text(wrapConclusion, 15, 228);
@@ -1230,12 +1230,12 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
     doc.setFont("helvetica", "normal");
     doc.line(40, 272, 90, 272);
-    doc.text("Assinatura do Agente (BPA)", 65, 277, { align: "center" });
+    doc.text("Assinatura do Responsável Técnico", 65, 277, { align: "center" });
 
     doc.line(120, 272, 170, 272);
     doc.text("Coordenador de Monitoramento Geográfico", 145, 277, { align: "center" });
 
-    doc.save(`LAUDO-BPA-CAR-${propToUse.carCode}.pdf`);
+    doc.save(`RELATORIO-AMBIENTAL-CAR-${propToUse.carCode}.pdf`);
   };
 
   return (
@@ -1252,14 +1252,14 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
         </button>
 
         <div className="flex flex-col items-center">
-          <span className="text-sm font-black text-white tracking-widest uppercase text-center">APLICAÇÕES BPA</span>
-          <span className="text-[7.5px] font-mono text-yellow-500 font-bold uppercase tracking-widest leading-none mt-0.5">Módulo Geral de Busca CAR</span>
+          <span className="text-sm font-black text-white tracking-widest uppercase text-center">APLICAÇÕES AMBIENTAIS</span>
+          <span className="text-[7.5px] font-mono text-yellow-500 font-bold uppercase tracking-widest leading-none mt-0.5">Pesquisa Avançada CAR</span>
         </div>
 
         <div className="flex items-center w-10 h-10 rounded-xl overflow-hidden bg-military-950 border border-military-700/60 shadow-md">
           <img 
             src={brandLogo} 
-            alt="BPA Logo" 
+            alt="Aplicações Ambientais Logo" 
             className="w-full h-full object-cover" 
             referrerPolicy="no-referrer"
           />
@@ -1854,8 +1854,8 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
         {activeTab === 'historico' && (
           <div className="p-4 space-y-4 max-w-md mx-auto w-full flex-1 pb-16">
             <div className="space-y-1 text-center mt-1">
-              <h3 className="text-sm font-black uppercase tracking-wider text-military-100">Consultas Recentes da Fiscalização</h3>
-              <p className="text-[9px] text-military-450 uppercase font-mono tracking-widest">Histórico armazenado localmente para averiguação offline</p>
+              <h3 className="text-sm font-black uppercase tracking-wider text-military-100">Consultas Recentes de Imóveis</h3>
+              <p className="text-[9px] text-military-450 uppercase font-mono tracking-widest">Histórico armazenado localmente para consulta offline</p>
             </div>
 
             {historyList.length === 0 ? (

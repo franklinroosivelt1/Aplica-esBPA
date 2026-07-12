@@ -265,7 +265,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
       // HUD Text Indicator
       ctx.fillStyle = '#abc3a6';
       ctx.font = 'bold 16px monospace';
-      ctx.fillText('BPA GPS SIMULATOR v2.5 ONSITE', 40, 50);
+      ctx.fillText('GPS SIMULATOR v2.5 ONSITE', 40, 50);
       ctx.fillText('● MODO SEGURO OFFLINE', 40, 80);
       ctx.restore();
     } else if (video) {
@@ -361,7 +361,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
       const objectUrl = URL.createObjectURL(blob);
       
       const link = document.createElement('a');
-      link.download = `BPA_CAMSTAMP_${Date.now()}.jpeg`;
+      link.download = `PHOTO_CAMSTAMP_${Date.now()}.jpeg`;
       link.href = objectUrl;
       document.body.appendChild(link);
       link.click();
@@ -372,7 +372,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
       console.error("Auto download fallback:", err);
       // Fallback to legacy link click just in case
       const link = document.createElement('a');
-      link.download = `BPA_CAMSTAMP_${Date.now()}.jpeg`;
+      link.download = `PHOTO_CAMSTAMP_${Date.now()}.jpeg`;
       link.href = dataUrl;
       link.click();
     }
@@ -429,13 +429,13 @@ export default function CamStamp({ onBack }: CamStampProps) {
       try {
         const response = await fetch(photoUrl);
         const blob = await response.blob();
-        const file = new File([blob], `BPA_PHOTO_${Date.now()}.jpeg`, { type: 'image/jpeg' });
+        const file = new File([blob], `PHOTO_${Date.now()}.jpeg`, { type: 'image/jpeg' });
 
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
-            title: 'Foto Georreferenciada BPA',
-            text: 'Compartilhado via BPA SisGeo'
+            title: 'Foto Georreferenciada',
+            text: 'Compartilhado via Aplicações Ambientais'
           });
           return;
         }
@@ -560,7 +560,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
 
                   {/* HUD Info */}
                   <rect x="40" y="40" width="220" height="4" fill="#abc3a6" opacity="0.3" />
-                  <text x="50" y="30" fill="#abc3a6" fontSize="10" fontFamily="monospace" letterSpacing="2">BPA GPS SIMULATOR v2.5</text>
+                  <text x="50" y="30" fill="#abc3a6" fontSize="10" fontFamily="monospace" letterSpacing="2">GPS SIMULATOR v2.5</text>
                   <text x="50" y="60" fill="#abc3a6" fontSize="10" fontFamily="monospace" opacity="0.7">● MODO SEGURO OFFLINE</text>
                 </svg>
 
@@ -738,7 +738,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
                       const objectUrl = URL.createObjectURL(blob);
                       
                       const link = document.createElement('a');
-                      link.download = `BPA_PHOTO_${Date.now()}.jpeg`;
+                      link.download = `PHOTO_${Date.now()}.jpeg`;
                       link.href = objectUrl;
                       document.body.appendChild(link);
                       link.click();
@@ -748,7 +748,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
                     } catch (e) {
                       console.error("Gallery download fallback:", e);
                       const link = document.createElement('a');
-                      link.download = `BPA_PHOTO_${Date.now()}.jpeg`;
+                      link.download = `PHOTO_${Date.now()}.jpeg`;
                       link.href = selectedImage;
                       link.click();
                     }
@@ -904,8 +904,8 @@ export default function CamStamp({ onBack }: CamStampProps) {
                 <img src={sharingPhotoUrl} className="w-full h-full object-cover" alt="Compartilhamento" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-zinc-200 truncate">Foto Georreferenciada BPA</p>
-                <p className="text-[10px] font-mono text-zinc-400 mt-0.5">BPA_PHOTO_GEORREF.jpeg</p>
+                <p className="text-xs font-bold text-zinc-200 truncate">Foto Georreferenciada</p>
+                <p className="text-[10px] font-mono text-zinc-400 mt-0.5">PHOTO_GEORREF.jpeg</p>
               </div>
             </div>
 
@@ -969,7 +969,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
                   const newWindow = window.open();
                   if (newWindow) {
                     newWindow.document.write(`<img src="${sharingPhotoUrl}" style="max-width:100%; height:auto; display:block; margin:20px auto; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.5);" />`);
-                    newWindow.document.title = "Foto Georreferenciada BPA";
+                    newWindow.document.title = "Foto Georreferenciada";
                     newWindow.document.body.style.backgroundColor = "#000000";
                     newWindow.document.body.style.margin = "0";
                     newWindow.document.body.style.padding = "10px";
@@ -995,7 +995,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
                     const objectUrl = URL.createObjectURL(blob);
                     
                     const link = document.createElement('a');
-                    link.download = `BPA_PHOTO_${Date.now()}.jpeg`;
+                    link.download = `PHOTO_${Date.now()}.jpeg`;
                     link.href = objectUrl;
                     document.body.appendChild(link);
                     link.click();
@@ -1006,7 +1006,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
                   } catch (err) {
                     console.error(err);
                     const link = document.createElement('a');
-                    link.download = `BPA_PHOTO_${Date.now()}.jpeg`;
+                    link.download = `PHOTO_${Date.now()}.jpeg`;
                     link.href = sharingPhotoUrl;
                     link.click();
                     setToastMsg("Imagem baixada com sucesso!");

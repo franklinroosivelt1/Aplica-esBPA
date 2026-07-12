@@ -265,14 +265,14 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
     if (!generatedPdfUrl) return;
     const response = await fetch(generatedPdfUrl);
     const blob = await response.blob();
-    const file = new File([blob], 'BPA_DOCUMENTO.pdf', { type: 'application/pdf' });
+    const file = new File([blob], 'DOCUMENTO_AMBIENTAL.pdf', { type: 'application/pdf' });
 
     if (navigator.share) {
       try {
         await navigator.share({
           files: [file],
-          title: 'Documento BPA',
-          text: 'PDF gerado via App BPA'
+          title: 'Relatório Georreferenciado',
+          text: 'PDF gerado via Aplicações Ambientais'
         });
       } catch (err) {
         console.error('Share failed', err);
@@ -280,7 +280,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
     } else {
       const link = document.createElement('a');
       link.href = generatedPdfUrl;
-      link.download = 'BPA_DOCUMENTO.pdf';
+      link.download = 'DOCUMENTO_AMBIENTAL.pdf';
       link.click();
     }
   };
@@ -289,7 +289,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
     if (!generatedPdfUrl) return;
     const link = document.createElement('a');
     link.href = generatedPdfUrl;
-    link.download = `BPA_DOCUMENTO_${Date.now()}.pdf`;
+    link.download = `documento_ambiental_${Date.now()}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

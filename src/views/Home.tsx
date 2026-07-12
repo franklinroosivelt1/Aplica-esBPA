@@ -52,7 +52,7 @@ export default function Home({ onNavigate }: HomeProps) {
       label: 'Buscar Mandado de Prisão', 
       icon: Shield,
       subtitle: 'Consulta de Foragidos Offline',
-      description: 'Pesquisa tática e offline de mandados de prisão ativos ou foragidos da justiça de Acre.',
+      description: 'Pesquisa rápida, precisa e offline de mandados de prisão ativos ou foragidos da justiça de Acre.',
       offline: true
     },
     { 
@@ -92,10 +92,10 @@ export default function Home({ onNavigate }: HomeProps) {
 
             <div>
               <h1 className="text-xl font-black tracking-tight text-[#111827] uppercase font-sans">
-                APLICAÇÕES BPA
+                APLICAÇÕES AMBIENTAIS
               </h1>
               <p className="text-[12px] text-[#4B5563] mt-1 max-w-[280px] mx-auto leading-normal font-sans font-semibold">
-                Batalhão de Policiamento Ambiental do Acre • BPA
+                Plataforma de Georreferenciamento e Gestão de Campo
               </p>
             </div>
           </div>
@@ -148,11 +148,11 @@ export default function Home({ onNavigate }: HomeProps) {
         <div className="flex items-center justify-center gap-2 mb-1">
           <div className="w-1.5 h-1.5 bg-[#0E7490] rounded-full animate-pulse" />
           <span className="text-[10px] font-mono tracking-widest uppercase text-[#111827] font-extrabold">
-            Batalhão de Policiamento Ambiental - PMAC
+            Aplicações Ambientais - Geoprocessamento de Precisão
           </span>
         </div>
         <p className="text-[9px] font-mono text-[#4B5563] tracking-wider uppercase font-bold">
-          Divisão de Recursos Tecnológicos • v1.6
+          Plataforma de Navegação e Mapeamento • v1.6
         </p>
       </footer>
     </div>

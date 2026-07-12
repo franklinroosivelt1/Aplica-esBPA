@@ -641,10 +641,10 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
   };
 
   const handleResetDB = () => {
-    if (confirm("Deseja restaurar os dados de mandados iniciais pré-definidos do BPA?")) {
+    if (confirm("Deseja restaurar os dados de mandados iniciais pré-definidos do sistema?")) {
       localStorage.setItem('bpa_mandados_db', JSON.stringify(PRE_SEEDED_MANDADOS));
       setMandados(PRE_SEEDED_MANDADOS);
-      showToast("Base de dados restaurada para padrão operacional!");
+      showToast("Base de dados restaurada com sucesso!");
     }
   };
 
@@ -652,7 +652,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(mandados, null, 2));
     const dlAnchorElem = document.createElement('a');
     dlAnchorElem.setAttribute("href", dataStr);
-    dlAnchorElem.setAttribute("download", `bpa_mandados_cripto_${Date.now()}.json`);
+    dlAnchorElem.setAttribute("download", `mandados_cripto_${Date.now()}.json`);
     dlAnchorElem.click();
     showToast("Mandados exportados com sucesso!");
   };
