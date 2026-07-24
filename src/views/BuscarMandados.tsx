@@ -293,6 +293,49 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     });
   };
 
+  const extractTipificacaoFromText = (text: string): { motivo: string; artigo: string } => {
+    if (!text) return { motivo: "Mandado de Prisão", artigo: "Processo Penal BNMP" };
+    const upper = text.toUpperCase();
+
+    // Check explicit field labels
+    const tipifMatch = text.match(/(?:TIPIFICAÇÃO PENAL|CAPITULAÇÃO|MOTIVO|DELITO|CRIME|INFRAÇÃO|ASSUNTO|ENQUADRAMENTO)[:\s]+([^\n\r;|]{3,90})/i);
+    if (tipifMatch && tipifMatch[1]) {
+      const val = tipifMatch[1].trim();
+      if (!val.toUpperCase().includes("MANDADO DE PRISÃO") && !val.toUpperCase().includes("NÃO INFORMADO") && val.length > 2) {
+        return { motivo: val, artigo: val };
+      }
+    }
+
+    // Detect common criminal law categories
+    let crime = "";
+    if (upper.includes("HOMICÍDIO") || upper.includes("HOMICIDIO")) crime = "Homicídio";
+    else if (upper.includes("TRÁFICO") || upper.includes("TRAFICO")) crime = "Tráfico de Drogas (Lei 11.343/06)";
+    else if (upper.includes("ROUBO")) crime = "Roubo Majorado";
+    else if (upper.includes("FURTO")) crime = "Furto";
+    else if (upper.includes("ESTUPRO")) crime = "Estupro / Agressão Sexual";
+    else if (upper.includes("VIOLÊNCIA DOMÉSTICA") || upper.includes("MARIA DA PENHA")) crime = "Violência Doméstica";
+    else if (upper.includes("PORTE ILEGAL") || upper.includes("POSSE ILEGAL")) crime = "Porte/Posse Ilegal de Arma";
+    else if (upper.includes("RECEPTAÇÃO") || upper.includes("RECEPTACAO")) crime = "Receptação";
+    else if (upper.includes("ESTELIONATO")) crime = "Estelionato";
+    else if (upper.includes("ORGANIZAÇÃO CRIMINOSA") || upper.includes("QUADRILHA")) crime = "Organização CriminOSA";
+    else if (upper.includes("CRIME AMBIENTAL") || upper.includes("DESMATAMENTO") || upper.includes("9.605")) crime = "Crime Ambiental (Lei 9.605/98)";
+    else if (upper.includes("LESÃO CORPORAL") || upper.includes("LESAO CORPORAL")) crime = "Lesão Corporal";
+    else if (upper.includes("AMEAÇA") || upper.includes("AMEACA")) crime = "Ameaça";
+    else if (upper.includes("CONDENAÇÃO") || upper.includes("PENA")) crime = "Execução de Pena Criminal";
+
+    const artMatch = text.match(/\b(?:ART|ARTIGO|LEI)\.?\s*(\d+[\w\s\/.-]*)/i);
+
+    if (crime && artMatch) {
+      return { motivo: `${crime} (${artMatch[0].trim()})`, artigo: artMatch[0].trim() };
+    } else if (crime) {
+      return { motivo: crime, artigo: crime };
+    } else if (artMatch) {
+      return { motivo: `Infracao Penal (${artMatch[0].trim()})`, artigo: artMatch[0].trim() };
+    }
+
+    return { motivo: "Mandado de Prisão - Ordem Judicial", artigo: "Pendência BNMP" };
+  };
+
   const extractField = (text: string, keys: string[]): string | null => {
     const upperText = text.toUpperCase();
     for (const key of keys) {
@@ -359,7 +402,6 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      // Check if file with same name is already loaded to avoid duplicates
       if (newAttachedFiles.some(f => f.name === file.name)) {
         continue;
       }
@@ -481,6 +523,8 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                     }
                   });
 
+                  const tipifInfo = extractTipificacaoFromText(cells.join(' ') + " " + lineText);
+
                   extractedWarrants.push({
                     id: `extracted-${numero}-${lineIdx}-${pageNum}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
                     nome: nome,
@@ -491,8 +535,8 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                     situacao: situacao,
                     dataExpedicao: dataExpedicao,
                     numeroMandado: numero,
-                    naturezaInfracao: peca,
-                    artigoLei: "Art. da Lei 9.605/98 (Crime Ambiental)",
+                    naturezaInfracao: peca && peca !== "Mandado de Prisão" ? peca : tipifInfo.motivo,
+                    artigoLei: tipifInfo.artigo,
                     orgaoEmissor: expedidor,
                     tipoPrisao: peca.toLowerCase().includes('condenação') ? 'Condenação Definitiva' : peca.toLowerCase().includes('temporária') ? 'Temporária' : 'Preventiva',
                     status: 'Ativo',
@@ -506,7 +550,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
           // Fallback parsing for certificates on page level
           const pageRawText = pageLines.join(' ');
           const generalWords = pageRawText.toUpperCase();
-          if (generalWords.includes("MANDADO") || generalWords.includes("PRISÃO") || generalWords.includes("EUZENITA")) {
+          if (generalWords.includes("MANDADO") || generalWords.includes("PRISÃO") || generalWords.includes("BNMP")) {
             const euzenMatch = pageRawText.match(/([A-ZÀ-Ú]{3,}\s+[A-ZÀ-Ú\s]{4,45})/g);
             if (euzenMatch) {
               euzenMatch.forEach(nameCandidate => {
@@ -530,14 +574,16 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                     const processMatch = pageRawText.match(/\b\d{3,7}-\d{2}\.\d{4}\b/) || pageRawText.match(/\b\d{7,10}-\d{2}\b/);
                     const numero = processMatch ? processMatch[0] : "BNMP-FALL-" + Date.now().toString().slice(-4) + Math.floor(Math.random() * 10).toString();
                     
+                    const tipifInfo = extractTipificacaoFromText(pageRawText);
+
                     extractedWarrants.push({
                       id: `fall-${numero}-${pageNum}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
                       nome: cleanCandidate.toUpperCase(),
                       numeroMandado: numero,
                       status: 'Ativo',
                       gravidade: 'Média',
-                      artigoLei: "Art. da Lei 9.605/98 (Crime Ambiental)",
-                      naturezaInfracao: "Mandado de Prisão",
+                      artigoLei: tipifInfo.artigo,
+                      naturezaInfracao: tipifInfo.motivo,
                       orgaoEmissor: "Conselho Nacional de Justiça",
                       tipoPrisao: "Preventiva",
                       situacao: "PENDENTE DE CUMPRIMENTO"
@@ -798,8 +844,9 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     lineText: string;
   }
 
-  // Calculate matching lines directly from PDFs
+  // Calculate matching lines directly from PDFs and build dynamic warrant items on match
   const fileLinesMatched: FileLineMatch[] = [];
+  const extraDynamicFromPdfs: Mandado[] = [];
   const activeQuery = (searchQuery || activeSearchQuery || '').toLowerCase().trim();
 
   if (activeQuery.length >= 2) {
@@ -809,20 +856,61 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
       if (file.pages && Array.isArray(file.pages)) {
         file.pages.forEach((page: any) => {
           if (page.lines && Array.isArray(page.lines)) {
-            page.lines.forEach((lineText: string) => {
+            page.lines.forEach((lineText: string, lineIdx: number) => {
               const normLine = normalizeNameForSearch(lineText);
               const simpleLine = lineText.toLowerCase();
               
               if (normLine.includes(normalizedQ) || simpleLine.includes(activeQuery)) {
-                const alreadyAdded = fileLinesMatched.some(m => 
+                const alreadyAddedMatch = fileLinesMatched.some(m => 
                   m.fileName === file.name && m.pageNum === page.pageNum && m.lineText === lineText
                 );
-                if (!alreadyAdded) {
+                if (!alreadyAddedMatch) {
                   fileLinesMatched.push({
                     fileName: file.name,
                     pageNum: page.pageNum,
                     lineText: lineText
                   });
+                }
+
+                // Check if candidate is already in mandados
+                const existsInMandados = mandados.some(m => 
+                  normalizeNameForSearch(m.nome).includes(normalizedQ) ||
+                  (m.alcunha && normalizeNameForSearch(m.alcunha).includes(normalizedQ)) ||
+                  (m.nomeMae && normalizeNameForSearch(m.nomeMae).includes(normalizedQ)) ||
+                  (m.numeroMandado && m.numeroMandado.includes(activeQuery))
+                );
+
+                if (!existsInMandados) {
+                  const procMatch = lineText.match(/\b\d{3,10}-\d{2}\.\d{4}\b/) || lineText.match(/\b\d{5,10}-\d{2}\b/) || lineText.match(/BNMP[A-Z0-9-]+/i);
+                  const numMandado = procMatch ? procMatch[0] : `BNMP-PDF-${page.pageNum}-${lineIdx}`;
+                  const tipif = extractTipificacaoFromText(page.text || lineText);
+                  const dateMatch = lineText.match(/\b\d{2}\/\d{2}\/\d{4}\b/);
+
+                  let candidateName = lineText
+                    .replace(/[\d\-./\\]/g, ' ')
+                    .replace(/BNMP|MANDADO|PRISÃO|PENDENTE|CUMPRIMENTO|CONSELHO|NACIONAL|JUSTIÇA|TRIBUNAL|VARA|CRIMINAL/gi, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                  if (candidateName.length >= 3) {
+                    const dynamicItem: Mandado = {
+                      id: `dynamic-pdf-${file.id}-${page.pageNum}-${lineIdx}`,
+                      nome: candidateName.toUpperCase(),
+                      numeroMandado: numMandado,
+                      naturezaInfracao: tipif.motivo,
+                      artigoLei: tipif.artigo,
+                      orgaoEmissor: "Conselho Nacional de Justiça",
+                      dataExpedicao: dateMatch ? dateMatch[0] : undefined,
+                      situacao: "PENDENTE DE CUMPRIMENTO",
+                      tipoPrisao: "Preventiva",
+                      status: "Ativo",
+                      gravidade: "Média"
+                    };
+
+                    if (!extraDynamicFromPdfs.some(d => d.nome === dynamicItem.nome || d.numeroMandado === dynamicItem.numeroMandado)) {
+                      extraDynamicFromPdfs.push(dynamicItem);
+                    }
+                  }
                 }
               }
             });
@@ -832,15 +920,16 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     });
   }
 
-  // Safe search and match - only active when user searches (transient history)
-  const filteredMandados = mandados.filter(item => {
+  // Combined list for search
+  const allPoolMandados = [...mandados, ...extraDynamicFromPdfs];
+
+  // Filter combined pool
+  const filteredMandados = allPoolMandados.filter(item => {
     const query = (searchQuery || activeSearchQuery || '').toLowerCase().trim();
     if (!query) {
-      // Se tiver arquivo carregado e nenhuma pesquisa, mostra todos os mandados para confirmação visual
       return attachedFiles.length > 0 ? true : false;
     }
 
-    // Busca estruturada por Nome, Nome da Mãe, Nome do Pai, Alcunha, Órgão e Tipo com normalização ortográfica complementar
     const normalizedQuery = normalizeNameForSearch(query);
     const normalizedNome = normalizeNameForSearch(item.nome);
     const normalizedAlcunha = normalizeNameForSearch(item.alcunha);
@@ -858,7 +947,6 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     const matchInfracao = normalizedInfracao.includes(normalizedQuery);
     const matchArtigo = normalizedArtigo.includes(normalizedQuery);
 
-    // Comparações simples de texto para RG, CPF, Número do Mandado, Nascimento e Situação processual
     const querySimple = query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const matchCPF = item.cpf?.replace(/[.\-\s]/g, '').includes(query.replace(/[.\-\s]/g, ''));
     const matchRG = item.rg?.toLowerCase().includes(querySimple);
@@ -1151,65 +1239,50 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
               </span>
             </div>
 
-            <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
               {filteredMandados.map((item) => {
                 const isExpanded = expandedId === item.id;
-                const cardBg = item.gravidade === 'Alta' 
-                  ? 'bg-red-50 hover:bg-red-100/50 border-red-200 text-red-950 transition-all font-sans' 
-                  : item.gravidade === 'Média' 
-                    ? 'bg-amber-50 hover:bg-amber-100/50 border-amber-200 text-amber-950 transition-all font-sans' 
-                    : 'bg-emerald-50/60 hover:bg-emerald-50 border-emerald-200 text-emerald-950 transition-all font-sans';
-
-                const severityBadge = item.gravidade === 'Alta'
-                  ? 'bg-red-100 text-red-800 border-red-200 font-bold'
-                  : item.gravidade === 'Média'
-                    ? 'bg-amber-100 text-amber-800 border-amber-200 font-bold'
-                    : 'bg-emerald-100 text-emerald-850 border-emerald-200 font-bold';
+                const cardBg = isExpanded
+                  ? 'bg-military-850 border-military-600 shadow-md text-military-100'
+                  : 'bg-military-900/90 hover:bg-military-850 border-military-750 text-military-100 transition-all';
 
                 return (
                   <div
                     key={item.id}
                     onClick={() => setExpandedId(isExpanded ? null : item.id)}
-                    className={`w-full text-left rounded-xl border p-3 shadow-sm transition-all relative overflow-hidden cursor-pointer ${cardBg}`}
+                    className={`w-full text-left rounded-xl border p-3.5 shadow-sm transition-all relative overflow-hidden cursor-pointer ${cardBg}`}
                   >
-                    <div className="flex items-start justify-between gap-3 pr-4">
-                      <div className="space-y-0.5">
-                        <span className="text-[7.5px] font-mono uppercase tracking-widest text-military-500 block font-black">
-                          BNMP: {item.numeroMandado.slice(0, 18)}...
-                        </span>
-                        <h4 className="font-extrabold text-[12px] tracking-wide text-military-100 uppercase leading-tight">
-                          <HighlightedText text={item.nome} query={searchQuery || activeSearchQuery || ''} />
-                        </h4>
-                        {item.alcunha && (
-                          <span className="text-[9px] text-[#865d1a] font-mono font-bold uppercase block">
-                            VULGO: "<HighlightedText text={item.alcunha} query={searchQuery || activeSearchQuery || ''} />"
-                          </span>
-                        )}
+                    {/* INITIAL LIST VIEW (COLLAPSED): Nome, Motivo, Numero do Mandado */}
+                    <div className="flex items-start justify-between gap-3 pr-2">
+                      <div className="space-y-1.5 w-full">
+                        <div>
+                          <span className="text-[8px] font-mono font-extrabold text-military-450 uppercase block">NOME:</span>
+                          <h4 className="font-extrabold text-sm tracking-wide text-white uppercase leading-snug">
+                            <HighlightedText text={item.nome} query={searchQuery || activeSearchQuery || ''} />
+                          </h4>
+                        </div>
+
+                        <div>
+                          <span className="text-[8px] font-mono font-extrabold text-military-450 uppercase block">MOTIVO:</span>
+                          <p className="font-bold text-military-200 text-xs uppercase truncate">
+                            {item.naturezaInfracao || item.artigoLei || 'Mandado de Prisão'}
+                          </p>
+                        </div>
+
+                        <div>
+                          <span className="text-[8px] font-mono font-extrabold text-military-450 uppercase block">NUMERO DO MANDADO:</span>
+                          <p className="font-mono font-extrabold text-amber-400 text-xs select-all break-all">
+                            {item.numeroMandado}
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <span className={`px-1.2 py-0.5 rounded text-[7px] font-black uppercase tracking-wider border ${severityBadge}`}>
-                          {item.gravidade}
-                        </span>
-                        <span className="bg-military-900 text-military-400 border border-military-750 px-1 py-0.5 rounded text-[7.5px] font-mono uppercase font-semibold">
-                          {item.tipoPrisao}
-                        </span>
+                      <div className="text-military-400 self-center flex-shrink-0 pl-1">
+                        {isExpanded ? <ChevronUp className="w-5 h-5 text-amber-400" /> : <ChevronDown className="w-5 h-5" />}
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-x-2 mt-2 pt-2 border-t border-military-750/50 text-[9.5px]">
-                      <div>
-                        <span className="text-[7px] font-mono text-military-450 uppercase block">MOTIVO/DELITO</span>
-                        <p className="text-military-200 truncate uppercase mt-0.5 font-medium">{item.naturezaInfracao}</p>
-                      </div>
-                      <div>
-                        <span className="text-[7px] font-mono text-military-450 uppercase block">CPF / RG</span>
-                        <p className="font-mono text-military-300 font-bold mt-0.5">
-                          {item.cpf || 'DIVERGENTE'} / {item.rg || 'DIVERGENTE'}
-                        </p>
-                      </div>
-                    </div>
-
+                    {/* EXPANDED CARD VIEW: Numero, Nome, Alcunha, Nome da Mãe, Data de Nascimento, Situação, Data de Emissão, Órgão Emissor */}
                     <AnimatePresence>
                       {isExpanded && (
                         <motion.div
@@ -1217,101 +1290,87 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.15 }}
-                          className="overflow-hidden mt-3 pt-3 border-t border-military-800 space-y-3 text-xs text-military-200"
+                          className="overflow-hidden mt-3 pt-3 border-t border-military-750/80 space-y-3 text-xs text-military-200"
                           onClick={e => e.stopPropagation()}
                         >
-                          <div className="grid grid-cols-2 gap-2 bg-black/45 p-2 rounded-lg border border-military-850">
-                            <div>
-                              <span className="text-[7px] font-mono text-military-450 uppercase block">NATUREZA DO CRIME</span>
-                              <p className="font-semibold text-white/95 text-[10px] uppercase">{item.naturezaInfracao}</p>
-                            </div>
-                            <div>
-                              <span className="text-[7px] font-mono text-military-450 uppercase block">DISPOSITIVO PENAL</span>
-                              <p className="font-bold text-yellow-500 font-mono text-[10px]">{item.artigoLei}</p>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2 px-1 text-[10px]/relaxed">
-                            <div>
-                              <span className="text-[7.5px] font-mono text-military-450 uppercase block">CÓDIGO INTEGRADO CNJ:</span>
-                              <span className="font-mono font-bold text-white block select-all break-all bg-black/55 p-1.5 rounded border border-military-850 mt-0.5 text-[10.5px]">
+                          <div className="bg-black/60 p-3.5 rounded-xl border border-military-750 space-y-3 shadow-inner">
+                            {/* 1. Numero */}
+                            <div className="bg-military-900/90 p-2 rounded-lg border border-military-800">
+                              <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">NÚMERO DO MANDADO:</span>
+                              <span className="font-mono font-extrabold text-amber-400 text-xs block select-all break-all mt-0.5">
                                 {item.numeroMandado}
                               </span>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">DT. NASCIMENTO:</span>
-                                <span className="font-bold text-military-200">{item.dataNascimento || 'NÃO INFORMADO'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">SITUAÇÃO:</span>
-                                <span className="font-bold text-military-200 uppercase">{item.situacao || 'PENDENTE'}</span>
-                              </div>
+                            {/* 2. Nome */}
+                            <div>
+                              <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">NOME:</span>
+                              <span className="font-black text-white text-xs block uppercase mt-0.5">
+                                <HighlightedText text={item.nome} query={searchQuery || activeSearchQuery || ''} />
+                              </span>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2">
+                            {/* 3. Alcunha */}
+                            <div>
+                              <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">ALCUNHA:</span>
+                              <span className="font-bold text-amber-300 text-xs block uppercase mt-0.5">
+                                {item.alcunha ? <HighlightedText text={item.alcunha} query={searchQuery || activeSearchQuery || ''} /> : 'NÃO INFORMADO'}
+                              </span>
+                            </div>
+
+                            {/* 4. Nome da Mãe */}
+                            <div>
+                              <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">NOME DA MÃE:</span>
+                              <span className="font-bold text-military-100 text-xs block uppercase mt-0.5">
+                                {item.nomeMae ? <HighlightedText text={item.nomeMae} query={searchQuery || activeSearchQuery || ''} /> : 'NÃO INFORMADO'}
+                              </span>
+                            </div>
+
+                            {/* 5. Data de Nascimento & 6. Situação */}
+                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-military-800/80">
                               <div>
-                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">GENITORA (MÃE):</span>
-                                <span className="font-bold text-military-200 uppercase">
-                                  {item.nomeMae ? (
-                                    <HighlightedText text={item.nomeMae} query={searchQuery || activeSearchQuery || ''} />
-                                  ) : (
-                                    'NÃO INFORMADO'
-                                  )}
+                                <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">DATA DE NASCIMENTO:</span>
+                                <span className="font-bold text-military-100 text-xs block mt-0.5">
+                                  {item.dataNascimento || 'NÃO INFORMADO'}
                                 </span>
                               </div>
                               <div>
-                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">GENITOR (PAI):</span>
-                                <span className="font-bold text-military-200 uppercase">
-                                  {item.nomePai ? (
-                                    <HighlightedText text={item.nomePai} query={searchQuery || activeSearchQuery || ''} />
-                                  ) : (
-                                    'NÃO INFORMADO'
-                                  )}
+                                <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">SITUAÇÃO:</span>
+                                <span className="font-extrabold text-emerald-400 text-xs block uppercase mt-0.5">
+                                  {item.situacao || 'PENDENTE DE CUMPRIMENTO'}
                                 </span>
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2">
+                            {/* 7. Data de emissão & 8. Órgão Emissor */}
+                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-military-800/80">
                               <div>
-                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">JUÍZO EXPEDIDOR:</span>
-                                <span className="font-bold text-military-200 uppercase">{item.orgaoEmissor}</span>
+                                <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">DATA DE EMISSÃO:</span>
+                                <span className="font-bold text-military-100 text-xs block mt-0.5">
+                                  {item.dataExpedicao || 'NÃO INFORMADO'}
+                                </span>
                               </div>
                               <div>
-                                <span className="text-[7.5px] font-mono text-military-450 uppercase block">DATA DE EXPEDIÇÃO:</span>
-                                <span className="font-bold text-military-200">{item.dataExpedicao || 'NÃO INFORMADO'}</span>
+                                <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">ÓRGÃO EMISSOR:</span>
+                                <span className="font-bold text-military-100 text-xs block uppercase mt-0.5">
+                                  {item.orgaoEmissor || 'CONSELHO NACIONAL DE JUSTIÇA'}
+                                </span>
                               </div>
                             </div>
-
-                            {item.observacoes && (
-                              <div className="bg-amber-50 border border-amber-200/50 p-2.5 rounded-lg mt-1 text-amber-950">
-                                <span className="text-[7.5px] font-mono text-amber-800 uppercase tracking-widest font-black block mb-0.5">
-                                  ⚠️ REGISTRO ADICIONAL:
-                                </span>
-                                <p className="text-[10px] text-amber-900 leading-relaxed uppercase font-medium">
-                                  {item.observacoes}
-                                </p>
-                              </div>
-                            )}
                           </div>
 
-                          <div className="flex items-center justify-end pt-2 border-t border-military-850">
+                          <div className="flex items-center justify-end pt-1">
                             <button
                               onClick={(e) => handleDeleteWarrant(item.id, e)}
-                              className="px-2.5 py-1 bg-red-100 hover:bg-red-200 border border-red-200 text-red-700 rounded-md text-[8px] uppercase font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                              className="px-2.5 py-1 bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 rounded-md text-[9px] uppercase font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                             >
-                              <Trash2 size={10} className="text-red-600" />
+                              <Trash2 size={11} className="text-red-400" />
                               Deletar Registro
                             </button>
                           </div>
                         </motion.div>
                       )}
                     </AnimatePresence>
-
-                    <div className="absolute bottom-3 right-4 text-military-500">
-                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                    </div>
                   </div>
                 );
               })}
