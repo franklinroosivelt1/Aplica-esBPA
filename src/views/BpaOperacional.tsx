@@ -595,7 +595,11 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     setHistoryList(prev => {
       const filtered = prev.filter(item => item.carCode !== prop.carCode);
       const updated = [prop, ...filtered].slice(0, 15); // keep max 15
-      localStorage.setItem('acregeo_car_history', JSON.stringify(updated));
+      try {
+        localStorage.setItem('acregeo_car_history', JSON.stringify(updated));
+      } catch (e) {
+        console.warn("localStorage setItem failed:", e);
+      }
       return updated;
     });
   };

@@ -30,7 +30,11 @@ export default function CubagemBPA({ onBack }: CubagemBPAProps) {
   });
 
   useEffect(() => {
-    localStorage.setItem('bpa_wood_entries', JSON.stringify(entries));
+    try {
+      localStorage.setItem('bpa_wood_entries', JSON.stringify(entries));
+    } catch (e) {
+      console.warn("localStorage setItem failed:", e);
+    }
   }, [entries]);
 
   // Shared fields

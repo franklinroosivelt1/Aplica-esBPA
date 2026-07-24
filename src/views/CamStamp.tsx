@@ -115,13 +115,21 @@ export default function CamStamp({ onBack }: CamStampProps) {
 
   // Persistence
   useEffect(() => {
-    localStorage.setItem('bpa_camera_settings', JSON.stringify(settings));
+    try {
+      localStorage.setItem('bpa_camera_settings', JSON.stringify(settings));
+    } catch (e) {
+      console.warn("localStorage setItem failed:", e);
+    }
   }, [settings]);
 
   useEffect(() => {
     // Limit saved gallery size in localStorage to 12 items to prevent QuotaExceededError and keep synchronous loading fast on low-spec phones
-    const limitedGallery = gallery.slice(0, 12);
-    localStorage.setItem('bpa_camera_gallery', JSON.stringify(limitedGallery));
+    try {
+      const limitedGallery = gallery.slice(0, 12);
+      localStorage.setItem('bpa_camera_gallery', JSON.stringify(limitedGallery));
+    } catch (e) {
+      console.warn("localStorage setItem failed:", e);
+    }
   }, [gallery]);
 
   useEffect(() => {

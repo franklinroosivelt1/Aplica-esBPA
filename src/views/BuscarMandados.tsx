@@ -125,22 +125,87 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
   );
 }
 
+// --- DATABASE PERSISTENCE SYSTEM (IndexedDB for high capacity storage without QuotaExceededError) ---
+const MANDADOS_DB_NAME = 'BpaMandadosDB_v2';
+const MANDADOS_DB_VERSION = 1;
+
+function openMandadosDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || !window.indexedDB) {
+      reject(new Error("IndexedDB não disponível."));
+      return;
+    }
+    const req = indexedDB.open(MANDADOS_DB_NAME, MANDADOS_DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('mandados')) {
+        db.createObjectStore('mandados');
+      }
+      if (!db.objectStoreNames.contains('attached_files')) {
+        db.createObjectStore('attached_files');
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function saveMandadosToStorage(mandadosList: Mandado[]): Promise<void> {
+  // Primary save: IndexedDB (virtually unlimited quota)
+  try {
+    const db = await openMandadosDB();
+    const tx = db.transaction('mandados', 'readwrite');
+    tx.objectStore('mandados').put(mandadosList, 'current_mandados');
+  } catch (err) {
+    console.warn("Falha ao salvar no IndexedDB (mandados):", err);
+  }
+
+  // Backup save: localStorage (wrapped safely to prevent QuotaExceededError)
+  try {
+    localStorage.setItem('bpa_mandados_db', JSON.stringify(mandadosList));
+  } catch (e) {
+    console.warn("localStorage quota excedida para bpa_mandados_db. Dados armazenados com segurança no IndexedDB.");
+  }
+}
+
+export async function saveAttachedFilesToStorage(filesList: any[]): Promise<void> {
+  // Primary save: IndexedDB (virtually unlimited quota for PDF text/lines)
+  try {
+    const db = await openMandadosDB();
+    const tx = db.transaction('attached_files', 'readwrite');
+    tx.objectStore('attached_files').put(filesList, 'current_attached_files');
+  } catch (err) {
+    console.warn("Falha ao salvar no IndexedDB (arquivos anexados):", err);
+  }
+
+  // Backup save: try localStorage safely
+  try {
+    localStorage.setItem('bpa_attached_files', JSON.stringify(filesList));
+  } catch (e) {
+    console.warn("localStorage quota excedida ao salvar arquivos PDF. Todo o conteúdo foi mantido com sucesso no IndexedDB!");
+    // Remove bloated localStorage item to free space for other app utilities
+    try {
+      localStorage.removeItem('bpa_attached_files');
+    } catch (err) {}
+  }
+}
+
 interface BuscarMandadosProps {
   onBack: () => void;
 }
 
 export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
   const [mandados, setMandados] = useState<Mandado[]>(() => {
-    const saved = localStorage.getItem('bpa_mandados_db');
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem('bpa_mandados_db');
+      if (saved) {
         const decoded = JSON.parse(saved);
-        if (Array.isArray(decoded)) {
+        if (Array.isArray(decoded) && decoded.length > 0) {
           return decoded;
         }
-      } catch (e) {
-        // ignore
       }
+    } catch (e) {
+      // ignore
     }
     return PRE_SEEDED_MANDADOS;
   });
@@ -150,20 +215,55 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
   // Multiple PDF attachments types & state
   const [attachedFiles, setAttachedFiles] = useState<any[]>(() => {
-    const saved = localStorage.getItem('bpa_attached_files');
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem('bpa_attached_files');
+      if (saved) {
         return JSON.parse(saved);
-      } catch (e) {
-        return [];
       }
+    } catch (e) {
+      return [];
     }
     return [];
   });
 
+  // Hydrate asynchronously from IndexedDB on component mount
   useEffect(() => {
-    localStorage.setItem('bpa_attached_files', JSON.stringify(attachedFiles));
-  }, [attachedFiles]);
+    let isMounted = true;
+    async function loadDataFromStorage() {
+      try {
+        const db = await openMandadosDB();
+
+        // 1. Mandados
+        const mandadosTx = db.transaction('mandados', 'readonly');
+        const mandadosReq = mandadosTx.objectStore('mandados').get('current_mandados');
+        mandadosReq.onsuccess = () => {
+          if (!isMounted) return;
+          if (mandadosReq.result && Array.isArray(mandadosReq.result) && mandadosReq.result.length > 0) {
+            setMandados(mandadosReq.result);
+          } else if (mandados.length > 0) {
+            saveMandadosToStorage(mandados);
+          }
+        };
+
+        // 2. Attached PDF Files
+        const filesTx = db.transaction('attached_files', 'readonly');
+        const filesReq = filesTx.objectStore('attached_files').get('current_attached_files');
+        filesReq.onsuccess = () => {
+          if (!isMounted) return;
+          if (filesReq.result && Array.isArray(filesReq.result) && filesReq.result.length > 0) {
+            setAttachedFiles(filesReq.result);
+          } else if (attachedFiles.length > 0) {
+            saveAttachedFilesToStorage(attachedFiles);
+          }
+        };
+      } catch (err) {
+        console.warn("Aviso na inicialização do armazenamento IndexedDB:", err);
+      }
+    }
+
+    loadDataFromStorage();
+    return () => { isMounted = false; };
+  }, []);
 
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
   
@@ -255,7 +355,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
       return;
     }
 
-    const currentMap = new Map(mandados.map(w => [w.numeroMandado, w]));
+    const currentMap = new Map<string, Mandado>(mandados.map(w => [w.numeroMandado, w]));
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
@@ -479,9 +579,10 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     }
 
     setAttachedFiles(newAttachedFiles);
+    saveAttachedFilesToStorage(newAttachedFiles);
     
     const mergedList = Array.from(currentMap.values());
-    localStorage.setItem('bpa_mandados_db', JSON.stringify(mergedList));
+    saveMandadosToStorage(mergedList);
     setMandados(mergedList);
 
     setIsParsingPdf(false);
@@ -524,20 +625,21 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     
     const updatedFiles = attachedFiles.filter(f => f.id !== fileId);
     setAttachedFiles(updatedFiles);
+    saveAttachedFilesToStorage(updatedFiles);
     
     // Also remove warrants parsed from that file if they are in public state and local storage
     const warrantsToKeep = mandados.filter(m => 
       !fileToDelete.extractedWarrants.some((del: Mandado) => del.numeroMandado === m.numeroMandado)
     );
     setMandados(warrantsToKeep);
-    localStorage.setItem('bpa_mandados_db', JSON.stringify(warrantsToKeep));
+    saveMandadosToStorage(warrantsToKeep);
     
     showToast(`Arquivo "${fileToDelete.name}" e seus registros foram excluídos!`);
   };
 
   const confirmImportWarrants = () => {
     if (parsedWarrants.length === 0) return;
-    const currentMap = new Map(mandados.map(w => [w.numeroMandado, w]));
+    const currentMap = new Map<string, Mandado>(mandados.map(w => [w.numeroMandado, w]));
     let insertedCount = 0;
     
     parsedWarrants.forEach(w => {
@@ -548,7 +650,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     });
     
     const merged = Array.from(currentMap.values());
-    localStorage.setItem('bpa_mandados_db', JSON.stringify(merged));
+    saveMandadosToStorage(merged);
     setMandados(merged);
     setParsedWarrants([]);
     showToast(`Operação concluída: ${insertedCount} novos mandados adicionados off-line!`);
@@ -608,7 +710,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     };
 
     const updated = [created, ...mandados];
-    localStorage.setItem('bpa_mandados_db', JSON.stringify(updated));
+    saveMandadosToStorage(updated);
     setMandados(updated);
     setShowAddForm(false);
     setNewMandado({
@@ -634,7 +736,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
     e.stopPropagation();
     if (confirm("Deseja realmente remover este mandado da base do smartphone?")) {
       const updated = mandados.filter(item => item.id !== id);
-      localStorage.setItem('bpa_mandados_db', JSON.stringify(updated));
+      saveMandadosToStorage(updated);
       setMandados(updated);
       showToast("Mandado de prisão removido com sucesso!");
     }
@@ -642,7 +744,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
   const handleResetDB = () => {
     if (confirm("Deseja restaurar os dados de mandados iniciais pré-definidos do sistema?")) {
-      localStorage.setItem('bpa_mandados_db', JSON.stringify(PRE_SEEDED_MANDADOS));
+      saveMandadosToStorage(PRE_SEEDED_MANDADOS);
       setMandados(PRE_SEEDED_MANDADOS);
       showToast("Base de dados restaurada com sucesso!");
     }
@@ -665,7 +767,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
         try {
           const parsed = JSON.parse(event.target?.result as string);
           if (Array.isArray(parsed)) {
-            localStorage.setItem('bpa_mandados_db', JSON.stringify(parsed));
+            saveMandadosToStorage(parsed);
             setMandados(parsed);
             showToast(`Sincronizados ${parsed.length} mandados locais com sucesso!`);
           } else {
