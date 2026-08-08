@@ -1,6 +1,11 @@
-const CACHE_NAME = 'bpa-app-cache-v2';
+const CACHE_NAME = 'bpa-app-cache-v3';
 
 self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(['/', '/index.html']).catch(() => {});
+    })
+  );
   self.skipWaiting();
 });
 
@@ -19,8 +24,7 @@ self.addEventListener('fetch', (event) => {
   
   // Cache requests to our own origin
   if (url.origin === self.location.origin) {
-    // For navigation/HTML requests, always use a Network-First strategy
-    // to prevent caching broken or outdated bundle HTML files.
+    // For navigation/HTML requests, use Network-First with Cache fallback
     const isHtml = event.request.mode === 'navigate' || 
                    url.pathname === '/' || 
                    url.pathname === '/index.html' || 
@@ -37,8 +41,9 @@ self.addEventListener('fetch', (event) => {
             return networkResponse;
           })
           .catch(() => {
-            // Fallback to cache only if network is completely unavailable
-            return caches.match(event.request) || caches.match('/index.html') || caches.match('/');
+            // Fallback to cache if network is unavailable
+            return caches.match(event.request)
+              .then((cached) => cached || caches.match('/index.html') || caches.match('/'));
           })
       );
     } else {
@@ -46,7 +51,6 @@ self.addEventListener('fetch', (event) => {
       event.respondWith(
         caches.match(event.request).then((cachedResponse) => {
           if (cachedResponse) {
-            // Fetch new version in background to update cache for next load
             fetch(event.request).then((networkResponse) => {
               if (networkResponse && networkResponse.status === 200) {
                 caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
@@ -63,6 +67,8 @@ self.addEventListener('fetch', (event) => {
               });
             }
             return networkResponse;
+          }).catch(() => {
+            return new Response('', { status: 404, statusText: 'Offline' });
           });
         })
       );
@@ -72,9 +78,10 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('google.com') ||
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('arcgisonline.com') ||
-    url.hostname.includes('googleusercontent.com')
+    url.hostname.includes('googleusercontent.com') ||
+    url.hostname.includes('cdnjs.cloudflare.com')
   ) {
-    // Cache tiles and static resources fetched on the fly
+    // Cache external tiles and libraries (like PDF.js)
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
         if (cachedResponse) {

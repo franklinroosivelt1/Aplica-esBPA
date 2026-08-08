@@ -216,44 +216,53 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
 
   const generatePDF = async () => {
     if (images.length === 0) return;
-    
-    const pdf = new jsPDF({
-      orientation: 'p',
-      unit: 'mm',
-      format: 'a4'
-    });
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-
-    for (let i = 0; i < images.length; i++) {
-      if (i > 0) pdf.addPage();
-      
-      const img = images[i];
-      try {
-        const loadedImg = await loadImage(img);
-        const naturalWidth = loadedImg.naturalWidth || loadedImg.width || 1280;
-        const naturalHeight = loadedImg.naturalHeight || loadedImg.height || 720;
-        const ratio = naturalWidth / naturalHeight;
-        
-        let width = pdfWidth - 20;
-        let height = width / ratio;
-        
-        if (height > pdfHeight - 20) {
-          height = pdfHeight - 20;
-          width = height * ratio;
+    // Load all images first to extract natural dimensions
+    const loadedImagesInfo = await Promise.all(
+      images.map(async (img) => {
+        try {
+          const loadedImg = await loadImage(img);
+          const naturalWidth = loadedImg.naturalWidth || loadedImg.width || 1280;
+          const naturalHeight = loadedImg.naturalHeight || loadedImg.height || 720;
+          return { img, naturalWidth, naturalHeight };
+        } catch (err) {
+          console.error('Failed to load image for PDF', err);
+          return { img, naturalWidth: 1280, naturalHeight: 720 };
         }
+      })
+    );
 
-        const x = (pdfWidth - width) / 2;
-        const y = (pdfHeight - height) / 2;
-        
-        const format = img.toLowerCase().includes('png') ? 'PNG' : 'JPEG';
-        pdf.addImage(img, format, x, y, width, height);
-      } catch (err) {
-        console.error('Failed to load image for PDF', err);
-        pdf.addImage(img, 'JPEG', 10, 10, pdfWidth - 20, pdfHeight - 20);
+    let pdf: jsPDF | null = null;
+    const margin = 5; // 5mm light white border
+
+    for (let i = 0; i < loadedImagesInfo.length; i++) {
+      const { img, naturalWidth, naturalHeight } = loadedImagesInfo[i];
+      const isLandscape = naturalWidth > naturalHeight;
+      const ratio = naturalWidth / naturalHeight;
+
+      // Calculate target image dimensions fitting standard page proportion with light border
+      const imageWidth = isLandscape ? 287 : 200;
+      const imageHeight = imageWidth / ratio;
+
+      const pageWidth = imageWidth + (margin * 2);
+      const pageHeight = imageHeight + (margin * 2);
+      const orientation = isLandscape ? 'l' : 'p';
+
+      if (i === 0) {
+        pdf = new jsPDF({
+          orientation: orientation,
+          unit: 'mm',
+          format: [pageWidth, pageHeight]
+        });
+      } else {
+        pdf!.addPage([pageWidth, pageHeight], orientation);
       }
+
+      const format = img.toLowerCase().includes('png') ? 'PNG' : 'JPEG';
+      pdf!.addImage(img, format, margin, margin, imageWidth, imageHeight);
     }
+
+    if (!pdf) return;
 
     const blob = pdf.output('blob');
     const url = URL.createObjectURL(blob);

@@ -13,10 +13,20 @@ function displayFatalError(error: Error | string) {
 }
 
 window.addEventListener('error', (event) => {
+  const msg = event.message || '';
+  if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('script error') || msg.includes('Load failed') || msg.includes('net::ERR_')) {
+    // Ignore network script load or image load errors when offline
+    return;
+  }
   displayFatalError(event.error || event.message);
 });
 
 window.addEventListener('unhandledrejection', (event) => {
+  const reasonStr = event.reason ? (event.reason.message || String(event.reason)) : '';
+  if (reasonStr.includes('Failed to fetch') || reasonStr.includes('NetworkError') || reasonStr.includes('offline') || reasonStr.includes('net::ERR_') || reasonStr.includes('Load failed')) {
+    // Ignore unhandled promise rejections caused by offline network fetches
+    return;
+  }
   displayFatalError(event.reason);
 });
 
