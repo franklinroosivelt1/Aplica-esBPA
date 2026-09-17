@@ -81,10 +81,10 @@ export default function Home({ onNavigate }: HomeProps) {
           id="header-card"
         >
           <div className="relative z-10 flex flex-col items-center justify-center">
-            <h1 className="text-xl font-black tracking-tight text-military-100 uppercase font-sans">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-military-100 uppercase font-sans">
               APLICAÇÕES AMBIENTAIS
             </h1>
-            <p className="text-[11px] text-military-400 mt-0.5 max-w-[300px] mx-auto leading-normal font-bold uppercase tracking-widest">
+            <p className="text-xs sm:text-[13px] text-military-300 mt-1 max-w-[340px] mx-auto leading-normal font-bold uppercase tracking-wider">
               Plataforma de Gestão de Campo e Fiscalização
             </p>
           </div>
@@ -116,7 +116,7 @@ export default function Home({ onNavigate }: HomeProps) {
                 <div className={`p-3 rounded-xl shrink-0 transition-colors flex items-center justify-center ${
                   isPrimary
                     ? 'bg-military-700/70 text-white border border-military-400/40'
-                    : 'bg-military-900 text-military-400 border border-military-750 group-hover:text-military-200 group-hover:border-military-600'
+                    : 'bg-military-900 text-military-300 border border-military-750 group-hover:text-military-100 group-hover:border-military-600'
                 }`}>
                   <IconComp className="w-5 h-5" strokeWidth={2.2} />
                 </div>
@@ -124,19 +124,19 @@ export default function Home({ onNavigate }: HomeProps) {
                 {/* Center Content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className={`font-black text-[13px] uppercase tracking-wide leading-tight truncate ${
+                    <h3 className={`font-black text-sm sm:text-base uppercase tracking-wide leading-tight truncate ${
                       isPrimary ? 'text-white' : 'text-military-100 group-hover:text-white'
                     }`}>
                       {item.label}
                     </h3>
                     {isPrimary && (
-                      <span className="bg-white/20 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0">
+                      <span className="bg-white/20 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0">
                         Principal
                       </span>
                     )}
                   </div>
-                  <p className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 truncate ${
-                    isPrimary ? 'text-military-200' : 'text-military-400'
+                  <p className={`text-xs font-semibold mt-0.5 truncate ${
+                    isPrimary ? 'text-military-200' : 'text-military-300'
                   }`}>
                     {item.subtitle}
                   </p>
@@ -146,7 +146,7 @@ export default function Home({ onNavigate }: HomeProps) {
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
                   isPrimary
                     ? 'bg-military-500/60 text-white group-hover:translate-x-0.5'
-                    : 'bg-military-900 border border-military-750 text-military-400 group-hover:text-military-200 group-hover:border-military-600 group-hover:translate-x-0.5'
+                    : 'bg-military-900 border border-military-750 text-military-300 group-hover:text-military-100 group-hover:border-military-600 group-hover:translate-x-0.5'
                 }`}>
                   <ChevronRight className="w-4 h-4" />
                 </div>
@@ -159,12 +159,12 @@ export default function Home({ onNavigate }: HomeProps) {
       {/* Footer */}
       <footer className="pt-6 pb-2 text-center" id="footer">
         <div className="flex items-center justify-center gap-2 mb-1">
-          <div className="w-1.5 h-1.5 bg-military-500 rounded-full animate-pulse" />
-          <span className="text-[10px] font-mono tracking-widest uppercase text-military-400 font-extrabold">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+          <span className="text-xs font-mono tracking-wider uppercase text-military-300 font-extrabold">
             BPA • Operação e Fiscalização Integrada
           </span>
         </div>
-        <p className="text-[9px] text-military-500 uppercase tracking-widest font-mono">
+        <p className="text-[11px] text-military-400 uppercase tracking-widest font-mono font-medium">
           Acre • Suporte Offline Ativo
         </p>
       </footer>

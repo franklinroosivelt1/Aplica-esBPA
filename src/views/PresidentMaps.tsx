@@ -4121,15 +4121,15 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         <div className="grid grid-cols-4 border-b border-military-700 bg-military-800 text-center font-mono">
           <button
             onClick={() => setActiveTab('ferramentas')}
-            className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-1 h-14 ${activeTab === 'ferramentas' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
+            className={`py-2 text-xs font-black uppercase transition-all flex flex-col items-center justify-center gap-1 h-14 ${activeTab === 'ferramentas' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
             <Wrench className="w-4 h-4" />
-            <span>Recursos</span>
+            <span className="tracking-wide">Recursos</span>
           </button>
 
           <button
             onClick={() => setActiveTab('pontos')}
-            className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'pontos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
+            className={`py-2 text-xs font-black uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'pontos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
             <MapPin className="w-4 h-4" />
             <span className="leading-tight">Pontos<br />Salvos</span>
@@ -4137,7 +4137,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           
           <button
             onClick={() => setActiveTab('camadas')}
-            className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'camadas' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
+            className={`py-2 text-xs font-black uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'camadas' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
             <Layers className="w-4 h-4" />
             <span className="leading-tight">Camadas/<br />Mapas</span>
@@ -4145,7 +4145,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           
           <button
             onClick={() => setActiveTab('trajetos')}
-            className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'trajetos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
+            className={`py-2 text-xs font-black uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'trajetos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
             <Route className="w-4 h-4" />
             <span className="leading-tight">Rotas<br />Gravadas</span>

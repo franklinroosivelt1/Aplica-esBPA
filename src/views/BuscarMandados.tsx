@@ -1070,66 +1070,66 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
       {/* Portal Nacional BNMP – Consulta de CPF Online no CNJ */}
       <div className="bg-red-50/50 border border-red-200/80 p-5 rounded-2xl mb-5 shadow-sm relative overflow-hidden">
-        <div className="absolute top-0 right-0 bg-red-100 text-red-700/90 border-l border-b border-red-200 px-2.5 py-1 rounded-bl-xl text-[8px] font-mono font-bold uppercase tracking-wider flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+        <div className="absolute top-0 right-0 bg-red-100 text-red-700/90 border-l border-b border-red-200 px-3 py-1 rounded-bl-xl text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5">
+          <span className="w-2 h-2 bg-red-500 rounded-full" />
           Conexão Externa
         </div>
 
         <div className="flex items-start gap-3 mb-3">
           <div className="p-2 bg-red-100 border border-red-150 rounded-xl text-red-700">
-            <ShieldAlert size={18} />
+            <ShieldAlert size={20} />
           </div>
           <div>
-            <h2 className="text-xs font-bold text-red-950 uppercase tracking-wider">
+            <h2 className="text-sm font-black text-red-950 uppercase tracking-wider">
               CONSULTAR PORTAL BNMP ONLINE (CNJ)
             </h2>
-            <p className="text-[9px] text-red-700 uppercase font-mono mt-0.5 leading-tight">
+            <p className="text-xs text-red-700 uppercase font-mono mt-0.5 leading-tight font-semibold">
               Acesso direto ao site oficial
             </p>
           </div>
         </div>
 
-        <p className="text-[10px] text-red-800 leading-relaxed mb-4 uppercase font-medium">
+        <p className="text-xs text-red-900 leading-relaxed mb-4 uppercase font-medium">
           Acesse o portal nacional de mandados do Conselho Nacional de Justiça para realizar pesquisas utilizando filtros de CPF, nome de foragidos ou número de processo.
         </p>
 
         <div className="space-y-3">
           <button
             onClick={handleAbrirPortal}
-            className="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] transition-all text-white font-extrabold text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+            className="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] transition-all text-white font-black text-xs sm:text-sm py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm"
           >
-            <ExternalLink size={14} className="text-white" />
+            <ExternalLink size={15} className="text-white" />
             <span>Pesquisar no Portal CNJ BNMP ↗</span>
           </button>
         </div>
 
-        <div className="mt-2.5 flex items-center justify-center gap-1 text-[8.5px] font-mono text-red-600/70 uppercase font-semibold text-center">
+        <div className="mt-2.5 flex items-center justify-center gap-1 text-[11px] font-mono text-red-700 uppercase font-semibold text-center">
           <span>portalbnmp.cnj.jus.br/#/pesquisa-peca</span>
         </div>
       </div>
 
       {/* Importador de PDF BNMP (Offline) */}
       <div className="bg-military-800 border border-military-750 p-5 rounded-2xl mb-5 shadow-sm relative overflow-hidden">
-        <div className="absolute top-0 right-0 bg-emerald-100 text-emerald-800 border-l border-b border-emerald-200 px-2.5 py-1 rounded-bl-xl text-[8px] font-mono font-black uppercase tracking-wider flex items-center gap-1">
-          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+        <div className="absolute top-0 right-0 bg-emerald-100 text-emerald-800 border-l border-b border-emerald-200 px-3 py-1 rounded-bl-xl text-[10px] font-mono font-black uppercase tracking-wider flex items-center gap-1.5">
+          <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
           100% OFF-LINE
         </div>
 
         <div className="flex items-start gap-3 mb-3">
           <div className="p-2 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700">
-            <FileText size={18} />
+            <FileText size={20} />
           </div>
           <div>
-            <h2 className="text-xs font-bold text-black uppercase tracking-wider">
+            <h2 className="text-sm font-black text-black uppercase tracking-wider">
               IMPORTAR MANDADOS EM PDF (BNMP)
             </h2>
-            <p className="text-[9px] text-military-500 uppercase font-mono mt-0.5 leading-tight">
+            <p className="text-xs text-military-500 uppercase font-mono mt-0.5 leading-tight font-semibold">
               Processamento seguro local no dispositivo
             </p>
           </div>
         </div>
 
-        <p className="text-[10px] text-military-600 leading-relaxed mb-4 uppercase font-medium">
+        <p className="text-xs text-military-600 leading-relaxed mb-4 uppercase font-medium">
           Carregue o arquivo PDF com as Certidões de Mandados de Prisão oficiais do BNMP. O App realizará a extração e inserção dos dados de forma local.
         </p>
 
@@ -1147,21 +1147,21 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
           <button
             type="button"
             onClick={() => document.getElementById('bnmp-pdf-picker')?.click()}
-            className="w-full bg-military-500 hover:bg-military-450 text-white active:scale-[0.98] border border-military-750 transition-all font-black text-[10px] py-3.5 px-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm text-center leading-tight hover:border-military-500"
+            className="w-full bg-military-500 hover:bg-military-450 text-white active:scale-[0.98] border border-military-750 transition-all font-black text-xs sm:text-sm py-3.5 px-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm text-center leading-tight hover:border-military-500"
           >
-            <Database size={13} className="text-white flex-shrink-0" />
-            <span>SELECIONAR ARQUIVO.PDF PARA BUSCAR OFF-LINE</span>
+            <Database size={15} className="text-white flex-shrink-0" />
+            <span>SELECIONAR ARQUIVO .PDF PARA BUSCAR OFF-LINE</span>
           </button>
         ) : (
           <div className="space-y-2 mt-2">
-            <span className="text-[9px] font-mono font-bold text-military-500 uppercase tracking-widest block">
+            <span className="text-xs font-mono font-bold text-military-500 uppercase tracking-wider block">
               Documentos Anexados:
             </span>
             <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
               {attachedFiles.map((f) => (
-                <div key={f.id} className="flex items-center justify-between px-3 py-2 bg-military-900 border border-military-750 rounded-xl gap-3">
+                <div key={f.id} className="flex items-center justify-between px-3 py-2.5 bg-military-900 border border-military-750 rounded-xl gap-3">
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <FileText className="w-3.5 h-3.5 text-military-500 flex-shrink-0" />
+                    <FileText className="w-4 h-4 text-military-500 flex-shrink-0" />
                     <span className="text-xs font-mono font-bold text-military-400 uppercase truncate" title={f.name}>
                       {f.name}
                     </span>
@@ -1169,10 +1169,10 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                   <button
                     type="button"
                     onClick={() => handleDeleteAttachedFile(f.id)}
-                    className="p-1 px-1.5 text-red-600 hover:text-red-500 hover:bg-red-50 rounded transition-all flex items-center justify-center cursor-pointer"
+                    className="p-1.5 px-2 text-red-600 hover:text-red-500 hover:bg-red-50 rounded transition-all flex items-center justify-center cursor-pointer"
                     title="Excluir arquivo"
                   >
-                    <Trash2 size={13} />
+                    <Trash2 size={15} />
                   </button>
                 </div>
               ))}
@@ -1181,7 +1181,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
             <button
               type="button"
               onClick={() => document.getElementById('bnmp-pdf-picker')?.click()}
-              className="mt-2 text-center w-full block text-[9px] font-black text-military-500 hover:text-military-300 cursor-pointer uppercase tracking-wider py-1 hover:underline"
+              className="mt-2 text-center w-full block text-xs font-black text-military-500 hover:text-military-300 cursor-pointer uppercase tracking-wider py-1.5 hover:underline"
             >
               + Anexar outro arquivo PDF
             </button>
@@ -1190,8 +1190,8 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
         {isParsingPdf && (
           <div className="flex items-center justify-center gap-2 py-3 bg-military-900 border border-military-750 rounded-xl mt-3 animate-pulse">
-            <div className="w-3.5 h-3.5 border border-military-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-[10px] text-military-500 font-mono font-bold uppercase tracking-wider">
+            <div className="w-4 h-4 border border-military-500 border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-military-500 font-mono font-bold uppercase tracking-wider">
               {parseProgress || "Lendo..."}
             </span>
           </div>
@@ -1204,18 +1204,18 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por Nome, Vulgo, CPF ou Nº Mandado..."
-            className="w-full bg-white text-black border border-military-700 focus:border-emerald-700 focus:outline-none rounded-xl py-3 pl-10 pr-4 placeholder-military-600 text-xs tracking-wide uppercase font-bold transition-all shadow-xs"
+            className="w-full bg-white text-black border border-military-700 focus:border-emerald-700 focus:outline-none rounded-xl py-3.5 pl-11 pr-4 placeholder-military-600 text-sm tracking-wide uppercase font-bold transition-all shadow-xs"
           />
-          <Search className="absolute left-3.5 top-3.5 w-4 h-4 text-military-400" />
+          <Search className="absolute left-3.5 top-4 w-5 h-5 text-military-400" />
           {searchQuery && (
             <button 
               onClick={() => {
                 setSearchQuery('');
                 setActiveSearchQuery('');
               }}
-              className="absolute right-3.5 top-3.5 hover:text-white text-military-400 whitespace-nowrap"
+              className="absolute right-3.5 top-4 hover:text-white text-military-400 whitespace-nowrap"
             >
-              <X size={14} className="hover:scale-110 transition-transform" />
+              <X size={16} className="hover:scale-110 transition-transform" />
             </button>
           )}
         </div>
@@ -1224,9 +1224,9 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
         <button
           type="button"
           onClick={handleSearchClick}
-          className="w-full bg-emerald-700 hover:bg-emerald-600 active:scale-[0.99] transition-all text-white font-black text-xs py-3 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm border border-emerald-500/30 mt-3"
+          className="w-full bg-emerald-700 hover:bg-emerald-600 active:scale-[0.99] transition-all text-white font-black text-xs sm:text-sm py-3.5 rounded-xl uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-sm border border-emerald-500/30 mt-3"
         >
-          <FileText size={14} className="text-emerald-300" />
+          <FileText size={16} className="text-emerald-300" />
           <span>Buscar Mandado no Arquivo .PDF</span>
         </button>
 
@@ -1234,13 +1234,13 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
         {parsedWarrants.length > 0 && (
           <div className="mt-4 bg-military-850 border border-military-750 rounded-xl p-3.5 space-y-3">
             <div className="flex items-center justify-between border-b border-military-750 pb-2">
-              <span className="text-[9px] font-mono font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1">
-                <UserCheck size={11} />
+              <span className="text-xs font-mono font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1.5">
+                <UserCheck size={14} />
                 Suspeitos Encontrados ({parsedWarrants.length})
               </span>
               <button 
                 onClick={() => setParsedWarrants([])}
-                className="text-military-450 hover:text-red-600 text-[9px] font-bold uppercase cursor-pointer"
+                className="text-military-450 hover:text-red-600 text-xs font-bold uppercase cursor-pointer"
               >
                 Limpar
               </button>
@@ -1253,56 +1253,56 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                   <div className="bg-military-900/60 p-2 rounded-lg border border-military-700/60">
                     <div className="flex justify-between items-start gap-2">
                       <div className="flex-1 min-w-0">
-                        <span className="text-[7.5px] font-mono font-black text-emerald-900 uppercase block tracking-wider">
+                        <span className="text-[10px] font-mono font-black text-emerald-900 uppercase block tracking-wider">
                           1. NOME DA PESSOA:
                         </span>
                         <span 
-                          className="font-black uppercase text-xs sm:text-sm block leading-tight break-words"
+                          className="font-black uppercase text-sm sm:text-base block leading-tight break-words"
                           style={{ color: '#000000' }}
                         >
                           {item.nome}
                         </span>
                       </div>
-                      <span className="bg-emerald-100 border border-emerald-300 text-emerald-950 text-[8px] font-black uppercase px-1.5 py-0.5 rounded flex-shrink-0">
+                      <span className="bg-emerald-100 border border-emerald-300 text-emerald-950 text-[10px] font-black uppercase px-2 py-0.5 rounded flex-shrink-0">
                         {item.tipoPrisao || 'PREVENTIVA'}
                       </span>
                     </div>
                   </div>
                   
                   {/* 2. CPF & 3. NOME DA MÃE */}
-                  <div className="grid grid-cols-2 gap-2 text-[9.5px]">
-                    <div className="bg-military-900/40 p-1.5 rounded-lg border border-military-700/40">
-                      <span className="text-[7.5px] font-mono font-black text-emerald-900 uppercase block">2. CPF:</span>
-                      <span className="font-mono font-black block" style={{ color: '#000000' }}>
-                        {item.cpf || <span className="text-military-500 italic font-normal">NÃO INFORMADO</span>}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-military-900/40 p-2 rounded-lg border border-military-700/40">
+                      <span className="text-[10px] font-mono font-black text-emerald-900 uppercase block">2. CPF:</span>
+                      <span className="font-mono font-black text-xs sm:text-sm block mt-0.5" style={{ color: '#000000' }}>
+                        {item.cpf || <span className="text-military-500 italic font-normal text-xs">NÃO INFORMADO</span>}
                       </span>
                     </div>
-                    <div className="bg-military-900/40 p-1.5 rounded-lg border border-military-700/40">
-                      <span className="text-[7.5px] font-mono font-black text-emerald-900 uppercase block">3. NOME DA MÃE:</span>
-                      <span className="font-black block truncate uppercase" style={{ color: '#000000' }}>
-                        {item.nomeMae || <span className="text-military-500 italic font-normal">NÃO INFORMADO</span>}
+                    <div className="bg-military-900/40 p-2 rounded-lg border border-military-700/40">
+                      <span className="text-[10px] font-mono font-black text-emerald-900 uppercase block">3. NOME DA MÃE:</span>
+                      <span className="font-black text-xs sm:text-sm block truncate uppercase mt-0.5" style={{ color: '#000000' }}>
+                        {item.nomeMae || <span className="text-military-500 italic font-normal text-xs">NÃO INFORMADO</span>}
                       </span>
                     </div>
                   </div>
 
                   {/* 4. SITUAÇÃO & 5. DATA DA EMISSÃO */}
-                  <div className="grid grid-cols-2 gap-2 text-[9.5px]">
-                    <div className="bg-military-900/40 p-1.5 rounded-lg border border-military-700/40">
-                      <span className="text-[7.5px] font-mono font-black text-emerald-900 uppercase block">4. SITUAÇÃO:</span>
-                      <span className="font-black text-emerald-950 text-[8.5px] uppercase block bg-emerald-100/90 border border-emerald-300 px-1.5 py-0.5 rounded mt-0.5 text-center">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-military-900/40 p-2 rounded-lg border border-military-700/40">
+                      <span className="text-[10px] font-mono font-black text-emerald-900 uppercase block">4. SITUAÇÃO:</span>
+                      <span className="font-black text-emerald-950 text-[10px] sm:text-xs uppercase block bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded mt-0.5 text-center">
                         {item.situacao || 'PENDENTE DE CUMPRIMENTO'}
                       </span>
                     </div>
-                    <div className="bg-military-900/40 p-1.5 rounded-lg border border-military-700/40">
-                      <span className="text-[7.5px] font-mono font-black text-emerald-900 uppercase block">5. DATA DA EMISSÃO:</span>
-                      <span className="font-mono font-black block mt-0.5" style={{ color: '#000000' }}>
-                        {item.dataExpedicao || <span className="text-military-500 italic font-normal">NÃO INFORMADO</span>}
+                    <div className="bg-military-900/40 p-2 rounded-lg border border-military-700/40">
+                      <span className="text-[10px] font-mono font-black text-emerald-900 uppercase block">5. DATA DA EMISSÃO:</span>
+                      <span className="font-mono font-black text-xs sm:text-sm block mt-0.5" style={{ color: '#000000' }}>
+                        {item.dataExpedicao || <span className="text-military-500 italic font-normal text-xs">NÃO INFORMADO</span>}
                       </span>
                     </div>
                   </div>
 
                   {/* POSTERIORMENTE: DEMAIS DADOS EXISTENTES */}
-                  <div className="pt-1.5 border-t border-military-700/50 text-[8.5px] font-mono text-military-600 block truncate uppercase">
+                  <div className="pt-2 border-t border-military-700/50 text-xs font-mono text-military-600 block truncate uppercase">
                     REGISTRO / PROCESSO: <span className="font-bold text-black">{item.numeroMandado}</span>
                   </div>
                 </div>
@@ -1311,7 +1311,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
             <button
               onClick={confirmImportWarrants}
-              className="w-full bg-emerald-700 hover:bg-emerald-600 transition-all text-white font-black text-xs py-2.5 rounded-lg uppercase tracking-wider block text-center cursor-pointer shadow-sm"
+              className="w-full bg-emerald-700 hover:bg-emerald-600 transition-all text-white font-black text-xs sm:text-sm py-3 rounded-xl uppercase tracking-wider block text-center cursor-pointer shadow-sm"
             >
               Confirmar Importação de ({parsedWarrants.length}) Mandados
             </button>
@@ -1321,12 +1321,12 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
         {/* Integrated List of Loaded/Filtered Warrants */}
         {filteredMandados.length > 0 && (
           <div className="mt-5 pt-4 border-t border-military-750 space-y-3">
-            <div className="flex items-center justify-between text-[10px] font-mono text-military-400 px-0.5 pb-1 font-bold">
-              <span className="uppercase tracking-widest flex items-center gap-1 text-military-300">
-                <Database className="w-3.5 h-3.5 text-emerald-700" />
+            <div className="flex items-center justify-between text-xs font-mono text-military-400 px-0.5 pb-1 font-bold">
+              <span className="uppercase tracking-wider flex items-center gap-1.5 text-military-300">
+                <Database className="w-4 h-4 text-emerald-700" />
                 Mandados Carregados:
               </span>
-              <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded font-black">
+              <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-1 rounded-lg font-black text-xs">
                 {filteredMandados.length} ATIVOS LOCAL
               </span>
             </div>
@@ -1347,14 +1347,14 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                     {/* PRIORIDADE DE EXIBIÇÃO: 1. Nome da pessoa, 2. CPF, 3. Nome da mãe, 4. Situação, 5. Data da Emissão */}
                     <div className="space-y-2.5">
                       {/* 1. NOME DA PESSOA (DESTAQUE PRIORITÁRIO) */}
-                      <div className="bg-military-900/60 p-2.5 rounded-xl border border-military-700/70">
+                      <div className="bg-military-900/60 p-3 rounded-xl border border-military-700/70">
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <span className="text-[8px] font-mono font-black text-emerald-900 uppercase block tracking-wider mb-0.5">
+                            <span className="text-[10px] font-mono font-black text-emerald-900 uppercase block tracking-wider mb-0.5">
                               1. NOME DA PESSOA:
                             </span>
                             <h4 
-                              className="font-black text-sm sm:text-base tracking-wide uppercase leading-snug break-words"
+                              className="font-black text-base sm:text-lg tracking-wide uppercase leading-snug break-words"
                               style={{ color: '#000000' }}
                             >
                               <HighlightedText text={item.nome} query={searchQuery || activeSearchQuery || ''} className="text-black font-black" />
@@ -1363,12 +1363,12 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                           
                           <div className="text-military-600 flex-shrink-0 pt-0.5">
                             {isExpanded ? (
-                              <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-emerald-900 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-300">
                                 <ChevronUp className="w-3.5 h-3.5" />
                                 Menos detalhes
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold text-military-600 bg-white px-2 py-0.5 rounded border border-military-700">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-military-600 bg-white px-2.5 py-1 rounded-lg border border-military-700">
                                 <ChevronDown className="w-3.5 h-3.5" />
                                 Mais detalhes
                               </span>
@@ -1379,11 +1379,11 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
                       {/* 2. CPF & 3. NOME DA MÃE */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="bg-military-900/40 p-2 rounded-lg border border-military-700/60">
-                          <span className="text-[8px] font-mono font-black text-emerald-900 uppercase block tracking-wider">
+                        <div className="bg-military-900/40 p-2.5 rounded-lg border border-military-700/60">
+                          <span className="text-[10px] font-mono font-black text-emerald-900 uppercase block tracking-wider">
                             2. CPF:
                           </span>
-                          <p className="font-mono font-black text-xs sm:text-sm select-all mt-0.5" style={{ color: '#000000' }}>
+                          <p className="font-mono font-black text-sm sm:text-base select-all mt-0.5" style={{ color: '#000000' }}>
                             {item.cpf ? (
                               <HighlightedText text={item.cpf} query={searchQuery || activeSearchQuery || ''} className="text-black font-mono font-black" />
                             ) : (
@@ -1392,11 +1392,11 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                           </p>
                         </div>
 
-                        <div className="bg-military-900/40 p-2 rounded-lg border border-military-700/60">
-                          <span className="text-[8px] font-mono font-black text-emerald-900 uppercase block tracking-wider">
+                        <div className="bg-military-900/40 p-2.5 rounded-lg border border-military-700/60">
+                          <span className="text-[10px] font-mono font-black text-emerald-900 uppercase block tracking-wider">
                             3. NOME DA MÃE:
                           </span>
-                          <p className="font-black text-xs sm:text-sm uppercase truncate mt-0.5" style={{ color: '#000000' }}>
+                          <p className="font-black text-sm sm:text-base uppercase truncate mt-0.5" style={{ color: '#000000' }}>
                             {item.nomeMae ? (
                               <HighlightedText text={item.nomeMae} query={searchQuery || activeSearchQuery || ''} className="text-black font-black" />
                             ) : (
@@ -1408,29 +1408,29 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
                       {/* 4. SITUAÇÃO & 5. DATA DA EMISSÃO */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="bg-military-900/40 p-2 rounded-lg border border-military-700/60">
-                          <span className="text-[8px] font-mono font-black text-emerald-900 uppercase block tracking-wider">
+                        <div className="bg-military-900/40 p-2.5 rounded-lg border border-military-700/60">
+                          <span className="text-[10px] font-mono font-black text-emerald-900 uppercase block tracking-wider">
                             4. SITUAÇÃO:
                           </span>
                           <div className="mt-1">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9.5px] font-black uppercase tracking-wider border shadow-xs ${
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-black uppercase tracking-wider border shadow-xs ${
                               item.situacao?.toUpperCase().includes('CUMPRIDO')
                                 ? 'bg-blue-100 text-blue-950 border-blue-400'
                                 : item.situacao?.toUpperCase().includes('REVOGADO')
                                 ? 'bg-amber-100 text-amber-950 border-amber-400'
                                 : 'bg-emerald-100 text-emerald-950 border-emerald-400'
                             }`}>
-                              <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                              <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
                               {item.situacao || 'PENDENTE DE CUMPRIMENTO'}
                             </span>
                           </div>
                         </div>
 
-                        <div className="bg-military-900/40 p-2 rounded-lg border border-military-700/60">
-                          <span className="text-[8px] font-mono font-black text-emerald-900 uppercase block tracking-wider">
+                        <div className="bg-military-900/40 p-2.5 rounded-lg border border-military-700/60">
+                          <span className="text-[10px] font-mono font-black text-emerald-900 uppercase block tracking-wider">
                             5. DATA DA EMISSÃO:
                           </span>
-                          <p className="font-mono font-black text-xs sm:text-sm mt-0.5" style={{ color: '#000000' }}>
+                          <p className="font-mono font-black text-sm sm:text-base mt-0.5" style={{ color: '#000000' }}>
                             {item.dataExpedicao ? (
                               <HighlightedText text={item.dataExpedicao} query={searchQuery || activeSearchQuery || ''} className="text-black font-mono font-black" />
                             ) : (
@@ -1452,67 +1452,67 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                           className="overflow-hidden mt-3 pt-3 border-t border-military-750/80 space-y-2.5 text-xs text-black"
                           onClick={e => e.stopPropagation()}
                         >
-                          <div className="bg-military-900/40 p-3 rounded-xl border border-military-700/60 space-y-2.5">
-                            <div className="text-[9px] font-mono font-black text-emerald-900 uppercase tracking-wider border-b border-military-700/60 pb-1 flex items-center gap-1">
-                              <FileText size={11} className="text-emerald-700" />
+                          <div className="bg-military-900/40 p-3.5 rounded-xl border border-military-700/60 space-y-3">
+                            <div className="text-xs font-mono font-black text-emerald-900 uppercase tracking-wider border-b border-military-700/60 pb-1.5 flex items-center gap-1.5">
+                              <FileText size={14} className="text-emerald-700" />
                               Demais Dados do Mandado
                             </div>
 
                             {/* Número do Mandado */}
                             <div>
-                              <span className="text-[8px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
+                              <span className="text-[10px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
                                 NÚMERO DO MANDADO / PROCESSO:
                               </span>
-                              <span className="font-mono font-black text-emerald-900 text-xs block select-all break-all mt-0.5">
+                              <span className="font-mono font-black text-emerald-900 text-xs sm:text-sm block select-all break-all mt-0.5">
                                 {item.numeroMandado}
                               </span>
                             </div>
 
                             {/* Motivo / Infração */}
                             <div>
-                              <span className="text-[8px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
+                              <span className="text-[10px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
                                 MOTIVO / INFRAÇÃO:
                               </span>
-                              <span className="font-bold text-xs block uppercase mt-0.5" style={{ color: '#000000' }}>
+                              <span className="font-bold text-xs sm:text-sm block uppercase mt-0.5" style={{ color: '#000000' }}>
                                 {item.naturezaInfracao || item.artigoLei || 'MANDADO DE PRISÃO'}
                               </span>
                             </div>
 
                             {/* Alcunha & Data de Nascimento */}
-                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-military-700/60">
+                            <div className="grid grid-cols-2 gap-2.5 pt-1.5 border-t border-military-700/60">
                               <div>
-                                <span className="text-[8px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
+                                <span className="text-[10px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
                                   ALCUNHA / VULGO:
                                 </span>
-                                <span className="font-bold text-xs block uppercase mt-0.5" style={{ color: '#000000' }}>
+                                <span className="font-bold text-xs sm:text-sm block uppercase mt-0.5" style={{ color: '#000000' }}>
                                   {item.alcunha ? <HighlightedText text={item.alcunha} query={searchQuery || activeSearchQuery || ''} className="text-black font-bold" /> : 'NÃO INFORMADO'}
                                 </span>
                               </div>
                               <div>
-                                <span className="text-[8px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
+                                <span className="text-[10px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
                                   DATA DE NASCIMENTO:
                                 </span>
-                                <span className="font-bold text-xs block mt-0.5" style={{ color: '#000000' }}>
+                                <span className="font-bold text-xs sm:text-sm block mt-0.5" style={{ color: '#000000' }}>
                                   {item.dataNascimento || 'NÃO INFORMADO'}
                                 </span>
                               </div>
                             </div>
 
                             {/* Órgão Emissor & Tipo de Prisão */}
-                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-military-700/60">
+                            <div className="grid grid-cols-2 gap-2.5 pt-1.5 border-t border-military-700/60">
                               <div>
-                                <span className="text-[8px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
+                                <span className="text-[10px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
                                   ÓRGÃO EMISSOR:
                                 </span>
-                                <span className="font-bold text-xs block uppercase mt-0.5" style={{ color: '#000000' }}>
+                                <span className="font-bold text-xs sm:text-sm block uppercase mt-0.5" style={{ color: '#000000' }}>
                                   {item.orgaoEmissor || 'CONSELHO NACIONAL DE JUSTIÇA'}
                                 </span>
                               </div>
                               <div>
-                                <span className="text-[8px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
+                                <span className="text-[10px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
                                   TIPO DE PRISÃO:
                                 </span>
-                                <span className="font-bold text-xs block uppercase mt-0.5" style={{ color: '#000000' }}>
+                                <span className="font-bold text-xs sm:text-sm block uppercase mt-0.5" style={{ color: '#000000' }}>
                                   {item.tipoPrisao || 'PREVENTIVA'}
                                 </span>
                               </div>
@@ -1520,23 +1520,23 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
                             {/* RG & Nome do Pai */}
                             {(item.rg || item.nomePai) && (
-                              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-military-700/60">
+                              <div className="grid grid-cols-2 gap-2.5 pt-1.5 border-t border-military-700/60">
                                 {item.rg && (
                                   <div>
-                                    <span className="text-[8px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
+                                    <span className="text-[10px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
                                       RG:
                                     </span>
-                                    <span className="font-mono font-bold text-xs block mt-0.5" style={{ color: '#000000' }}>
+                                    <span className="font-mono font-bold text-xs sm:text-sm block mt-0.5" style={{ color: '#000000' }}>
                                       {item.rg}
                                     </span>
                                   </div>
                                 )}
                                 {item.nomePai && (
                                   <div>
-                                    <span className="text-[8px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
+                                    <span className="text-[10px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
                                       NOME DO PAI:
                                     </span>
-                                    <span className="font-bold text-xs block uppercase mt-0.5" style={{ color: '#000000' }}>
+                                    <span className="font-bold text-xs sm:text-sm block uppercase mt-0.5" style={{ color: '#000000' }}>
                                       {item.nomePai}
                                     </span>
                                   </div>
@@ -1546,24 +1546,24 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
                             {/* Observações */}
                             {item.observacoes && (
-                              <div className="pt-1 border-t border-military-700/60">
-                                <span className="text-[8px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
+                              <div className="pt-1.5 border-t border-military-700/60">
+                                <span className="text-[10px] font-mono text-emerald-900 uppercase font-black block tracking-wider">
                                   OBSERVAÇÕES:
                                 </span>
-                                <p className="text-xs mt-0.5" style={{ color: '#000000' }}>
+                                <p className="text-xs sm:text-sm mt-0.5 leading-relaxed" style={{ color: '#000000' }}>
                                   {item.observacoes}
                                 </p>
                               </div>
                             )}
                           </div>
 
-                          <div className="flex items-center justify-end pt-1">
+                          <div className="flex items-center justify-end pt-1.5">
                             <button
                               type="button"
                               onClick={(e) => handleDeleteWarrant(item.id, e)}
-                              className="px-2.5 py-1 bg-red-100 hover:bg-red-200 border border-red-300 text-red-800 rounded-lg text-[9px] uppercase font-black flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                              className="px-3 py-1.5 bg-red-100 hover:bg-red-200 border border-red-300 text-red-800 rounded-lg text-xs uppercase font-black flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                             >
-                              <Trash2 size={11} className="text-red-700" />
+                              <Trash2 size={13} className="text-red-700" />
                               Deletar Registro
                             </button>
                           </div>
@@ -1580,24 +1580,24 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
         {/* Dynamic occurrence listing for matching general words */}
         {activeSearchQuery && fileLinesMatched.length > 0 && (
           <div className="mt-5 pt-4 border-t border-military-800 space-y-3">
-            <div className="flex items-center justify-between text-[10px] font-mono text-military-450 px-0.5 pb-1 font-bold">
-              <span className="uppercase tracking-widest flex items-center gap-1">
-                <SearchIcon className="w-3.5 h-3.5 text-[#e1b12c]" />
+            <div className="flex items-center justify-between text-xs font-mono text-military-450 px-0.5 pb-1 font-bold">
+              <span className="uppercase tracking-wider flex items-center gap-1.5">
+                <SearchIcon className="w-4 h-4 text-[#e1b12c]" />
                 Ocorrências de texto nos documentos:
               </span>
-              <span className="bg-yellow-950/80 border border-yellow-800/30 text-yellow-500 px-2 py-0.5 rounded font-black">
+              <span className="bg-yellow-950/80 border border-yellow-800/30 text-yellow-500 px-2.5 py-1 rounded-lg font-black text-xs">
                 {fileLinesMatched.length} Trechos
               </span>
             </div>
 
-            <div className="space-y-2 max-h-[254px] overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
               {fileLinesMatched.map((match, idx) => (
-                <div key={idx} className="bg-white border border-military-700/80 p-3 rounded-xl space-y-1.5 shadow-xs">
-                  <div className="flex items-center justify-between text-[8px] font-mono text-military-600 font-bold">
+                <div key={idx} className="bg-white border border-military-700/80 p-3.5 rounded-xl space-y-2 shadow-xs">
+                  <div className="flex items-center justify-between text-[11px] font-mono text-military-600 font-bold">
                     <span className="truncate max-w-[70%] text-emerald-900 font-bold">{match.fileName}</span>
                     <span className="text-military-600 font-mono">Pág. {match.pageNum}</span>
                   </div>
-                  <p className="text-[11.5px] font-sans leading-relaxed font-bold" style={{ color: '#000000' }}>
+                  <p className="text-xs sm:text-sm font-sans leading-relaxed font-bold" style={{ color: '#000000' }}>
                     <HighlightedText text={match.lineText} query={activeSearchQuery} className="text-black font-semibold" />
                   </p>
                 </div>
@@ -1609,9 +1609,9 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
         {/* Empty search matches integrated in the same area */}
         {activeSearchQuery && filteredMandados.length === 0 && fileLinesMatched.length === 0 && (
           <div className="mt-5 pt-4 border-t border-military-750 text-center py-8 px-4 bg-military-850/50 rounded-xl">
-            <UserCheck className="w-8 h-8 text-military-500/40 mx-auto mb-2" />
-            <p className="text-[11px] text-military-400 font-bold uppercase tracking-wider mb-0.5">Nenhum registro encontrado</p>
-            <p className="text-[9px] text-military-600 max-w-xs mx-auto leading-normal uppercase font-medium">
+            <UserCheck className="w-9 h-9 text-military-500/40 mx-auto mb-2" />
+            <p className="text-xs font-bold text-military-400 uppercase tracking-wider mb-1">Nenhum registro encontrado</p>
+            <p className="text-xs text-military-500 max-w-xs mx-auto leading-normal uppercase font-medium">
               Sem resultados na pesquisa off-line. Altere os termos da busca ou carregue novas certidões de mandado.
             </p>
           </div>
