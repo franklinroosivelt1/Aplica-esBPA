@@ -5,11 +5,11 @@ import {
   Shield,
   Map,
   FileImage,
+  BookOpen,
   ChevronRight,
   Sparkles
 } from 'lucide-react';
-type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar';
-import brandLogo from '../assets/images/batalhao_ambiental_logo_1779854041969.png';
+type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar' | 'diariodebordo';
 
 interface HomeProps {
   onNavigate: (view: View) => void;
@@ -59,39 +59,34 @@ export default function Home({ onNavigate }: HomeProps) {
       icon: FileImage,
       subtitle: 'Gerador de Relatórios e Laudos Fotográficos',
       description: 'Conversão rápida de imagens de campo em documentos PDF com enquadramento ajustável.'
+    },
+    { 
+      id: 'diariodebordo', 
+      label: 'Diário de Bordo', 
+      icon: BookOpen,
+      subtitle: 'Bloco de Anotações e Registros de Serviço',
+      description: 'Registro de ocorrências, relatos operacionais e anotações com data e hora.'
     }
   ];
 
   return (
-    <div className="flex flex-col min-h-[90vh] justify-between pb-8 pt-2" id="home-container">
-      <div className="w-full space-y-5">
-        {/* Header com identidade BPA militar */}
+    <div className="flex flex-col min-h-[90vh] justify-between pb-8 pt-1" id="home-container">
+      <div className="w-full space-y-3.5">
+        {/* Header com identidade BPA militar - Sem ícone quadrado para elevar botões */}
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="relative bg-military-850 border border-military-700/80 p-5 rounded-3xl overflow-hidden text-center shadow-xl"
+          className="relative bg-military-850 border border-military-700/80 py-3 px-5 rounded-2xl overflow-hidden text-center shadow-md"
           id="header-card"
         >
-          <div className="relative z-10 flex flex-col items-center justify-center gap-3">
-            {/* Logo container */}
-            <div className="inline-flex items-center justify-center p-1.5 bg-military-900 rounded-2xl border border-military-700 shadow-md w-16 h-16 transition-transform hover:scale-105 duration-200">
-              <img 
-                src={brandLogo} 
-                alt="Batalhão de Policiamento Ambiental Logo" 
-                className="w-full h-full object-contain rounded-xl"
-                referrerPolicy="no-referrer" 
-              />
-            </div>
-
-            <div>
-              <h1 className="text-xl font-black tracking-tight text-military-100 uppercase font-sans">
-                APLICAÇÕES AMBIENTAIS
-              </h1>
-              <p className="text-xs text-military-400 mt-1 max-w-[280px] mx-auto leading-normal font-bold uppercase tracking-widest">
-                Plataforma de Gestão de Campo e Fiscalização
-              </p>
-            </div>
+          <div className="relative z-10 flex flex-col items-center justify-center">
+            <h1 className="text-xl font-black tracking-tight text-military-100 uppercase font-sans">
+              APLICAÇÕES AMBIENTAIS
+            </h1>
+            <p className="text-[11px] text-military-400 mt-0.5 max-w-[300px] mx-auto leading-normal font-bold uppercase tracking-widest">
+              Plataforma de Gestão de Campo e Fiscalização
+            </p>
           </div>
         </motion.div>
 

@@ -19,6 +19,7 @@ import FotoPDF from './views/FotoPDF';
 import BpaOperacional from './views/BpaOperacional';
 import PresidentMaps from './views/PresidentMaps';
 import BuscarMandados from './views/BuscarMandados';
+import DiarioDeBordo from './views/DiarioDeBordo';
 
 function LoadingView({ message = "Carregando módulo..." }: { message?: string }) {
   return (
@@ -31,7 +32,7 @@ function LoadingView({ message = "Carregando módulo..." }: { message?: string }
 }
 
 
-export type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar';
+export type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar' | 'diariodebordo';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
@@ -46,6 +47,8 @@ export default function App() {
         return <CubagemBPA onBack={() => setCurrentView('home')} />;
       case 'mandados':
         return <BuscarMandados onBack={() => setCurrentView('home')} />;
+      case 'diariodebordo':
+        return <DiarioDeBordo onBack={() => setCurrentView('home')} />;
       case 'verificarcar':
         return (
           <div className="flex flex-col items-center justify-center min-h-[70vh] text-center p-6 bg-military-900 border border-military-850 rounded-3xl m-4">
@@ -88,8 +91,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-military-900 text-military-100 font-sans selection:bg-military-500 selection:text-white transition-colors duration-200">
-      {/* App Header (Sticky when not in home, camstamp, view maps, fotopdf, cubagem, or bpaoperacional) */}
-      {currentView !== 'home' && currentView !== 'camstamp' && currentView !== 'mapas' && currentView !== 'fotopdf' && currentView !== 'cubagem' && currentView !== 'bpaoperacional' && currentView !== 'mandados' && (
+      {/* App Header (Sticky when not in custom view layouts) */}
+      {currentView !== 'home' && currentView !== 'camstamp' && currentView !== 'mapas' && currentView !== 'fotopdf' && currentView !== 'cubagem' && currentView !== 'bpaoperacional' && currentView !== 'mandados' && currentView !== 'diariodebordo' && (
         <header className="sticky top-0 z-50 bg-military-800/80 backdrop-blur-md border-b border-military-700 px-4 py-3 flex items-center justify-between">
           <button 
             onClick={() => setCurrentView('home')}
@@ -115,7 +118,7 @@ export default function App() {
         </header>
       )}
 
-      <main className={`${currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' || currentView === 'mandados' ? 'w-full' : 'max-w-md mx-auto'} min-h-screen`}>
+      <main className={`${currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' || currentView === 'mandados' || currentView === 'diariodebordo' ? 'w-full' : 'max-w-md mx-auto'} min-h-screen`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={currentView}
@@ -123,7 +126,7 @@ export default function App() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className={currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' || currentView === 'mandados' ? '' : 'p-4 pt-6'}
+            className={currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' || currentView === 'mandados' || currentView === 'diariodebordo' ? '' : 'p-4 pt-6'}
           >
             {renderView()}
           </motion.div>
