@@ -217,36 +217,53 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
   const generatePDF = async () => {
     if (images.length === 0) return;
 
-    // Load all images first to extract natural dimensions
+    // Load all images first to extract precise natural dimensions
     const loadedImagesInfo = await Promise.all(
       images.map(async (img) => {
         try {
           const loadedImg = await loadImage(img);
-          const naturalWidth = loadedImg.naturalWidth || loadedImg.width || 1280;
-          const naturalHeight = loadedImg.naturalHeight || loadedImg.height || 720;
+          const naturalWidth = loadedImg.naturalWidth || loadedImg.width || 1920;
+          const naturalHeight = loadedImg.naturalHeight || loadedImg.height || 1080;
           return { img, naturalWidth, naturalHeight };
         } catch (err) {
           console.error('Failed to load image for PDF', err);
-          return { img, naturalWidth: 1280, naturalHeight: 720 };
+          return { img, naturalWidth: 1920, naturalHeight: 1080 };
         }
       })
     );
 
     let pdf: jsPDF | null = null;
-    const margin = 5; // 5mm light white border
+    const margin = 4; // Leve borda branca uniforme de 4mm
 
     for (let i = 0; i < loadedImagesInfo.length; i++) {
       const { img, naturalWidth, naturalHeight } = loadedImagesInfo[i];
-      const isLandscape = naturalWidth > naturalHeight;
-      const ratio = naturalWidth / naturalHeight;
+      const isLandscape = naturalWidth >= naturalHeight;
+      const orientation = isLandscape ? 'landscape' : 'portrait';
 
-      // Calculate target image dimensions fitting standard page proportion with light border
-      const imageWidth = isLandscape ? 287 : 200;
-      const imageHeight = imageWidth / ratio;
+      let pageWidth: number;
+      let pageHeight: number;
+      let imageWidth: number;
+      let imageHeight: number;
 
-      const pageWidth = imageWidth + (margin * 2);
-      const pageHeight = imageHeight + (margin * 2);
-      const orientation = isLandscape ? 'l' : 'p';
+      if (isLandscape) {
+        // Layout Horizontal (Paisagem): preenche a largura padrão horizontal sem faixas verticais excessivas
+        pageWidth = 297;
+        imageWidth = pageWidth - (margin * 2);
+        imageHeight = imageWidth * (naturalHeight / naturalWidth);
+        pageHeight = imageHeight + (margin * 2);
+      } else {
+        // Layout Vertical (Retrato): preenche a largura padrão vertical mantendo proporção fiel
+        pageWidth = 210;
+        imageWidth = pageWidth - (margin * 2);
+        imageHeight = imageWidth * (naturalHeight / naturalWidth);
+        pageHeight = imageHeight + (margin * 2);
+      }
+
+      // Arredonda valores para evitar erros de ponto flutuante no jsPDF
+      pageWidth = Math.round(pageWidth * 10) / 10;
+      pageHeight = Math.round(pageHeight * 10) / 10;
+      imageWidth = Math.round(imageWidth * 10) / 10;
+      imageHeight = Math.round(imageHeight * 10) / 10;
 
       if (i === 0) {
         pdf = new jsPDF({
@@ -259,7 +276,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
       }
 
       const format = img.toLowerCase().includes('png') ? 'PNG' : 'JPEG';
-      pdf!.addImage(img, format, margin, margin, imageWidth, imageHeight);
+      pdf!.addImage(img, format, margin, margin, imageWidth, imageHeight, undefined, 'FAST');
     }
 
     if (!pdf) return;
@@ -381,14 +398,14 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
         <div className="flex justify-center gap-4 mt-5 mb-2">
           <button
             onClick={() => rotateImage('left')}
-            className="flex items-center gap-2 px-5 py-3.5 bg-military-300 hover:bg-military-200 text-military-950 rounded-xl font-black text-xs active:scale-95 transition-all cursor-pointer shadow-md border border-military-450"
+            className="flex items-center gap-2 px-5 py-3.5 bg-military-800 hover:bg-military-750 text-military-100 rounded-xl font-black text-xs active:scale-95 transition-all cursor-pointer shadow-md border border-military-700"
             title="Girar para Esquerda"
           >
             <RotateCcw size={16} /> GIRAR ESQUERDA
           </button>
           <button
             onClick={() => rotateImage('right')}
-            className="flex items-center gap-2 px-5 py-3.5 bg-military-300 hover:bg-military-200 text-military-950 rounded-xl font-black text-xs active:scale-95 transition-all cursor-pointer shadow-md border border-military-450"
+            className="flex items-center gap-2 px-5 py-3.5 bg-military-800 hover:bg-military-750 text-military-100 rounded-xl font-black text-xs active:scale-95 transition-all cursor-pointer shadow-md border border-military-700"
             title="Girar para Direita"
           >
             <RotateCw size={16} /> GIRAR DIREITA
@@ -398,13 +415,13 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
         <div className="py-4 grid grid-cols-2 gap-4">
           <button 
             onClick={() => { setCurrentPhoto(null); setMode('camera'); }}
-            className="flex items-center justify-center gap-2 bg-red-500/10 border-2 border-red-500/50 text-red-500 p-4 rounded-2xl font-bold cursor-pointer hover:bg-red-500/20 active:scale-95 transition-transform"
+            className="flex items-center justify-center gap-2 bg-red-500/10 border border-red-500/50 text-red-400 p-4 rounded-2xl font-bold cursor-pointer hover:bg-red-500/20 active:scale-95 transition-transform"
           >
             <Trash2 size={20} /> EXCLUIR
           </button>
           <button 
             onClick={handleSavePhoto}
-            className="flex items-center justify-center gap-2 bg-military-300 text-military-950 p-4 rounded-2xl font-bold shadow-xl shadow-military-300/20"
+            className="flex items-center justify-center gap-2 bg-military-600 hover:bg-military-500 text-white p-4 rounded-2xl font-black shadow-xl"
           >
             <Check size={24} /> SALVAR
           </button>
@@ -417,8 +434,8 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
     return (
       <div className="fixed inset-0 z-[100] bg-military-950 flex flex-col p-6 overflow-hidden">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold uppercase tracking-tight">PDF GERADO</h2>
-          <button onClick={() => setMode('selection')} className="p-2 bg-military-800 rounded-lg cursor-pointer hover:bg-military-750">
+          <h2 className="text-xl font-bold uppercase tracking-tight text-military-100">PDF GERADO</h2>
+          <button onClick={() => setMode('selection')} className="p-2 bg-military-800 rounded-lg cursor-pointer hover:bg-military-750 text-military-300">
             <X size={24} />
           </button>
         </div>
@@ -439,7 +456,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
             
             <button 
               onClick={handleDownload}
-              className="bg-military-300 hover:bg-military-200 text-military-950 p-4 rounded-xl font-black flex items-center justify-center gap-2 shadow-lg text-xs uppercase cursor-pointer active:scale-95 transition-all"
+              className="bg-military-600 hover:bg-military-500 text-white p-4 rounded-xl font-black flex items-center justify-center gap-2 shadow-lg text-xs uppercase cursor-pointer active:scale-95 transition-all"
               title="Baixar arquivo PDF no dispositivo"
             >
               <Download size={18} /> Baixar PDF
@@ -602,7 +619,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
             </span>
             <button 
               onClick={() => { setSelectedPageImageIndex(null); setSelectedPageImageUrl(null); }}
-              className="p-2 bg-military-300 hover:bg-military-200 text-military-950 rounded-lg cursor-pointer transition-colors"
+              className="p-2 bg-military-800 hover:bg-military-750 text-military-100 rounded-lg cursor-pointer transition-colors"
             >
               <X size={20} />
             </button>
@@ -616,7 +633,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
           <div className="mt-6 grid grid-cols-4 gap-2.5 w-full max-w-md mx-auto">
             <button
               onClick={() => handleRotatePageImage(selectedPageImageIndex, 'left')}
-              className="py-3 bg-military-300 hover:bg-military-200 text-military-950 font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-military-450 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
+              className="py-3 bg-military-800 hover:bg-military-750 text-military-100 font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-military-700 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
               title="Girar para Esquerda"
             >
               <RotateCcw size={16} />
@@ -624,7 +641,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
             </button>
             <button
               onClick={() => handleRotatePageImage(selectedPageImageIndex, 'right')}
-              className="py-3 bg-military-300 hover:bg-military-200 text-military-950 font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-military-450 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
+              className="py-3 bg-military-800 hover:bg-military-750 text-military-100 font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-military-700 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
               title="Girar para Direita"
             >
               <RotateCw size={16} />
@@ -644,11 +661,11 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
             </button>
             <button
               onClick={() => { setSelectedPageImageIndex(null); setSelectedPageImageUrl(null); }}
-              className="py-3 bg-military-300 hover:bg-military-200 text-military-950 font-bold rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all text-[10px] cursor-pointer"
+              className="py-3 bg-military-600 hover:bg-military-500 text-white font-black rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
               title="Confirmar e voltar"
             >
               <Check size={16} />
-              <span>OK</span>
+              <span>CONCLUIR</span>
             </button>
           </div>
         </div>

@@ -96,7 +96,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
             return (
               <React.Fragment key={i}>
                 {isMatch ? (
-                  <mark className="bg-amber-500/20 text-amber-300 border border-amber-500/35 px-1 rounded font-extrabold">{word}</mark>
+                  <mark className="bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 px-1 rounded font-extrabold">{word}</mark>
                 ) : (
                   <span>{word}</span>
                 )}
@@ -117,7 +117,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
   return (
     <span>
       {before}
-      <mark className="bg-amber-500/20 text-amber-300 border border-amber-500/35 px-1 rounded font-extrabold">
+      <mark className="bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 px-1 rounded font-extrabold">
         {match}
       </mark>
       <HighlightedText text={after} query={query} />
@@ -1271,14 +1271,14 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
                         <div>
                           <span className="text-[8px] font-mono font-extrabold text-military-450 uppercase block">NUMERO DO MANDADO:</span>
-                          <p className="font-mono font-extrabold text-amber-400 text-xs select-all break-all">
+                          <p className="font-mono font-extrabold text-emerald-400 text-xs select-all break-all">
                             {item.numeroMandado}
                           </p>
                         </div>
                       </div>
 
                       <div className="text-military-400 self-center flex-shrink-0 pl-1">
-                        {isExpanded ? <ChevronUp className="w-5 h-5 text-amber-400" /> : <ChevronDown className="w-5 h-5" />}
+                        {isExpanded ? <ChevronUp className="w-5 h-5 text-emerald-400" /> : <ChevronDown className="w-5 h-5" />}
                       </div>
                     </div>
 
@@ -1297,7 +1297,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                             {/* 1. Numero */}
                             <div className="bg-military-900/90 p-2 rounded-lg border border-military-800">
                               <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">NÚMERO DO MANDADO:</span>
-                              <span className="font-mono font-extrabold text-amber-400 text-xs block select-all break-all mt-0.5">
+                              <span className="font-mono font-extrabold text-emerald-400 text-xs block select-all break-all mt-0.5">
                                 {item.numeroMandado}
                               </span>
                             </div>
@@ -1313,7 +1313,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                             {/* 3. Alcunha */}
                             <div>
                               <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">ALCUNHA:</span>
-                              <span className="font-bold text-amber-300 text-xs block uppercase mt-0.5">
+                              <span className="font-bold text-emerald-300 text-xs block uppercase mt-0.5">
                                 {item.alcunha ? <HighlightedText text={item.alcunha} query={searchQuery || activeSearchQuery || ''} /> : 'NÃO INFORMADO'}
                               </span>
                             </div>
@@ -1393,12 +1393,12 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
             <div className="space-y-2 max-h-[254px] overflow-y-auto pr-1">
               {fileLinesMatched.map((match, idx) => (
-                <div key={idx} className="bg-amber-100/50 border border-amber-200/85 p-3 rounded-xl space-y-1">
-                  <div className="flex items-center justify-between text-[8px] font-mono text-military-500">
-                    <span className="truncate max-w-[70%]">{match.fileName}</span>
-                    <span>Pág. {match.pageNum}</span>
+                <div key={idx} className="bg-military-850 border border-military-750 p-3 rounded-xl space-y-1">
+                  <div className="flex items-center justify-between text-[8px] font-mono text-military-450">
+                    <span className="truncate max-w-[70%] text-military-300 font-bold">{match.fileName}</span>
+                    <span className="text-military-400 font-mono">Pág. {match.pageNum}</span>
                   </div>
-                  <p className="text-[11px] text-amber-950 font-sans leading-relaxed selection:bg-yellow-500/40 font-medium">
+                  <p className="text-[11px] text-military-100 font-sans leading-relaxed selection:bg-emerald-500/40 font-medium">
                     <HighlightedText text={match.lineText} query={activeSearchQuery} />
                   </p>
                 </div>

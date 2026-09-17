@@ -43,6 +43,7 @@ export interface ImportedMap {
   height: number;
   topLeft: { lat: number; lng: number };
   bottomRight: { lat: number; lng: number };
+  opacity?: number;
 }
 
 export interface KmlData {
@@ -684,22 +685,40 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
   }, [activeMapIds]);
 
   // Reorder map layers for overlay sequence (higher index = rendered on top)
-  const moveMapLayer = (index: number, direction: 'up' | 'down') => {
-    const targetIndex = direction === 'up' ? index + 1 : index - 1;
-    if (targetIndex < 0 || targetIndex >= importedMaps.length) return;
+  const moveMapLayer = (index: number, direction: 'up' | 'down' | 'top' | 'bottom') => {
+    if (index < 0 || index >= importedMaps.length) return;
+    let targetIndex = index;
+    if (direction === 'up') targetIndex = index + 1;
+    else if (direction === 'down') targetIndex = index - 1;
+    else if (direction === 'top') targetIndex = importedMaps.length - 1;
+    else if (direction === 'bottom') targetIndex = 0;
+
+    if (targetIndex < 0 || targetIndex >= importedMaps.length || targetIndex === index) return;
 
     const newMaps = [...importedMaps];
-    const temp = newMaps[index];
-    newMaps[index] = newMaps[targetIndex];
-    newMaps[targetIndex] = temp;
+    const [moved] = newMaps.splice(index, 1);
+    newMaps.splice(targetIndex, 0, moved);
 
     setImportedMaps(newMaps);
     localStorage.setItem('president_map_order', JSON.stringify(newMaps.map(m => m.id)));
+    triggerRedraw();
     showTemporaryStatus(
-      direction === 'up'
-        ? `Mapa "${temp.name}" movido para cima (Sobreposição no topo)`
-        : `Mapa "${temp.name}" movido para baixo`
+      direction === 'up' || direction === 'top'
+        ? `Mapa "${moved.name}" sobreposto (Camada ${targetIndex + 1}/${newMaps.length})`
+        : `Mapa "${moved.name}" posicionado abaixo (Camada ${targetIndex + 1}/${newMaps.length})`
     );
+  };
+
+  const updateMapOpacity = (id: string, opacity: number) => {
+    setImportedMaps(prev => {
+      const updated = prev.map(m => m.id === id ? { ...m, opacity } : m);
+      const targetMap = updated.find(m => m.id === id);
+      if (targetMap) {
+        dbSaveMap(targetMap).catch(() => {});
+      }
+      return updated;
+    });
+    triggerRedraw();
   };
 
   // Initialize and load saved maps and layers
@@ -974,8 +993,13 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         const targetW = brPixel.x - tlPixel.x;
         const targetH = brPixel.y - tlPixel.y;
 
-        // Render PDF content onto Web Mercator coordinates
+        // Render PDF content onto Web Mercator coordinates with layer opacity
+        const prevAlpha = ctx.globalAlpha;
+        if (activeMap.opacity !== undefined) {
+          ctx.globalAlpha = activeMap.opacity;
+        }
         ctx.drawImage(mapImg, targetX, targetY, targetW, targetH);
+        ctx.globalAlpha = prevAlpha;
 
         // Highlight map boundary visually (tactical military cyan/blue style)
         ctx.strokeStyle = '#3b82f6';
@@ -3046,7 +3070,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     <>
                       <div className="flex flex-col gap-0.5">
                         <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Área Calculada</span>
-                        <div className="bg-[#fffbeb] px-2.5 py-1.5 rounded-lg text-amber-700 border border-amber-100 text-xs font-black font-mono">
+                        <div className="bg-emerald-950/20 px-2.5 py-1.5 rounded-lg text-emerald-300 border border-emerald-800/60 text-xs font-black font-mono">
                           {featureAreaHectares.toFixed(3)} ha
                         </div>
                       </div>
@@ -3260,7 +3284,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 <div className="flex flex-col gap-2 text-[10px] font-mono select-all">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Área Calculada</span>
-                    <div className="bg-[#fffbeb] px-2.5 py-1.5 rounded-lg text-amber-700 border border-amber-100 text-xs font-black font-mono">
+                    <div className="bg-emerald-950/20 px-2.5 py-1.5 rounded-lg text-emerald-300 border border-emerald-800/60 text-xs font-black font-mono">
                       {selectedArea.area.toFixed(2)} ha
                     </div>
                   </div>
@@ -3337,7 +3361,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               </div>
               
               <div className="flex flex-col text-right justify-center">
-                <span className="text-[10px] text-amber-400 uppercase tracking-widest font-black">Resultado Total</span>
+                <span className="text-[10px] text-military-300 uppercase tracking-widest font-black">Resultado Total</span>
                 <span className="font-extrabold text-emerald-400 text-2xl tracking-tight leading-tight mt-0.5 drop-shadow-md">
                   {measuringMode === 'measure_distance' ? (() => {
                     let total = 0;
@@ -3387,7 +3411,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     }
                   }
                 }}
-                className="w-11 h-9 flex items-center justify-center rounded-xl bg-amber-150 hover:bg-amber-200 border border-amber-400 text-amber-950 transition-all active:scale-95 shadow-sm cursor-pointer"
+                className="w-11 h-9 flex items-center justify-center rounded-xl bg-military-800 hover:bg-military-750 border border-military-600 text-military-100 transition-all active:scale-95 shadow-sm cursor-pointer"
                 title="Desfazer Último Ponto"
                 type="button"
               >
@@ -3862,7 +3886,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   className="w-full flex items-center justify-between px-4 py-3 bg-military-800/80 hover:bg-military-850 transition-colors border-b border-military-700/60 font-mono"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse" />
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                     <span className="text-xs uppercase font-extrabold text-military-100 tracking-wider">Mapas Georreferenciados</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -3875,8 +3899,8 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   <div className="p-3 space-y-3">
                     {/* Upload Trigger Input */}
                     <div className="flex flex-col gap-1.5">
-                      <label className="flex items-center justify-center gap-2 border border-dashed border-military-650 hover:border-blue-500 hover:bg-military-800/30 transition-all p-3 rounded-lg cursor-pointer text-military-205">
-                        <Upload className="w-4 h-4 text-blue-400 shrink-0" />
+                      <label className="flex items-center justify-center gap-2 border border-dashed border-military-650 hover:border-emerald-500 hover:bg-military-800/30 transition-all p-3 rounded-lg cursor-pointer text-military-205">
+                        <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
                         <span className="font-mono text-[11px] font-bold uppercase tracking-wider">Inserir Mapa (PDF / JSON)</span>
                         <input 
                           type="file" 
@@ -3890,109 +3914,154 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       </span>
                     </div>
 
-                    {/* List of imported GeoPDF maps */}
-                    <div className="space-y-2">
-                      {importedMaps.length === 0 ? (
-                        <div className="text-center p-3 border border-military-800/50 rounded-lg bg-military-800/10">
-                          <p className="font-mono text-[9px] text-military-400 tracking-wider">NENHUM MAPA GEO ANEXADO</p>
+                    {/* List of imported GeoPDF maps with Overlay Ordering */}
+                    {importedMaps.length === 0 ? (
+                      <div className="text-center p-3 border border-military-800/50 rounded-lg bg-military-800/10">
+                        <p className="font-mono text-[9px] text-military-400 tracking-wider">NENHUM MAPA GEO ANEXADO</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between px-2 py-1.5 bg-military-900 rounded-lg border border-military-750">
+                          <span className="font-mono text-[8px] text-military-350 uppercase font-black tracking-wider">
+                            ORGANIZAR SOBREPOSIÇÃO ({importedMaps.length} MAPAS)
+                          </span>
+                          <span className="font-mono text-[7.5px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded font-bold uppercase">
+                            TOPO ➔ BASE
+                          </span>
                         </div>
-                      ) : (
-                        importedMaps.map((m, idx) => (
-                          <div 
-                            key={m.id}
-                            className={`flex flex-col border p-2.5 rounded-xl transition-all ${activeMapIds.includes(m.id) ? 'border-blue-500 bg-blue-900/15 shadow-md shadow-blue-500/5' : 'border-military-750 bg-military-850/60 hover:border-military-600'}`}
-                          >
-                            {/* Layer badge and reorder buttons bar */}
-                            <div className="flex items-center justify-between mb-1.5 px-1 py-0.5 bg-military-900/80 rounded-lg border border-military-750 font-mono text-[8px] text-military-300">
-                              <span className="font-black text-amber-400 uppercase tracking-wide">
-                                CAMADA {idx + 1}/{importedMaps.length} {idx === importedMaps.length - 1 ? '• TOPO' : idx === 0 ? '• BASE' : ''}
-                              </span>
-                              <div className="flex items-center gap-1">
+
+                        {[...importedMaps].reverse().map((m, reverseIdx) => {
+                          const realIdx = importedMaps.length - 1 - reverseIdx;
+                          const isTop = realIdx === importedMaps.length - 1;
+                          const isBase = realIdx === 0;
+
+                          return (
+                            <div 
+                              key={m.id}
+                              className={`flex flex-col border p-2.5 rounded-xl transition-all ${activeMapIds.includes(m.id) ? 'border-emerald-600 bg-military-800/90 shadow-md shadow-emerald-500/5' : 'border-military-750 bg-military-850/60 hover:border-military-600'}`}
+                            >
+                              {/* Layer badge and reorder buttons bar */}
+                              <div className="flex items-center justify-between mb-1.5 px-2 py-1 bg-military-900 rounded-lg border border-military-750 font-mono text-[8px]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-2 h-2 rounded-full ${isTop ? 'bg-emerald-400 animate-pulse' : isBase ? 'bg-blue-400' : 'bg-military-400'}`} />
+                                  <span className="font-black text-military-200 uppercase tracking-wide">
+                                    {isTop ? 'CAMADA TOPO (SOBREPOSTO)' : isBase ? 'CAMADA BASE (FUNDO)' : `CAMADA INTERMEDIÁRIA ${realIdx + 1}`}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => moveMapLayer(realIdx, 'up')}
+                                    disabled={isTop}
+                                    className="px-2 py-0.5 bg-military-800 hover:bg-military-700 disabled:opacity-25 disabled:hover:bg-military-800 border border-military-700 rounded text-emerald-300 font-sans text-[8px] font-bold uppercase flex items-center gap-0.5 cursor-pointer transition-all"
+                                    title="Sobrepor (Ficar por cima dos outros mapas)"
+                                  >
+                                    <ArrowUp className="w-2.5 h-2.5 text-emerald-400" />
+                                    <span>Subir</span>
+                                  </button>
+                                  <button
+                                    onClick={() => moveMapLayer(realIdx, 'down')}
+                                    disabled={isBase}
+                                    className="px-2 py-0.5 bg-military-800 hover:bg-military-700 disabled:opacity-25 disabled:hover:bg-military-800 border border-military-700 rounded text-military-300 font-sans text-[8px] font-bold uppercase flex items-center gap-0.5 cursor-pointer transition-all"
+                                    title="Ficar por baixo (Enviar para trás)"
+                                  >
+                                    <ArrowDown className="w-2.5 h-2.5 text-blue-400" />
+                                    <span>Descer</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Nome do mapa: Letreiro Digital contínuo */}
+                              <div className="bg-[#f1f5f9] border border-slate-200/60 rounded-md px-2 py-1 overflow-hidden whitespace-nowrap relative mb-1.5">
+                                <div className="inline-block animate-[marquee_45s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[10px] font-black uppercase tracking-normal text-slate-800 pr-8">
+                                  {m.name} &nbsp;&bull;&nbsp; {m.name} &nbsp;&bull;&nbsp; {m.name}
+                                </div>
+                              </div>
+
+                              {/* Controle de Opacidade/Transparência para Sobreposição */}
+                              {activeMapIds.includes(m.id) && (
+                                <div className="mb-2 p-1.5 bg-military-900/70 border border-military-750/70 rounded-lg flex items-center justify-between text-[8px] font-mono">
+                                  <span className="text-military-400 uppercase font-bold">Transparência:</span>
+                                  <div className="flex gap-1">
+                                    {[
+                                      { label: '100%', val: 1.0 },
+                                      { label: '75%', val: 0.75 },
+                                      { label: '50%', val: 0.5 },
+                                      { label: '25%', val: 0.25 }
+                                    ].map(op => (
+                                      <button
+                                        key={op.label}
+                                        onClick={() => updateMapOpacity(m.id, op.val)}
+                                        className={`px-1.5 py-0.5 rounded text-[7.5px] font-black uppercase transition-all cursor-pointer ${
+                                          (m.opacity ?? 1.0) === op.val
+                                            ? 'bg-emerald-600 text-white border border-emerald-400'
+                                            : 'bg-military-800 border border-military-700 text-military-350 hover:text-military-200'
+                                        }`}
+                                      >
+                                        {op.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Três botões de ações mais compactos */}
+                              <div className="grid grid-cols-3 gap-1.5 border-t border-military-750/30 pt-1.5 mt-0.5">
+                                {/* Botão 1: Exibir / Ocultar */}
                                 <button
-                                  onClick={() => moveMapLayer(idx, 'up')}
-                                  disabled={idx === importedMaps.length - 1}
-                                  className="px-1.5 py-0.5 bg-military-800 hover:bg-military-700 disabled:opacity-30 disabled:hover:bg-military-800 border border-military-700 rounded text-military-200 font-sans text-[8px] font-bold uppercase flex items-center gap-0.5 cursor-pointer"
-                                  title="Sobrepor (Mover para Camada Superior)"
+                                  onClick={() => {
+                                    if (activeMapIds.includes(m.id)) {
+                                      setActiveMapIds(prev => prev.filter(id => id !== m.id));
+                                    } else {
+                                      setActiveMapIds(prev => [...prev, m.id]);
+                                      setCenter({
+                                        lat: m.topLeft.lat + (m.bottomRight.lat - m.topLeft.lat)/2,
+                                        lng: m.topLeft.lng + (m.bottomRight.lng - m.topLeft.lng)/2
+                                      });
+                                    }
+                                  }}
+                                  className={`flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border transition-all cursor-pointer ${activeMapIds.includes(m.id) ? 'bg-emerald-950/40 border-emerald-600 text-emerald-300 shadow-sm' : 'bg-military-800/40 border-military-700/60 text-military-300 hover:bg-military-800'}`}
+                                  id={`btn-view-${m.id}`}
                                 >
-                                  <ArrowUp className="w-2.5 h-2.5 text-emerald-400" />
-                                  <span>Subir</span>
+                                  {activeMapIds.includes(m.id) ? (
+                                    <>
+                                      <Eye className="w-3 h-3 text-emerald-400 shrink-0" />
+                                      <span className="font-mono text-[8px] font-bold uppercase tracking-wider">Ocultar</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <EyeOff className="w-3 h-3 text-military-400 shrink-0" />
+                                      <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Exibir</span>
+                                    </>
+                                  )}
                                 </button>
+
+                                {/* Botão 2: Compartilhar */}
                                 <button
-                                  onClick={() => moveMapLayer(idx, 'down')}
-                                  disabled={idx === 0}
-                                  className="px-1.5 py-0.5 bg-military-800 hover:bg-military-700 disabled:opacity-30 disabled:hover:bg-military-800 border border-military-700 rounded text-military-200 font-sans text-[8px] font-bold uppercase flex items-center gap-0.5 cursor-pointer"
-                                  title="Mover para Camada Inferior"
+                                  onClick={() => handleShareMap(m)}
+                                  className="flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border bg-military-800/40 border-military-700/60 text-military-300 hover:bg-military-800 hover:border-emerald-500/40 hover:text-emerald-300 transition-all cursor-pointer"
+                                  title="Compartilhar Mapa"
+                                  id={`btn-share-${m.id}`}
                                 >
-                                  <ArrowDown className="w-2.5 h-2.5 text-blue-400" />
-                                  <span>Descer</span>
+                                  <Share2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                  <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Enviar</span>
+                                </button>
+
+                                {/* Botão 3: Excluir */}
+                                <button
+                                  onClick={() => removeMap(m.id, m.name)}
+                                  className="flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border bg-military-800/40 border-military-700/60 text-military-300 hover:bg-red-950/30 hover:border-red-500/40 hover:text-red-300 transition-all cursor-pointer"
+                                  title="Excluir Permanentemente"
+                                  id={`btn-delete-${m.id}`}
+                                >
+                                  <Trash2 className="w-3 h-3 text-red-400 shrink-0" />
+                                  <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Excluir</span>
                                 </button>
                               </div>
                             </div>
-
-                            {/* Nome do mapa: Letreiro Digital contínuo */}
-                            <div className="bg-[#f1f5f9] border border-slate-200/60 rounded-md px-2 py-1 overflow-hidden whitespace-nowrap relative mb-1.5">
-                              <div className="inline-block animate-[marquee_45s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[10px] font-black uppercase tracking-normal text-slate-800 pr-8">
-                                {m.name} &nbsp;&bull;&nbsp; {m.name} &nbsp;&bull;&nbsp; {m.name}
-                              </div>
-                            </div>
-                            
-                            {/* Três botões de ações mais compactos */}
-                            <div className="grid grid-cols-3 gap-1.5 border-t border-military-750/15 pt-1.5 mt-0.5">
-                              {/* Botão 1: Exibir / Ocultar */}
-                              <button
-                                onClick={() => {
-                                  if (activeMapIds.includes(m.id)) {
-                                    setActiveMapIds(prev => prev.filter(id => id !== m.id));
-                                  } else {
-                                    setActiveMapIds(prev => [...prev, m.id]);
-                                    setCenter({
-                                      lat: m.topLeft.lat + (m.bottomRight.lat - m.topLeft.lat)/2,
-                                      lng: m.topLeft.lng + (m.bottomRight.lng - m.topLeft.lng)/2
-                                    });
-                                  }
-                                }}
-                                className={`flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border transition-all ${activeMapIds.includes(m.id) ? 'bg-blue-600/20 border-blue-500 text-blue-200 shadow-sm shadow-blue-500/10' : 'bg-military-800/40 border-military-700/60 text-military-300 hover:bg-military-800'}`}
-                                id={`btn-view-${m.id}`}
-                              >
-                                {activeMapIds.includes(m.id) ? (
-                                  <>
-                                    <Eye className="w-3 h-3 text-blue-400 shrink-0" />
-                                    <span className="font-mono text-[8px] font-bold uppercase tracking-wider">Ocultar</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <EyeOff className="w-3 h-3 text-military-400 shrink-0" />
-                                    <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Exibir</span>
-                                  </>
-                                )}
-                              </button>
-
-                              {/* Botão 2: Compartilhar */}
-                              <button
-                                onClick={() => handleShareMap(m)}
-                                className="flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border bg-military-800/40 border-military-700/60 text-military-300 hover:bg-military-800 hover:border-emerald-500/40 hover:text-emerald-300 transition-all"
-                                title="Compartilhar Mapa"
-                                id={`btn-share-${m.id}`}
-                              >
-                                <Share2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                                <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Enviar</span>
-                              </button>
-
-                              {/* Botão 3: Excluir */}
-                              <button
-                                onClick={() => removeMap(m.id, m.name)}
-                                className="flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border bg-military-800/40 border-military-700/60 text-military-300 hover:bg-red-950/30 hover:border-red-500/40 hover:text-red-300 transition-all"
-                                title="Excluir Permanentemente"
-                                id={`btn-delete-${m.id}`}
-                              >
-                                <Trash2 className="w-3 h-3 text-red-400 shrink-0" />
-                                <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Excluir</span>
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -4232,7 +4301,8 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                         };
                         setSavedPoints(prev => [newTrack, ...prev]);
                         setIsRecordingGpsTrack(false);
-                        showTemporaryStatus(`Trilha "${finalName}" salva e listada em Pontos Salvos!`);
+                        setActiveTab('pontos');
+                        showTemporaryStatus(`Trilha "${finalName}" salva e listada na aba Pontos Salvos!`);
                       }}
                       className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 border border-emerald-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                     >
@@ -4263,7 +4333,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                             setSimulatedGps(true);
                             showTemporaryStatus("GPS Simulado ativado (Acre).");
                           }}
-                          className={`py-1.5 px-2 border rounded-lg font-sans text-[8.5px] font-black uppercase transition-all cursor-pointer ${simulatedGps ? 'bg-amber-950/20 border-amber-600/80 text-amber-400' : 'bg-military-900 border-military-750 text-military-400 hover:text-military-200'}`}
+                          className={`py-1.5 px-2 border rounded-lg font-sans text-[8.5px] font-black uppercase transition-all cursor-pointer ${simulatedGps ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300' : 'bg-military-900 border-military-750 text-military-400 hover:text-military-200'}`}
                         >
                           SIMULADO (WALK)
                         </button>
@@ -4546,7 +4616,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 truncate max-w-[70%]">
-                                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 shadow-lg shadow-amber-500/30 animate-pulse" />
+                                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-lg shadow-emerald-500/30 animate-pulse" />
                                   <div className="flex flex-col truncate">
                                     <span className="font-sans text-[11px] uppercase font-black text-military-100 truncate">
                                       {sa.name}
@@ -4591,7 +4661,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                           type="text"
                                           value={editItemName}
                                           onChange={e => setEditItemName(e.target.value)}
-                                          className="flex-grow bg-black/60 border border-military-800 px-2 py-1 text-[10px] rounded text-amber-300 font-mono focus:outline-none focus:border-amber-500"
+                                          className="flex-grow bg-black/60 border border-military-700 px-2 py-1 text-[10px] rounded text-emerald-300 font-mono focus:outline-none focus:border-emerald-500"
                                           placeholder="Ex. Gleba Alfa"
                                         />
                                         <button
@@ -4702,7 +4772,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     return (
                       <div 
                         key={pt.id} 
-                        className={`flex flex-col border rounded-xl p-3 transition-all ${editingPointId === pt.id ? 'border-amber-500 bg-amber-950/10' : 'border-military-750 bg-military-800 hover:border-military-500 hover:shadow-sm'}`}
+                        className={`flex flex-col border rounded-xl p-3 transition-all ${editingPointId === pt.id ? 'border-emerald-500 bg-emerald-950/20' : 'border-military-750 bg-military-800 hover:border-military-500 hover:shadow-sm'}`}
                       >
                         {/* Base Point/Track details */}
                         <div className="flex items-center justify-between">
@@ -4812,7 +4882,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                               className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white"
                               title={isTrackItem ? "Renomear Trilha" : "Editar coordenadas ou nome"}
                             >
-                              <Pencil className="w-3.5 h-3.5 text-amber-400 mb-0.5" />
+                              <Pencil className="w-3.5 h-3.5 text-emerald-400 mb-0.5" />
                               <span className="font-mono text-[7.5px] uppercase tracking-wide">Editar</span>
                             </button>
 
@@ -4968,9 +5038,10 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                         };
                         setSavedPoints(prev => [newTrack, ...prev]);
                         setIsRecordingGpsTrack(false);
-                        showTemporaryStatus(`Trilha "${finalName}" salva com sucesso!`);
+                        setActiveTab('pontos');
+                        showTemporaryStatus(`Trilha "${finalName}" salva e listada na aba Pontos Salvos!`);
                       }}
-                      className="w-full py-3 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 border border-purple-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 border border-emerald-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                     >
                       <Save className="w-3.5 h-3.5" />
                       SALVAR GRAVAÇÃO DE TRILHA
@@ -5001,7 +5072,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           setSimulatedGps(true);
                           showTemporaryStatus("GPS Simulado ativado (Acre). Perfeito para demonstrações em desktop.");
                         }}
-                        className={`py-2 px-2.5 border rounded-lg font-sans text-[9px] font-black uppercase transition-all cursor-pointer ${simulatedGps ? 'bg-amber-950/20 border-amber-600/80 text-amber-400' : 'bg-military-900 border-military-750 text-military-400 hover:text-military-200'}`}
+                        className={`py-2 px-2.5 border rounded-lg font-sans text-[9px] font-black uppercase transition-all cursor-pointer ${simulatedGps ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300' : 'bg-military-900 border-military-750 text-military-400 hover:text-military-200'}`}
                       >
                         SIMULADO (WALK)
                       </button>

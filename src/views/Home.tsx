@@ -5,6 +5,8 @@ import {
   Shield,
   Map,
   FileImage,
+  ChevronRight,
+  Sparkles
 } from 'lucide-react';
 type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar';
 import brandLogo from '../assets/images/batalhao_ambiental_logo_1779854041969.png';
@@ -14,145 +16,161 @@ interface HomeProps {
 }
 
 export default function Home({ onNavigate }: HomeProps) {
-  const menuItems: { id: View; label: string; icon: any; subtitle: string; description: string; offline: boolean }[] = [
+  const menuItems: { id: View; label: string; icon: any; subtitle: string; description: string; isPrimary?: boolean }[] = [
     { 
       id: 'camstamp', 
       label: 'Foto Georreferenciada', 
       icon: Camera,
-      subtitle: 'CamStamp - GPS Integrado',
+      subtitle: 'CamStamp com Carimbo GPS e Altitude',
       description: 'Captura fotográfica fiscal com marca d\'água de coordenadas, altitude, data e hora.',
-      offline: true
+      isPrimary: true
     },
     { 
       id: 'mapas', 
       label: 'Mapas Georreferenciados', 
       icon: Map,
-      subtitle: 'Navegação e Camadas Offline',
-      description: 'Monitoramento de áreas de interesse, polígonos KML e mapas base offline.',
-      offline: true
+      subtitle: 'Navegação Tática, KML e Trilha GPS',
+      description: 'Monitoramento de áreas de interesse, polígonos KML e mapas base offline com gravação de trilha.'
     },
     { 
       id: 'cubagem', 
       label: 'Cubagem de Madeiras', 
       icon: Calculator,
-      subtitle: 'Cálculo de Volume Florestal',
-      description: 'Cálculo volumétrico analítico de toras empilhadas ou individuais no campo.',
-      offline: true
+      subtitle: 'Cálculo Florestal em Tora e Bloco',
+      description: 'Cálculo volumétrico analítico Smalian para toras e peças serradas no campo.'
     },
     { 
       id: 'bpaoperacional', 
       label: 'Buscar Dados do CAR', 
       icon: Shield,
-      subtitle: 'Verificação de Imóveis CAR',
-      description: 'Consulta georreferenciada instantânea de propriedades a partir de coordenadas GPS.',
-      offline: false
+      subtitle: 'Pesquisa e Dossiê Territorial do Acre',
+      description: 'Consulta georreferenciada de propriedades e SICAR a partir de coordenadas GPS.'
     },
     { 
       id: 'mandados', 
       label: 'Buscar Mandado de Prisão', 
       icon: Shield,
-      subtitle: 'Consulta de Foragidos Offline',
-      description: 'Pesquisa rápida, precisa e offline de mandados de prisão ativos ou foragidos da justiça de Acre.',
-      offline: true
+      subtitle: 'Consulta de Segurança Pública e BNMP',
+      description: 'Pesquisa rápida, precisa e offline de mandados de prisão ativos no Acre.'
     },
     { 
       id: 'fotopdf', 
-      label: 'Foto em PDF', 
+      label: 'Fotos em PDF', 
       icon: FileImage,
-      subtitle: 'Geração de Laudos e Relatórios',
-      description: 'Conversão rápida de registros fotográficos de campo em relatórios PDF padronizados.',
-      offline: true
+      subtitle: 'Gerador de Relatórios e Laudos Fotográficos',
+      description: 'Conversão rápida de imagens de campo em documentos PDF com enquadramento ajustável.'
     }
   ];
 
   return (
-    <div className="flex flex-col min-h-[92vh] justify-between py-4 bg-white" id="home-container">
-      {/* Pristine, light-themed high-contrast header */}
-      <div className="w-full">
+    <div className="flex flex-col min-h-[90vh] justify-between pb-8 pt-2" id="home-container">
+      <div className="w-full space-y-5">
+        {/* Header com identidade BPA militar */}
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, ease: "easeOut" }}
-          className="relative bg-white border border-[#E5E7EB] p-6 rounded-[16px] overflow-hidden mb-6 text-center"
+          className="relative bg-military-850 border border-military-700/80 p-5 rounded-3xl overflow-hidden text-center shadow-xl"
           id="header-card"
         >
-          {/* Subtle grid pattern for premium field dashboard feel */}
-          <div className="absolute inset-0 bg-[linear-gradient(rgba(14,116,144,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(14,116,144,0.015)_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none" />
-          
           <div className="relative z-10 flex flex-col items-center justify-center gap-3">
-            {/* Logo container with elegant layout */}
-            <div className="inline-flex items-center justify-center p-1.5 bg-white rounded-2xl border border-[#E5E7EB] shadow-sm w-16 h-16 transition-transform hover:scale-105 duration-200">
+            {/* Logo container */}
+            <div className="inline-flex items-center justify-center p-1.5 bg-military-900 rounded-2xl border border-military-700 shadow-md w-16 h-16 transition-transform hover:scale-105 duration-200">
               <img 
                 src={brandLogo} 
-                alt="Batalhão Ambiental Logo" 
+                alt="Batalhão de Policiamento Ambiental Logo" 
                 className="w-full h-full object-contain rounded-xl"
                 referrerPolicy="no-referrer" 
               />
             </div>
 
             <div>
-              <h1 className="text-xl font-black tracking-tight text-[#111827] uppercase font-sans">
+              <h1 className="text-xl font-black tracking-tight text-military-100 uppercase font-sans">
                 APLICAÇÕES AMBIENTAIS
               </h1>
-              <p className="text-[12px] text-[#4B5563] mt-1 max-w-[280px] mx-auto leading-normal font-sans font-semibold">
-                Plataforma de Georreferenciamento e Gestão de Campo
+              <p className="text-xs text-military-400 mt-1 max-w-[280px] mx-auto leading-normal font-bold uppercase tracking-widest">
+                Plataforma de Gestão de Campo e Fiscalização
               </p>
             </div>
           </div>
         </motion.div>
 
-        {/* Modules Navigation Grid */}
-        <div className="w-full space-y-4 px-1">
-          <div className="grid grid-cols-2 gap-3.5">
-            {menuItems.map((item, index) => {
-              const IconComp = item.icon;
-              return (
-                <motion.button
-                  key={item.id}
-                  onClick={() => onNavigate(item.id)}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.03, duration: 0.15 }}
-                  whileHover={{ y: -2, scale: 1.01, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.04), 0 4px 6px -2px rgba(0, 0, 0, 0.01)" }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full text-left bg-white border border-[#E5E7EB] hover:border-[#0E7490] rounded-[20px] p-4 flex flex-col justify-between min-h-[175px] transition-all duration-150 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0E7490] shadow-[0_1px_3px_rgba(0,0,0,0.02)] group"
-                  id={`btn-menu-${item.id}`}
-                >
-                  <div className="w-full">
-                    {/* Modern, Minimalist Outline Icon Wrapper */}
-                    <div className="inline-flex items-center justify-center p-2.5 bg-[#F1F5F9] text-[#0E7490] rounded-xl mb-3.5 transition-colors group-hover:bg-[#E0F2FE] group-hover:text-[#0E7490]">
-                      <IconComp className="w-5.5 h-5.5" strokeWidth={2} />
-                    </div>
+        {/* Modules Navigation - List Style Buttons */}
+        <div className="w-full space-y-2.5 px-0.5" id="menu-list-container">
+          {menuItems.map((item, index) => {
+            const IconComp = item.icon;
+            const isPrimary = item.isPrimary;
 
-                    <h3 className="font-extrabold text-[12.5px] text-[#111827] uppercase tracking-wide leading-snug">
+            return (
+              <motion.button
+                key={item.id}
+                onClick={() => onNavigate(item.id)}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.03, duration: 0.15 }}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                className={`w-full text-left rounded-2xl p-4 flex items-center justify-between gap-3.5 transition-all duration-150 cursor-pointer shadow-lg group border ${
+                  isPrimary
+                    ? 'bg-military-600 hover:bg-military-500 text-white border-military-500 ring-2 ring-military-500/20 shadow-military-900/40'
+                    : 'bg-military-850 hover:bg-military-800 text-military-100 border-military-700/80 hover:border-military-600'
+                }`}
+                id={`btn-menu-${item.id}`}
+              >
+                {/* Left Icon */}
+                <div className={`p-3 rounded-xl shrink-0 transition-colors flex items-center justify-center ${
+                  isPrimary
+                    ? 'bg-military-700/70 text-white border border-military-400/40'
+                    : 'bg-military-900 text-military-400 border border-military-750 group-hover:text-military-200 group-hover:border-military-600'
+                }`}>
+                  <IconComp className="w-5 h-5" strokeWidth={2.2} />
+                </div>
+
+                {/* Center Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-black text-[13px] uppercase tracking-wide leading-tight truncate ${
+                      isPrimary ? 'text-white' : 'text-military-100 group-hover:text-white'
+                    }`}>
                       {item.label}
                     </h3>
-                    
-                    <h4 className="text-[10px] text-[#0E7490] font-bold font-sans mt-0.5">
-                      {item.subtitle}
-                    </h4>
+                    {isPrimary && (
+                      <span className="bg-white/20 text-white text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full shrink-0">
+                        Principal
+                      </span>
+                    )}
                   </div>
-
-                  <p className="text-[9.5px] text-[#4B5563] mt-2 leading-snug font-semibold line-clamp-3">
-                    {item.description}
+                  <p className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 truncate ${
+                    isPrimary ? 'text-military-200' : 'text-military-400'
+                  }`}>
+                    {item.subtitle}
                   </p>
-                </motion.button>
-              );
-            })}
-          </div>
+                </div>
+
+                {/* Right Arrow / Action Indicator */}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
+                  isPrimary
+                    ? 'bg-military-500/60 text-white group-hover:translate-x-0.5'
+                    : 'bg-military-900 border border-military-750 text-military-400 group-hover:text-military-200 group-hover:border-military-600 group-hover:translate-x-0.5'
+                }`}>
+                  <ChevronRight className="w-4 h-4" />
+                </div>
+              </motion.button>
+            );
+          })}
         </div>
       </div>
 
-      {/* Modern, high-visibility Footer */}
-      <footer className="pt-8 pb-4 text-center" id="footer">
+      {/* Footer */}
+      <footer className="pt-6 pb-2 text-center" id="footer">
         <div className="flex items-center justify-center gap-2 mb-1">
-          <div className="w-1.5 h-1.5 bg-[#0E7490] rounded-full animate-pulse" />
-          <span className="text-[10px] font-mono tracking-widest uppercase text-[#111827] font-extrabold">
-            Aplicações Ambientais - Geoprocessamento de Precisão
+          <div className="w-1.5 h-1.5 bg-military-500 rounded-full animate-pulse" />
+          <span className="text-[10px] font-mono tracking-widest uppercase text-military-400 font-extrabold">
+            BPA • Operação e Fiscalização Integrada
           </span>
         </div>
-        <p className="text-[9px] font-mono text-[#4B5563] tracking-wider uppercase font-bold">
-          Plataforma de Navegação e Mapeamento • v1.6
+        <p className="text-[9px] text-military-500 uppercase tracking-widest font-mono">
+          Acre • Suporte Offline Ativo
         </p>
       </footer>
     </div>
