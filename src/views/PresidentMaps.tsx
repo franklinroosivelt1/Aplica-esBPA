@@ -465,15 +465,18 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     localStorage.setItem('president_saved_areas', JSON.stringify(savedAreas));
   }, [savedAreas]);
 
-  // Collapsible dropdown toggle states for Distance and Area in the Tab view
+  // Collapsible dropdown toggle states for Distance, Area, and Track in the Tab view
   const [isDistanceDropdownOpen, setIsDistanceDropdownOpen] = useState(false);
   const [isAreaDropdownOpen, setIsAreaDropdownOpen] = useState(false);
+  const [isTrackDropdownOpen, setIsTrackDropdownOpen] = useState(false);
 
   const [expandedDistanceMenuId, setExpandedDistanceMenuId] = useState<string | null>(null);
   const [expandedAreaMenuId, setExpandedAreaMenuId] = useState<string | null>(null);
+  const [expandedTrackMenuId, setExpandedTrackMenuId] = useState<string | null>(null);
 
   const [editingDistanceId, setEditingDistanceId] = useState<string | null>(null);
   const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [editItemName, setEditItemName] = useState('');
 
   // Point Addition fields
@@ -2011,6 +2014,25 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     triggerKmlShareOrDownload(kml, `area_${sa.name.toLowerCase().replace(/\s+/g, '_')}.kml`, sa.name);
   };
 
+  const shareTrackAsKml = (track: SavedPoint) => {
+    if (!track.points || track.points.length === 0) return;
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>${track.name}</name>
+    <Placemark>
+      <name>${track.name}</name>
+      <description>Trilha GPS gravada em campo\nDistância Total: ${((track.distance || 0) / 1000).toFixed(2)} km\nDuração: ${formatElapsedTime(track.duration || 0)}</description>
+      <LineString>
+        <tessellate>1</tessellate>
+        <coordinates>${track.points.map(p => `${p.lng},${p.lat},0`).join(' ')}</coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>`;
+    triggerKmlShareOrDownload(kml, `trilha_${track.name.toLowerCase().replace(/\s+/g, '_')}.kml`, track.name);
+  };
+
   const triggerKmlShareOrDownload = async (kmlContent: string, filename: string, title: string) => {
     try {
       const file = new File([kmlContent], filename, { type: 'application/vnd.google-earth.kml+xml' });
@@ -2856,7 +2878,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         {/* Transient Notifications Banner */}
         {statusMessage && (
           <div 
-            className="absolute top-20 left-4 right-4 z-40 bg-zinc-900/95 text-white text-[11px] font-mono border border-blue-500/50 py-2 px-3 rounded-lg shadow-2xl text-center backdrop-blur-md"
+            className={`absolute ${(measuringMode === 'measure_distance' || measuringMode === 'measure_area') ? 'top-40' : 'top-20'} left-4 right-4 max-w-md mx-auto z-40 bg-zinc-900/95 text-white text-[11px] font-mono border border-blue-500/50 py-2 px-3 rounded-lg shadow-2xl text-center backdrop-blur-md transition-all`}
             onMouseDown={e => e.stopPropagation()}
             onMouseUp={e => e.stopPropagation()}
             onTouchStart={e => e.stopPropagation()}
@@ -3325,10 +3347,10 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           );
         })()}
 
-        {/* 4e. MEASURING OVERLAY FLOATING STATS CONTROL CARD */}
+        {/* 4e. MEASURING OVERLAY FLOATING STATS CONTROL CARD - PARTE SUPERIOR DA TELA */}
         {(measuringMode === 'measure_distance' || measuringMode === 'measure_area') && (
           <div 
-            className="absolute top-20 left-4 right-4 z-40 bg-military-900/95 border border-blue-500/50 p-3.5 rounded-xl text-white font-mono backdrop-blur-md shadow-2xl flex flex-col gap-2"
+            className="absolute top-3 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md z-40 bg-military-900/98 border border-blue-500/60 p-3 rounded-xl text-white font-mono backdrop-blur-md shadow-2xl flex flex-col gap-2 animate-fadeIn"
             onMouseDown={e => e.stopPropagation()}
             onMouseUp={e => e.stopPropagation()}
             onTouchStart={e => e.stopPropagation()}
@@ -3336,8 +3358,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-military-700/60 pb-1.5">
-              <span className="text-[10px] uppercase font-black tracking-wider text-blue-400">
-                {measuringMode === 'measure_distance' ? 'Modo de Medição: Distância' : 'Modo de Medição: Área (ha)'}
+              <span className="text-[10px] uppercase font-black tracking-wider text-blue-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                {measuringMode === 'measure_distance' ? 'MODO DE MEDIÇÃO : DISTÂNCIA' : 'MODO DE MEDIÇÃO : ÁREA (HA)'}
               </span>
               <button 
                 onClick={() => {
@@ -3345,7 +3368,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   setMeasurePoints([]);
                   setAreaPoints([]);
                 }}
-                className="p-1 hover:bg-military-800 rounded text-military-400 hover:text-white transition-colors"
+                className="p-1 hover:bg-military-800 rounded text-military-400 hover:text-white transition-colors cursor-pointer"
                 title="Sair da Medição"
               >
                 <X className="w-3.5 h-3.5" />
@@ -3800,10 +3823,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         {/* Sliding Tabs Selection Matrix */}
         <div className="grid grid-cols-4 border-b border-military-700 bg-military-800 text-center font-mono">
           <button
-            onClick={() => {
-              setActiveTab('ferramentas');
-              showTemporaryStatus("Painel 'Recursos' reservado para futura atualização do sistema.");
-            }}
+            onClick={() => setActiveTab('ferramentas')}
             className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-1 h-14 ${activeTab === 'ferramentas' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
             <Wrench className="w-4 h-4" />
@@ -3811,10 +3831,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           </button>
 
           <button
-            onClick={() => {
-              setActiveTab('pontos');
-              showTemporaryStatus("Painel 'Pontos Salvos' reservado para futura atualização.");
-            }}
+            onClick={() => setActiveTab('pontos')}
             className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'pontos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
             <MapPin className="w-4 h-4" />
@@ -3830,10 +3847,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           </button>
           
           <button
-            onClick={() => {
-              setActiveTab('trajetos');
-              showTemporaryStatus("Painel 'Rotas Gravadas' reservado para futura atualização do sistema.");
-            }}
+            onClick={() => setActiveTab('trajetos')}
             className={`py-2 text-[9px] font-extrabold uppercase transition-all flex flex-col items-center justify-center gap-0.5 h-14 ${activeTab === 'trajetos' ? 'bg-military-900 text-blue-400 border-b-2 border-blue-500' : 'text-military-400 hover:text-military-200'}`}
           >
             <Route className="w-4 h-4" />
@@ -4219,180 +4233,42 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 <span className="font-mono text-[9px] text-military-400 uppercase tracking-widest font-black">RECURSOS DE MAPEAMENTO</span>
               </div>
 
-              {/* Centered Large "ADICIONAR PONTO" Button as configured in Screenshot 1 */}
+              {/* Botão ADICIONAR PONTO (tamanho padronizado com os botões de medição) */}
               <button
                 onClick={() => {
                   setMeasuringMode('add_point');
-                  // Prefill coordinates input fields from center
                   syncDMSFromLatLng(center.lat, center.lng);
-                  setIsMenuOpen(false); // Close drawer to allow manual pin selection
+                  setIsMenuOpen(false);
                   showTemporaryStatus("Modo de Adição de Pontos Ativo. Mova o mapa ou altere as coordenadas.");
                 }}
-                className="w-full flex flex-col items-center justify-center p-6 bg-military-850/60 border border-military-750 hover:border-blue-500 rounded-xl hover:bg-military-800/40 transition-all text-center gap-2.5 group cursor-pointer"
+                className="w-full flex items-center justify-between px-4 py-3 bg-military-800/80 hover:bg-military-850 transition-colors border border-military-700/60 rounded-xl font-mono cursor-pointer group"
               >
-                <div className="w-10 h-10 rounded-full bg-blue-500/10 group-hover:bg-blue-500/20 flex items-center justify-center border border-blue-500/20 transition-all">
-                  <MapPin className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+                  <span className="text-xs uppercase font-extrabold text-military-100 tracking-wider">Adicionar Ponto</span>
                 </div>
-                <div className="flex flex-col">
-                  <span className="font-sans text-xs uppercase font-extrabold text-military-100 tracking-wider">ADICIONAR PONTO</span>
-                  <span className="font-mono text-[8px] text-military-450 uppercase mt-0.5">Captura com retículo central</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[8px] text-military-300 bg-military-900 border border-military-700 px-1.5 py-0.5 rounded tracking-widest font-black uppercase">
+                    {savedPoints.filter(p => !p.isTrack).length} Salvos
+                  </span>
+                  <MapPin className="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform" />
                 </div>
               </button>
 
-              {/* Botão & Card "GRAVAR TRILHA" inserido diretamente abaixo de Adicionar PONTO */}
-              <div className="border border-military-750 bg-military-850/60 rounded-xl p-4 transition-all hover:border-emerald-500/60">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center border ${isRecordingGpsTrack ? 'bg-red-500/20 border-red-500 animate-pulse' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
-                      <Route className={`w-4.5 h-4.5 ${isRecordingGpsTrack ? 'text-red-400' : 'text-emerald-400'}`} />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="font-sans text-xs uppercase font-extrabold text-military-100 tracking-wider block">
-                        GRAVAR TRILHA
-                      </span>
-                      <span className="font-mono text-[8px] text-military-450 uppercase">
-                        {isRecordingGpsTrack ? '🔴 Gravação em Andamento' : 'Rastreamento e salvamento em Pontos Salvos'}
-                      </span>
-                    </div>
-                  </div>
-                  {isRecordingGpsTrack && (
-                    <span className="font-mono text-[8px] bg-red-950/80 border border-red-500/60 text-red-300 font-black px-2 py-0.5 rounded-full uppercase animate-pulse">
-                      REC
-                    </span>
-                  )}
-                </div>
-
-                {isRecordingGpsTrack ? (
-                  <div className="space-y-3 pt-2 border-t border-military-750/50">
-                    {/* Realtime Stats */}
-                    <div className="grid grid-cols-3 gap-2 font-mono">
-                      <div className="bg-military-900 border border-military-750 p-2 rounded-lg text-center">
-                        <span className="text-[7.5px] text-military-400 uppercase font-bold block">TEMPO</span>
-                        <span className="text-[10px] text-emerald-400 font-extrabold">{formatElapsedTime(recordedTrackElapsedTime)}</span>
-                      </div>
-                      <div className="bg-military-900 border border-military-750 p-2 rounded-lg text-center">
-                        <span className="text-[7.5px] text-military-400 uppercase font-bold block">DISTÂNCIA</span>
-                        <span className="text-[10px] text-emerald-400 font-extrabold">{(recordedTrackDistance / 1000).toFixed(2)} km</span>
-                      </div>
-                      <div className="bg-military-900 border border-military-750 p-2 rounded-lg text-center">
-                        <span className="text-[7.5px] text-military-400 uppercase font-bold block">PONTOS</span>
-                        <span className="text-[10px] text-emerald-400 font-extrabold">{recordedTrackPoints.length}</span>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        if (recordedTrackPoints.length < 2) {
-                          showTemporaryStatus("Erro: Coordenadas insuficientes para gerar uma trilha (mínimo 2 pontos).");
-                          setIsRecordingGpsTrack(false);
-                          return;
-                        }
-                        const finalName = trackName || `TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`;
-                        const newTrack: SavedPoint = {
-                          id: 'track_' + Date.now(),
-                          name: finalName,
-                          lat: recordedTrackPoints[0].lat,
-                          lng: recordedTrackPoints[0].lng,
-                          isTrack: true,
-                          points: recordedTrackPoints,
-                          distance: recordedTrackDistance,
-                          duration: recordedTrackElapsedTime,
-                          createdAt: Date.now()
-                        };
-                        setSavedPoints(prev => [newTrack, ...prev]);
-                        setIsRecordingGpsTrack(false);
-                        setActiveTab('pontos');
-                        showTemporaryStatus(`Trilha "${finalName}" salva e listada na aba Pontos Salvos!`);
-                      }}
-                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 border border-emerald-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      SALVAR GRAVAÇÃO DE TRILHA
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        if (window.confirm("Deseja realmente descartar a gravação atual? Todos os pontos coletados serão perdidos.")) {
-                          setIsRecordingGpsTrack(false);
-                          showTemporaryStatus("Gravação descartada.");
-                        }
-                      }}
-                      className="w-full py-2 bg-military-800 hover:bg-red-950/30 border border-military-750 hover:border-red-900/50 text-military-400 hover:text-red-400 font-sans text-[9px] font-black uppercase rounded-xl tracking-wider transition-all cursor-pointer"
-                    >
-                      DESCARTAR GRAVAÇÃO
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3 pt-2 border-t border-military-750/50">
-                    {/* GPS Mode Selector */}
-                    <div>
-                      <span className="font-mono text-[8px] uppercase font-black text-military-450 block mb-1.5 tracking-wide">FONTE DE LOCALIZAÇÃO GPS</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => {
-                            setSimulatedGps(true);
-                            showTemporaryStatus("GPS Simulado ativado (Acre).");
-                          }}
-                          className={`py-1.5 px-2 border rounded-lg font-sans text-[8.5px] font-black uppercase transition-all cursor-pointer ${simulatedGps ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300' : 'bg-military-900 border-military-750 text-military-400 hover:text-military-200'}`}
-                        >
-                          SIMULADO (WALK)
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSimulatedGps(false);
-                            showTemporaryStatus("GPS Real ativado. Conectando ao hardware...");
-                            centerOnGps();
-                          }}
-                          className={`py-1.5 px-2 border rounded-lg font-sans text-[8.5px] font-black uppercase transition-all cursor-pointer ${!simulatedGps ? 'bg-blue-950/20 border-blue-600/80 text-blue-400' : 'bg-military-900 border-military-750 text-military-400 hover:text-military-200'}`}
-                        >
-                          REAL (CELULAR)
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Name input */}
-                    <div>
-                      <label className="font-mono text-[8px] uppercase font-black text-military-450 block mb-1 tracking-wide">
-                        NOME DO TRAJETO / TRILHA
-                      </label>
-                      <input
-                        type="text"
-                        placeholder={`TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`}
-                        value={inputTrackName}
-                        onChange={(e) => setInputTrackName(e.target.value)}
-                        className="w-full px-3 py-2 bg-military-900 border border-military-750 focus:border-military-500 focus:outline-none rounded-lg text-military-100 font-sans text-xs"
-                      />
-                    </div>
-
-                    {/* Start Button */}
-                    <button
-                      onClick={() => {
-                        const nameToUse = inputTrackName.trim() || `TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`;
-                        startNewRecording(nameToUse);
-                        setInputTrackName('');
-                      }}
-                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 border border-emerald-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
-                      INICIAR GRAVAÇÃO DE TRILHA
-                    </button>
-                  </div>
-                )}
+              <div className="p-1 border-b border-military-800 pt-1 pb-1.5">
+                <span className="font-mono text-[9px] text-military-400 uppercase tracking-widest font-black">MEDIÇÕES E GRAVAÇÕES EM CAMPO</span>
               </div>
 
-              <div className="p-1 border-b border-military-800 pt-2 pb-1.5">
-                <span className="font-mono text-[9px] text-military-400 uppercase tracking-widest font-black">MEDIÇÕES EM CAMPO</span>
-              </div>
-
-              {/* Collapsible Dropdowns for Distance & Area instead of simplified grid buttons */}
+              {/* Collapsible Dropdowns: Medir Distância, Calcular Área, Gravar Trilhas */}
               <div className="space-y-3">
                 
-                {/* 1. DISTÂNCIA DROPDOWN */}
+                {/* 1. MEDIR DISTÂNCIA */}
                 <div className="border border-military-700/60 rounded-xl overflow-hidden bg-military-850/30">
                   <button
                     onClick={() => {
                       setIsDistanceDropdownOpen(!isDistanceDropdownOpen);
-                      setIsAreaDropdownOpen(false); // Accordion behavior is clean
+                      setIsAreaDropdownOpen(false);
+                      setIsTrackDropdownOpen(false);
                     }}
                     className="w-full flex items-center justify-between px-4 py-3 bg-military-800/80 hover:bg-military-850 transition-colors border-b border-military-700/60 font-mono"
                   >
@@ -4570,13 +4446,14 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   <button
                     onClick={() => {
                       setIsAreaDropdownOpen(!isAreaDropdownOpen);
-                      setIsDistanceDropdownOpen(false); // Accordion behavior is clean
+                      setIsDistanceDropdownOpen(false);
+                      setIsTrackDropdownOpen(false);
                     }}
                     className="w-full flex items-center justify-between px-4 py-3 bg-military-800/80 hover:bg-military-850 transition-colors border-b border-military-700/60 font-mono"
                   >
                     <div className="flex items-center gap-2">
                       <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse" />
-                      <span className="text-xs uppercase font-extrabold text-military-100 tracking-wider">Calcular Área (há)</span>
+                      <span className="text-xs uppercase font-extrabold text-military-100 tracking-wider">Calcular Área</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-[8px] text-military-300 bg-military-900 border border-military-700 px-1.5 py-0.5 rounded tracking-widest font-black uppercase">
@@ -4739,6 +4616,298 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           ))
                         )}
                       </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. GRAVAR TRILHAS */}
+                <div className="border border-military-700/60 rounded-xl overflow-hidden bg-military-850/30">
+                  <button
+                    onClick={() => {
+                      setIsTrackDropdownOpen(!isTrackDropdownOpen);
+                      setIsDistanceDropdownOpen(false);
+                      setIsAreaDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-military-800/80 hover:bg-military-850 transition-colors border-b border-military-700/60 font-mono cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-1.5 h-1.5 rounded-full ${isRecordingGpsTrack ? 'bg-red-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`} />
+                      <span className="text-xs uppercase font-extrabold text-military-100 tracking-wider">Gravar Trilhas</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isRecordingGpsTrack ? (
+                        <span className="font-mono text-[8px] bg-red-950/90 border border-red-500 text-red-300 px-1.5 py-0.5 rounded tracking-widest font-black uppercase animate-pulse">
+                          REC &bull; {formatElapsedTime(recordedTrackElapsedTime)}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[8px] text-military-300 bg-military-900 border border-military-700 px-1.5 py-0.5 rounded tracking-widest font-black uppercase">
+                          {savedPoints.filter(p => p.isTrack).length} Salvas
+                        </span>
+                      )}
+                      {isTrackDropdownOpen ? <ChevronUp className="w-4 h-4 text-military-400" /> : <ChevronDown className="w-4 h-4 text-military-400" />}
+                    </div>
+                  </button>
+
+                  {isTrackDropdownOpen && (
+                    <div className="p-3 space-y-3">
+                      {isRecordingGpsTrack ? (
+                        <div className="space-y-3">
+                          {/* Realtime Stats */}
+                          <div className="grid grid-cols-3 gap-2 font-mono">
+                            <div className="bg-military-900 border border-military-750 p-2 rounded-lg text-center">
+                              <span className="text-[7.5px] text-military-400 uppercase font-bold block">TEMPO</span>
+                              <span className="text-[10px] text-emerald-400 font-extrabold">{formatElapsedTime(recordedTrackElapsedTime)}</span>
+                            </div>
+                            <div className="bg-military-900 border border-military-750 p-2 rounded-lg text-center">
+                              <span className="text-[7.5px] text-military-400 uppercase font-bold block">DISTÂNCIA</span>
+                              <span className="text-[10px] text-emerald-400 font-extrabold">{(recordedTrackDistance / 1000).toFixed(2)} km</span>
+                            </div>
+                            <div className="bg-military-900 border border-military-750 p-2 rounded-lg text-center">
+                              <span className="text-[7.5px] text-military-400 uppercase font-bold block">PONTOS</span>
+                              <span className="text-[10px] text-emerald-400 font-extrabold">{recordedTrackPoints.length}</span>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              if (recordedTrackPoints.length < 2) {
+                                showTemporaryStatus("Erro: Coordenadas insuficientes para gerar uma trilha (mínimo 2 pontos).");
+                                setIsRecordingGpsTrack(false);
+                                return;
+                              }
+                              const finalName = trackName || `TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`;
+                              const newTrack: SavedPoint = {
+                                id: 'track_' + Date.now(),
+                                name: finalName,
+                                lat: recordedTrackPoints[0].lat,
+                                lng: recordedTrackPoints[0].lng,
+                                isTrack: true,
+                                points: recordedTrackPoints,
+                                distance: recordedTrackDistance,
+                                duration: recordedTrackElapsedTime,
+                                createdAt: Date.now()
+                              };
+                              setSavedPoints(prev => [newTrack, ...prev]);
+                              setIsRecordingGpsTrack(false);
+                              showTemporaryStatus(`Trilha "${finalName}" salva com sucesso!`);
+                            }}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 border border-emerald-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            <Save className="w-3.5 h-3.5" />
+                            SALVAR GRAVAÇÃO DE TRILHA
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              if (window.confirm("Deseja realmente descartar a gravação atual? Todos os pontos coletados serão perdidos.")) {
+                                setIsRecordingGpsTrack(false);
+                                showTemporaryStatus("Gravação descartada.");
+                              }
+                            }}
+                            className="w-full py-2 bg-military-800 hover:bg-red-950/30 border border-military-750 hover:border-red-900/50 text-military-400 hover:text-red-400 font-sans text-[9px] font-black uppercase rounded-xl tracking-wider transition-all cursor-pointer"
+                          >
+                            DESCARTAR GRAVAÇÃO
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {/* GPS Mode Selector */}
+                          <div>
+                            <span className="font-mono text-[8px] uppercase font-black text-military-450 block mb-1.5 tracking-wide">FONTE DE LOCALIZAÇÃO GPS</span>
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => {
+                                  setSimulatedGps(true);
+                                  showTemporaryStatus("GPS Simulado ativado (Acre).");
+                                }}
+                                className={`py-1.5 px-2 border rounded-lg font-sans text-[8.5px] font-black uppercase transition-all cursor-pointer ${simulatedGps ? 'bg-emerald-950/40 border-emerald-500 text-emerald-300' : 'bg-military-900 border-military-750 text-military-400 hover:text-military-200'}`}
+                              >
+                                SIMULADO (WALK)
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSimulatedGps(false);
+                                  showTemporaryStatus("GPS Real ativado. Conectando ao hardware...");
+                                  centerOnGps();
+                                }}
+                                className={`py-1.5 px-2 border rounded-lg font-sans text-[8.5px] font-black uppercase transition-all cursor-pointer ${!simulatedGps ? 'bg-blue-950/20 border-blue-600/80 text-blue-400' : 'bg-military-900 border-military-750 text-military-400 hover:text-military-200'}`}
+                              >
+                                REAL (CELULAR)
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Name input */}
+                          <div>
+                            <label className="font-mono text-[8px] uppercase font-black text-military-450 block mb-1 tracking-wide">
+                              NOME DA TRILHA
+                            </label>
+                            <input
+                              type="text"
+                              placeholder={`TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`}
+                              value={inputTrackName}
+                              onChange={(e) => setInputTrackName(e.target.value)}
+                              className="w-full px-3 py-2 bg-military-900 border border-military-750 focus:border-military-500 focus:outline-none rounded-lg text-military-100 font-sans text-xs"
+                            />
+                          </div>
+
+                          {/* Start Button */}
+                          <button
+                            onClick={() => {
+                              const nameToUse = inputTrackName.trim() || `TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`;
+                              startNewRecording(nameToUse);
+                              setInputTrackName('');
+                              setIsMenuOpen(false);
+                              showTemporaryStatus(`Gravação de trilha iniciada: ${nameToUse}`);
+                            }}
+                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 border border-emerald-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                            INICIAR GRAVAÇÃO DE TRILHA
+                          </button>
+
+                          {/* List of saved tracks */}
+                          <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5 text-left border-t border-military-750/50 pt-2">
+                            <span className="font-mono text-[8px] text-military-400 uppercase font-black tracking-wider block">
+                              TRILHAS GRAVADAS ({savedPoints.filter(p => p.isTrack).length})
+                            </span>
+                            {savedPoints.filter(p => p.isTrack).length === 0 ? (
+                              <div className="text-center p-2.5 border border-military-800/50 rounded-lg bg-military-800/10">
+                                <p className="font-mono text-[8.5px] text-military-400 tracking-wider uppercase">NENHUMA TRILHA GRAVADA</p>
+                              </div>
+                            ) : (
+                              savedPoints.filter(p => p.isTrack).map(track => (
+                                <div 
+                                  key={track.id}
+                                  className={`flex flex-col border p-2.5 rounded-xl transition-all ${expandedTrackMenuId === track.id ? 'border-military-600 bg-military-800/40' : 'border-military-750 bg-military-850/60 hover:border-military-600'}`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 truncate max-w-[70%]">
+                                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 shadow-lg shadow-emerald-500/30 animate-pulse" />
+                                      <div className="flex flex-col truncate">
+                                        <span className="font-sans text-[11px] uppercase font-black text-military-100 truncate">
+                                          {track.name}
+                                        </span>
+                                        <span className="font-mono text-[8.5px] text-military-450 mt-0.5">
+                                          {((track.distance || 0) / 1000).toFixed(2)} km &bull; {track.points?.length || 0} pts &bull; {formatElapsedTime(track.duration || 0)}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <button
+                                        onClick={() => {
+                                          if (track.points && track.points.length > 0) {
+                                            setCenter({ lat: track.points[0].lat, lng: track.points[0].lng });
+                                            setZoom(16);
+                                            setIsMenuOpen(false);
+                                            showTemporaryStatus(`Centrado na trilha: ${track.name}`);
+                                          }
+                                        }}
+                                        className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white font-mono text-[9px] font-black rounded-lg uppercase tracking-wider transition-all cursor-pointer"
+                                      >
+                                        Ir
+                                      </button>
+                                      <button
+                                        onClick={() => setExpandedTrackMenuId(expandedTrackMenuId === track.id ? null : track.id)}
+                                        className={`p-1 rounded-lg border border-transparent transition-all cursor-pointer ${expandedTrackMenuId === track.id ? 'bg-military-800 text-military-100 border-military-600' : 'text-military-400 hover:text-military-200 hover:bg-military-850'}`}
+                                      >
+                                        <Menu className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* expanded action links for Track */}
+                                  {expandedTrackMenuId === track.id && (
+                                    <div className="grid grid-cols-4 gap-1.5 border-t border-military-800/80 pt-2.5 mt-2.5 animate-fadeIn">
+                                      {editingTrackId === track.id ? (
+                                        <div className="col-span-4 flex flex-col gap-1.5 p-1 bg-military-900 rounded-lg">
+                                          <span className="font-mono text-[7px] text-military-400 uppercase font-black tracking-wider px-1">Renomear Trilha:</span>
+                                          <div className="flex gap-1.5">
+                                            <input
+                                              type="text"
+                                              value={editItemName}
+                                              onChange={e => setEditItemName(e.target.value)}
+                                              className="flex-grow bg-black/60 border border-military-700 px-2 py-1 text-[10px] rounded text-emerald-300 font-mono focus:outline-none focus:border-emerald-500"
+                                              placeholder="Ex. Trilha Mata Alta"
+                                            />
+                                            <button
+                                              onClick={() => {
+                                                if (editItemName.trim()) {
+                                                  setSavedPoints(prev => prev.map(item => item.id === track.id ? { ...item, name: editItemName.trim() } : item));
+                                                  setEditingTrackId(null);
+                                                  showTemporaryStatus("Nome da trilha atualizado!");
+                                                }
+                                              }}
+                                              className="bg-emerald-600 hover:bg-emerald-500 px-2.5 py-1 text-[8px] font-bold text-white uppercase rounded font-mono cursor-pointer"
+                                            >
+                                              OK
+                                            </button>
+                                            <button
+                                              onClick={() => setEditingTrackId(null)}
+                                              className="bg-military-800 border border-military-700 px-2 py-1 text-[8px] font-bold text-military-300 uppercase rounded font-mono cursor-pointer"
+                                            >
+                                              Sair
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <button
+                                            onClick={() => shareTrackAsKml(track)}
+                                            className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white cursor-pointer"
+                                            title="Compartilhar como KML"
+                                          >
+                                            <Share2 className="w-3.5 h-3.5 text-blue-400 mb-0.5" />
+                                            <span className="font-mono text-[7.5px] uppercase tracking-wide">Partilhar</span>
+                                          </button>
+
+                                          <button
+                                            onClick={() => {
+                                              setEditItemName(track.name);
+                                              setEditingTrackId(track.id);
+                                            }}
+                                            className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white cursor-pointer"
+                                            title="Editar Nome"
+                                          >
+                                            <Pencil className="w-3.5 h-3.5 text-blue-400 mb-0.5" />
+                                            <span className="font-mono text-[7.5px] uppercase tracking-wide">Editar</span>
+                                          </button>
+
+                                          <button
+                                            onClick={() => {
+                                              const text = `${track.name} | Total: ${((track.distance || 0) / 1000).toFixed(2)} km | Duração: ${formatElapsedTime(track.duration || 0)} | Pontos: ${track.points?.map((p, idx) => `P${idx+1}: [${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}]`).join(' -> ')}`;
+                                              navigator.clipboard.writeText(text);
+                                              showTemporaryStatus("Coordenadas da trilha copiadas!");
+                                            }}
+                                            className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white cursor-pointer"
+                                            title="Copiar Coordenadas"
+                                          >
+                                            <Copy className="w-3.5 h-3.5 text-blue-400 mb-0.5" />
+                                            <span className="font-mono text-[7.5px] uppercase tracking-wide">Copiar</span>
+                                          </button>
+
+                                          <button
+                                            onClick={() => {
+                                              setSavedPoints(prev => prev.filter(x => x.id !== track.id));
+                                              showTemporaryStatus("Trilha removida.");
+                                            }}
+                                            className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white animate-fadeIn cursor-pointer"
+                                            title="Excluir"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5 text-red-400 mb-0.5" />
+                                            <span className="font-mono text-[7.5px] uppercase tracking-wide">Excluir</span>
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
