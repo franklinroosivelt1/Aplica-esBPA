@@ -26,7 +26,8 @@ import {
   Save,
   Pencil,
   RotateCcw,
-  Crosshair
+  Crosshair,
+  ShieldCheck
 } from 'lucide-react';
 import { decimalToDMS } from '../utils/coords';
 import brandLogo from '../assets/images/batalhao_ambiental_logo_1779854041969.png';
@@ -239,6 +240,100 @@ function worldPixelToLatLng(x: number, y: number, zoom: number) {
   return { lat, lng };
 }
 
+// --- HAVERSINE GEODETIC DISTANCE MATH ---
+function calculateHaversineDistance(pt1: { lat: number; lng: number }, pt2: { lat: number; lng: number }): number {
+  const R = 6371; // Earth major radius in km
+  const dLat = (pt2.lat - pt1.lat) * Math.PI / 180;
+  const dLng = (pt2.lng - pt1.lng) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(pt1.lat * Math.PI / 180) * Math.cos(pt2.lat * Math.PI / 180) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// --- GPS TRACK SANITIZER & ANOMALY FILTER (ANTI-TELEPORTATION) ---
+function sanitizeTrackPoints(rawPoints: Array<{ lat: number; lng: number; time?: number; accuracy?: number }>): {
+  cleanedPoints: Array<{ lat: number; lng: number; time?: number; accuracy?: number }>;
+  distanceMeters: number;
+  anomaliesRemoved: number;
+} {
+  if (!rawPoints || rawPoints.length === 0) {
+    return { cleanedPoints: [], distanceMeters: 0, anomaliesRemoved: 0 };
+  }
+  if (rawPoints.length === 1) {
+    return { cleanedPoints: rawPoints, distanceMeters: 0, anomaliesRemoved: 0 };
+  }
+
+  // 1. Filter out invalid/zero coordinates and points with very bad accuracy (> 60m)
+  const valid = rawPoints.filter(p => 
+    typeof p.lat === 'number' && !isNaN(p.lat) &&
+    typeof p.lng === 'number' && !isNaN(p.lng) &&
+    p.lat >= -90 && p.lat <= 90 &&
+    p.lng >= -180 && p.lng <= 180 &&
+    !(p.lat === 0 && p.lng === 0) &&
+    !(p.accuracy && p.accuracy > 60)
+  );
+
+  let anomaliesCount = rawPoints.length - valid.length;
+
+  if (valid.length <= 2) {
+    let d = 0;
+    for (let i = 1; i < valid.length; i++) {
+      d += calculateHaversineDistance(valid[i - 1], valid[i]) * 1000;
+    }
+    return { cleanedPoints: valid, distanceMeters: d, anomaliesRemoved: anomaliesCount };
+  }
+
+  // 2. Remove anomalous spikes (e.g. jumping > 1.5 km to cell tower and jumping back, or jump > 2.5 km)
+  const result: Array<{ lat: number; lng: number; time?: number; accuracy?: number }> = [];
+
+  for (let i = 0; i < valid.length; i++) {
+    const curr = valid[i];
+
+    if (result.length === 0) {
+      result.push(curr);
+      continue;
+    }
+
+    const prev = result[result.length - 1];
+    const distFromPrev = calculateHaversineDistance(prev, curr) * 1000;
+
+    // Check if next point exists to identify triangular spike
+    if (i < valid.length - 1) {
+      const next = valid[i + 1];
+      const distFromNext = calculateHaversineDistance(curr, next) * 1000;
+      const distPrevToNext = calculateHaversineDistance(prev, next) * 1000;
+
+      // Spike condition: point shoots > 1500m away, next shoots > 1500m back, while prev and next are close (< 1200m)
+      if (distFromPrev > 1500 && distFromNext > 1500 && distPrevToNext < 1200) {
+        anomaliesCount++;
+        continue; // Discard anomaly spike
+      }
+    }
+
+    // Check extreme single jump (> 2500m)
+    if (distFromPrev > 2500) {
+      anomaliesCount++;
+      continue; // Discard absurd jump
+    }
+
+    result.push(curr);
+  }
+
+  // 3. Recalculate true cumulative distance in meters
+  let totalDistance = 0;
+  for (let i = 1; i < result.length; i++) {
+    totalDistance += calculateHaversineDistance(result[i - 1], result[i]) * 1000;
+  }
+
+  return {
+    cleanedPoints: result,
+    distanceMeters: totalDistance,
+    anomaliesRemoved: anomaliesCount
+  };
+}
+
 // Coordinate preset for the Environmental Police (BPA) in Acre, Brazil
 const BASE_LAT = -9.04312;
 const BASE_LNG = -68.65581;
@@ -321,7 +416,7 @@ interface SavedPoint {
   lng: number;
   createdAt: number;
   isTrack?: boolean;
-  points?: Array<{ lat: number; lng: number }>;
+  points?: Array<{ lat: number; lng: number; time?: number; accuracy?: number }>;
   distance?: number;
   duration?: number;
 }
@@ -423,11 +518,26 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
   const [measurePoints, setMeasurePoints] = useState<Array<{ lat: number; lng: number }>>([]);
   const [areaPoints, setAreaPoints] = useState<Array<{ lat: number; lng: number }>>([]);
   
-  // Saved Points List
+  // Saved Points List (with automatic GPS glitch / anomaly sanitization)
   const [savedPoints, setSavedPoints] = useState<SavedPoint[]>(() => {
     const got = localStorage.getItem('president_saved_points');
     if (got) {
-      try { return JSON.parse(got); } catch (e) { return []; }
+      try {
+        const parsed: SavedPoint[] = JSON.parse(got);
+        return parsed.map(pt => {
+          if (pt.isTrack && pt.points && pt.points.length > 1) {
+            const { cleanedPoints, distanceMeters, anomaliesRemoved } = sanitizeTrackPoints(pt.points);
+            if (anomaliesRemoved > 0) {
+              return {
+                ...pt,
+                points: cleanedPoints,
+                distance: distanceMeters
+              };
+            }
+          }
+          return pt;
+        });
+      } catch (e) { return []; }
     }
     return [];
   });
@@ -782,24 +892,80 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     }
   }, []);
 
-  // Track real GPS position if simulation turned off
+  // Reference to last accepted GPS point for speed/jump calculations
+  const lastAcceptedGpsRef = useRef<{ lat: number; lng: number; time: number; accuracy: number } | null>(null);
+
+  // Centralized GPS processor that filters out low-accuracy cell tower spikes & teleportation glitches
+  const processGpsPosition = (pos: GeolocationPosition) => {
+    const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+
+    // 1. Basic coordinate sanity check
+    if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return;
+    }
+
+    // 2. Always update current GPS state for real-time map indicator & UI stats
+    setGpsCoords({ lat, lng, accuracy });
+
+    // 3. If track recording is active and not in simulated mode, apply strict GIS filtering
+    if (isRecordingGpsTrack && !simulatedGps) {
+      // Quality Gate 1: Accuracy filter (satellite GPS is <= 45m; cellular antennas/WiFi guesses are > 50m up to 100km)
+      if (accuracy > 45) {
+        console.warn(`[GPS Filter] Ponto descartado: baixa precisão (±${accuracy.toFixed(1)}m > 45m)`);
+        return;
+      }
+
+      const newPoint = { lat, lng, time: Date.now(), accuracy };
+
+      setRecordedTrackPoints(prev => {
+        if (prev.length === 0) {
+          lastAcceptedGpsRef.current = newPoint;
+          return [newPoint];
+        }
+
+        const lastPt = prev[prev.length - 1];
+        const distKm = calculateHaversineDistance(lastPt, newPoint);
+        const distM = distKm * 1000;
+
+        // Quality Gate 2: Ignore minimal jitter while standing still (< 1.0m)
+        if (distM < 1.0) {
+          return prev;
+        }
+
+        // Quality Gate 3: Anti-Teleportation & Outlier Rejection
+        const lastTime = (lastPt as any).time || (newPoint.time - 2000);
+        const timeDeltaSec = Math.max((newPoint.time - lastTime) / 1000, 1);
+        const speedKmh = (distM / timeDeltaSec) * 3.6;
+
+        // In field conditions (Acre forests/trails), an officer or vehicle does not exceed 140 km/h,
+        // and cannot jump > 2.0 km in a single reading (like the 195 km jump to Feijó cell tower).
+        if (distM > 2000 || (distM > 250 && speedKmh > 140)) {
+          console.warn(`[GPS Filter] Salto anômalo rejeitado: ${distM.toFixed(1)}m em ${timeDeltaSec.toFixed(1)}s (${speedKmh.toFixed(1)} km/h)`);
+          return prev;
+        }
+
+        // Valid point! Accumulate real ground distance and append point
+        setRecordedTrackDistance(d => d + distM);
+        lastAcceptedGpsRef.current = newPoint;
+        return [...prev, newPoint];
+      });
+    }
+  };
+
+  // Track real GPS position continuously
   useEffect(() => {
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        setGpsCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy
-        });
+        processGpsPosition(pos);
       },
       (err) => {
         console.warn("GPS Indisponível ou Permissão Negada", err);
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [isRecordingGpsTrack, simulatedGps]);
 
   // Redraw whenever parameters adapt (wrapped in requestAnimationFrame to prevent state lockups and drop frames on high interactions like pan/pinch)
   useEffect(() => {
@@ -2134,8 +2300,16 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     setRecordedTrackStartTime(startTime);
     setRecordedTrackElapsedTime(0);
     
-    const initialPos = simulatedGps ? simGpsCoords : gpsCoords;
-    const initialPoints = initialPos ? [initialPos] : [];
+    let initialPoints: Array<{ lat: number; lng: number; time?: number; accuracy?: number }> = [];
+    if (simulatedGps) {
+      initialPoints = [{ lat: simGpsCoords.lat, lng: simGpsCoords.lng, time: startTime, accuracy: 5 }];
+      lastAcceptedGpsRef.current = { lat: simGpsCoords.lat, lng: simGpsCoords.lng, time: startTime, accuracy: 5 };
+    } else if (gpsCoords && gpsCoords.accuracy <= 45 && !(gpsCoords.lat === 0 && gpsCoords.lng === 0)) {
+      initialPoints = [{ lat: gpsCoords.lat, lng: gpsCoords.lng, time: startTime, accuracy: gpsCoords.accuracy }];
+      lastAcceptedGpsRef.current = { lat: gpsCoords.lat, lng: gpsCoords.lng, time: startTime, accuracy: gpsCoords.accuracy };
+    } else {
+      lastAcceptedGpsRef.current = null;
+    }
     
     setRecordedTrackPoints(initialPoints);
     setRecordedTrackDistance(0);
@@ -2145,43 +2319,133 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     showTemporaryStatus(`Gravação de trilha iniciada: ${finalName}`);
   };
 
-  // Keep-Alive background systems: Screen Wake Lock + Silent Audio Playback Loop
+  // Keep-Alive background systems: Screen Wake Lock + Web Audio API + HTML5 Audio + Web Worker + MediaSession + Median.co Bridge
   const wakeLockRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioOscillatorRef = useRef<OscillatorNode | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const workerRef = useRef<Worker | null>(null);
 
   useEffect(() => {
     let activeAudio: HTMLAudioElement | null = null;
+    let activeWorker: Worker | null = null;
+    let activeAudioCtx: AudioContext | null = null;
+    let activeOsc: OscillatorNode | null = null;
     
     async function startKeepAlive() {
       if (!isRecordingGpsTrack) return;
       
-      // 1. Request Screen Wake Lock to prevent smartphone from turning off the screen or locking
+      // 1. Request Screen Wake Lock
       if ('wakeLock' in navigator) {
         try {
           wakeLockRef.current = await navigator.wakeLock.request('screen');
-          console.log("GPS Background: Wake Lock adquirido com sucesso.");
+          console.log("GPS Background: Screen Wake Lock ativo.");
         } catch (err) {
-          console.warn("GPS Background: Erro ao solicitar Screen Wake Lock:", err);
+          console.warn("GPS Background: Wake Lock request error:", err);
         }
       }
+
+      // 2. Native wrapper support (Median.co / GoNative container)
+      try {
+        (window as any).median?.screen?.keepScreenOn?.({ enable: true });
+        (window as any).gonative?.screen?.keepScreenOn?.({ enable: true });
+        (window as any).median?.backgroundLocation?.start?.();
+        (window as any).gonative?.backgroundLocation?.start?.();
+      } catch (err) {
+        console.warn("Median native bridge not present:", err);
+      }
       
-      // 2. Play a silent audio loop to keep the browser process alive in the background on mobile OS
+      // 3. Web Audio API sub-audible tone (keeps Android audio thread & WebView running in background)
+      try {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          if (ctx.state === 'suspended') {
+            await ctx.resume();
+          }
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(32, ctx.currentTime); // Sub-audible 32Hz
+          gain.gain.setValueAtTime(0.0001, ctx.currentTime); // Microscopic volume (inaudible)
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          audioContextRef.current = ctx;
+          audioOscillatorRef.current = osc;
+          activeAudioCtx = ctx;
+          activeOsc = osc;
+          console.log("GPS Background: Web Audio API oscillator ativo.");
+        }
+      } catch (err) {
+        console.warn("Web Audio API keepalive error:", err);
+      }
+
+      // 4. HTML5 Audio Loop + MediaSession (Registers app as active background media player on Android lockscreen)
       try {
         const audio = new Audio();
-        // 1-second silent WAV loop
         audio.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
         audio.loop = true;
-        audio.volume = 0.01; // Almost muted
+        audio.volume = 0.05;
         await audio.play();
         audioRef.current = audio;
         activeAudio = audio;
-        console.log("GPS Background: Áudio silencioso em segundo plano ativado.");
+
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: 'Gravação de Trilha GPS Ativa',
+            artist: 'President Maps',
+            album: 'Rastreamento Georreferenciado em Campo'
+          });
+          navigator.mediaSession.playbackState = 'playing';
+        }
+        console.log("GPS Background: MediaSession & Audio ativo.");
       } catch (err) {
-        console.warn("GPS Background: Bloqueio do navegador para áudio (necessita interação):", err);
+        console.warn("GPS Background: Audio loop error:", err);
+      }
+
+      // 5. Background Web Worker heartbeat (Runs in worker thread, forcing hardware GPS queries every 2s)
+      try {
+        const workerBlob = new Blob([`
+          let interval = null;
+          self.onmessage = function(e) {
+            if (e.data === 'start') {
+              if (interval) clearInterval(interval);
+              interval = setInterval(function() {
+                self.postMessage('tick');
+              }, 2000);
+            } else if (e.data === 'stop') {
+              if (interval) clearInterval(interval);
+              interval = null;
+            }
+          };
+        `], { type: 'application/javascript' });
+
+        const workerUrl = URL.createObjectURL(workerBlob);
+        const worker = new Worker(workerUrl);
+        worker.onmessage = (e) => {
+          if (e.data === 'tick') {
+            // Force hardware GPS position query even if watchPosition entered low-power state
+            if (navigator.geolocation && !simulatedGps) {
+              navigator.geolocation.getCurrentPosition(
+                (pos) => processGpsPosition(pos),
+                (err) => console.warn("Background GPS tick query:", err.message),
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 3500 }
+              );
+            }
+          }
+        };
+        worker.postMessage('start');
+        workerRef.current = worker;
+        activeWorker = worker;
+        console.log("GPS Background: Web Worker GPS Heartbeat iniciado.");
+      } catch (err) {
+        console.warn("Worker keepalive error:", err);
       }
     }
 
     function stopKeepAlive() {
+      // Release wake lock
       if (wakeLockRef.current) {
         wakeLockRef.current.release()
           .then(() => {
@@ -2189,12 +2453,50 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           })
           .catch((e: any) => console.error(e));
       }
+
+      // Release Median native screen keep
+      try {
+        (window as any).median?.screen?.keepScreenOn?.({ enable: false });
+        (window as any).gonative?.screen?.keepScreenOn?.({ enable: false });
+      } catch (e) {}
+
+      // Stop Web Worker
+      if (activeWorker) {
+        activeWorker.postMessage('stop');
+        activeWorker.terminate();
+      }
+      if (workerRef.current) {
+        workerRef.current.postMessage('stop');
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+
+      // Stop Web Audio
+      if (activeOsc) {
+        try { activeOsc.stop(); } catch (e) {}
+      }
+      if (activeAudioCtx) {
+        try { activeAudioCtx.close(); } catch (e) {}
+      }
+      if (audioOscillatorRef.current) {
+        try { audioOscillatorRef.current.stop(); } catch (e) {}
+        audioOscillatorRef.current = null;
+      }
+      if (audioContextRef.current) {
+        try { audioContextRef.current.close(); } catch (e) {}
+        audioContextRef.current = null;
+      }
+
+      // Stop HTML5 Audio & MediaSession
+      if (activeAudio) {
+        activeAudio.pause();
+      }
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
-      if (activeAudio) {
-        activeAudio.pause();
+      if ('mediaSession' in navigator) {
+        try { navigator.mediaSession.playbackState = 'none'; } catch (e) {}
       }
     }
 
@@ -2207,19 +2509,27 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     return () => {
       stopKeepAlive();
     };
-  }, [isRecordingGpsTrack]);
+  }, [isRecordingGpsTrack, simulatedGps]);
 
-  // Handle visibility changes to re-acquire wake lock when the tab becomes visible again
+  // Handle visibility changes to re-acquire wake lock & trigger immediate position fix upon unlock
   useEffect(() => {
     const handleVisibility = async () => {
       if (document.visibilityState === 'visible' && isRecordingGpsTrack) {
         if ('wakeLock' in navigator && !wakeLockRef.current) {
           try {
             wakeLockRef.current = await navigator.wakeLock.request('screen');
-            console.log("GPS Background: Wake Lock re-adquirido com sucesso ao abrir a aba");
+            console.log("GPS Background: Wake Lock re-adquirido com sucesso");
           } catch (err) {
             console.warn("GPS Background: Falha ao re-adquirir Wake Lock:", err);
           }
+        }
+        // Query GPS hardware immediately upon phone unlock
+        if (navigator.geolocation && !simulatedGps) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => processGpsPosition(pos),
+            (err) => console.warn(err),
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 4000 }
+          );
         }
       }
     };
@@ -2228,7 +2538,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [isRecordingGpsTrack]);
+  }, [isRecordingGpsTrack, simulatedGps]);
 
   // Effect 1: Handle GPS recording time ticking & simulated movement
   useEffect(() => {
@@ -2246,44 +2556,31 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       // If simulated, update position to create realistic walking movement
       if (simulatedGps) {
         setSimGpsCoords(prev => {
-          // slight random walk in Acre (approx 5-10 meters, which is 0.00005 to 0.00010 degrees)
-          // consistent walking heading northeast with a bit of noise
           const deltaLat = 0.00006 + (Math.random() - 0.4) * 0.00002;
           const deltaLng = 0.00008 + (Math.random() - 0.4) * 0.00002;
-          return {
+          const newPos = {
             lat: prev.lat + deltaLat,
-            lng: prev.lng + deltaLng
+            lng: prev.lng + deltaLng,
+            time: Date.now(),
+            accuracy: 5
           };
+          setRecordedTrackPoints(pts => {
+            if (pts.length === 0) return [newPos];
+            const last = pts[pts.length - 1];
+            const distM = calculateHaversineDistance(last, newPos) * 1000;
+            if (distM >= 0.5) {
+              setRecordedTrackDistance(d => d + distM);
+              return [...pts, newPos];
+            }
+            return pts;
+          });
+          return newPos;
         });
       }
     }, 1000);
 
     return () => clearInterval(intervalId);
   }, [isRecordingGpsTrack, simulatedGps, recordedTrackStartTime]);
-
-  // Effect 2: Watch current active position to append track points and calculate accumulated distance
-  const currentActivePos = simulatedGps ? simGpsCoords : gpsCoords;
-
-  useEffect(() => {
-    if (!isRecordingGpsTrack || !currentActivePos) return;
-
-    setRecordedTrackPoints(prev => {
-      if (prev.length === 0) {
-        return [currentActivePos];
-      }
-      const lastPt = prev[prev.length - 1];
-      // Calculate distance in km
-      const distKm = calculateHaversineDistance(lastPt, currentActivePos);
-      const distM = distKm * 1000;
-
-      // Append point and add to accumulated distance if moved at least 0.5 meters to capture fine paths
-      if (distM >= 0.5) {
-        setRecordedTrackDistance(d => d + distM);
-        return [...prev, currentActivePos];
-      }
-      return prev;
-    });
-  }, [isRecordingGpsTrack, currentActivePos]);
 
   // Center map on target coordinate
   const centerOnGps = () => {
@@ -4676,20 +4973,24 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                 return;
                               }
                               const finalName = trackName || `TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`;
+                              const { cleanedPoints, distanceMeters, anomaliesRemoved } = sanitizeTrackPoints(recordedTrackPoints);
+                              const pointsToSave = cleanedPoints.length >= 2 ? cleanedPoints : recordedTrackPoints;
+                              const distToSave = cleanedPoints.length >= 2 ? distanceMeters : recordedTrackDistance;
+
                               const newTrack: SavedPoint = {
                                 id: 'track_' + Date.now(),
                                 name: finalName,
-                                lat: recordedTrackPoints[0].lat,
-                                lng: recordedTrackPoints[0].lng,
+                                lat: pointsToSave[0].lat,
+                                lng: pointsToSave[0].lng,
                                 isTrack: true,
-                                points: recordedTrackPoints,
-                                distance: recordedTrackDistance,
+                                points: pointsToSave,
+                                distance: distToSave,
                                 duration: recordedTrackElapsedTime,
                                 createdAt: Date.now()
                               };
                               setSavedPoints(prev => [newTrack, ...prev]);
                               setIsRecordingGpsTrack(false);
-                              showTemporaryStatus(`Trilha "${finalName}" salva com sucesso!`);
+                              showTemporaryStatus(`Trilha "${finalName}" salva com sucesso!${anomaliesRemoved > 0 ? ` (${anomaliesRemoved} saltos anômalos removidos)` : ''}`);
                             }}
                             className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 border border-emerald-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                           >
@@ -4819,9 +5120,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
                                   {/* expanded action links for Track */}
                                   {expandedTrackMenuId === track.id && (
-                                    <div className="grid grid-cols-4 gap-1.5 border-t border-military-800/80 pt-2.5 mt-2.5 animate-fadeIn">
+                                    <div className="grid grid-cols-5 gap-1 border-t border-military-800/80 pt-2.5 mt-2.5 animate-fadeIn">
                                       {editingTrackId === track.id ? (
-                                        <div className="col-span-4 flex flex-col gap-1.5 p-1 bg-military-900 rounded-lg">
+                                        <div className="col-span-5 flex flex-col gap-1.5 p-1 bg-military-900 rounded-lg">
                                           <span className="font-mono text-[7px] text-military-400 uppercase font-black tracking-wider px-1">Renomear Trilha:</span>
                                           <div className="flex gap-1.5">
                                             <input
@@ -4853,6 +5154,29 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                         </div>
                                       ) : (
                                         <>
+                                          <button
+                                            onClick={() => {
+                                              if (track.points && track.points.length > 1) {
+                                                const { cleanedPoints, distanceMeters, anomaliesRemoved } = sanitizeTrackPoints(track.points);
+                                                if (anomaliesRemoved > 0) {
+                                                  setSavedPoints(prev => prev.map(item => item.id === track.id ? {
+                                                    ...item,
+                                                    points: cleanedPoints,
+                                                    distance: distanceMeters
+                                                  } : item));
+                                                  showTemporaryStatus(`Trilha corrigida! ${anomaliesRemoved} salto(s) anômalo(s) removido(s). Nova distância: ${formatDistance(distanceMeters)}.`);
+                                                } else {
+                                                  showTemporaryStatus("Trilha validada: nenhum salto ou anomalia encontrado.");
+                                                }
+                                              }
+                                            }}
+                                            className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-emerald-600 transition-all text-military-300 hover:text-emerald-400 cursor-pointer"
+                                            title="Limpar saltos anômalos de GPS (Anti-Glitch)"
+                                          >
+                                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 mb-0.5" />
+                                            <span className="font-mono text-[7px] uppercase tracking-wide">Limpar</span>
+                                          </button>
+
                                           <button
                                             onClick={() => shareTrackAsKml(track)}
                                             className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-military-650 transition-all text-military-300 hover:text-white cursor-pointer"
@@ -5021,7 +5345,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
                         {/* Expansible Actions Menu mimicking Screenshot 3 */}
                         {expandedPointMenuId === pt.id && (
-                          <div className="grid grid-cols-4 gap-1.5 border-t border-military-800/80 pt-2.5 mt-2.5 animate-fadeIn">
+                          <div className={`grid ${isTrackItem ? 'grid-cols-5' : 'grid-cols-4'} gap-1.5 border-t border-military-800/80 pt-2.5 mt-2.5 animate-fadeIn`}>
                             {/* Option 1: Visualizar */}
                             <button
                               onClick={() => {
@@ -5055,7 +5379,33 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                               <span className="font-mono text-[7.5px] uppercase tracking-wide">Editar</span>
                             </button>
 
-                            {/* Option 3: Compartilhar */}
+                            {/* Option 3: Limpar GPS (apenas para trilhas) */}
+                            {isTrackItem && (
+                              <button
+                                onClick={() => {
+                                  if (pt.points && pt.points.length > 1) {
+                                    const { cleanedPoints, distanceMeters, anomaliesRemoved } = sanitizeTrackPoints(pt.points);
+                                    if (anomaliesRemoved > 0) {
+                                      setSavedPoints(prev => prev.map(item => item.id === pt.id ? {
+                                        ...item,
+                                        points: cleanedPoints,
+                                        distance: distanceMeters
+                                      } : item));
+                                      showTemporaryStatus(`Trilha corrigida! ${anomaliesRemoved} salto(s) removido(s). Nova distância: ${formatDistance(distanceMeters)}.`);
+                                    } else {
+                                      showTemporaryStatus("Trilha validada: nenhum salto ou anomalia encontrado.");
+                                    }
+                                  }
+                                }}
+                                className="flex flex-col items-center justify-center p-1.5 rounded-lg bg-military-800/30 hover:bg-military-800 border border-military-750 hover:border-emerald-600 transition-all text-military-300 hover:text-emerald-400"
+                                title="Limpar saltos anômalos de GPS"
+                              >
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 mb-0.5" />
+                                <span className="font-mono text-[7.5px] uppercase tracking-wide">Limpar</span>
+                              </button>
+                            )}
+
+                            {/* Option 4: Compartilhar */}
                             <button
                               onClick={() => {
                                 let clipboardText = "";
@@ -5074,7 +5424,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                               <span className="font-mono text-[7.5px] uppercase tracking-wide">Enviar</span>
                             </button>
 
-                            {/* Option 4: Excluir */}
+                            {/* Option 5: Excluir */}
                             <button
                               onClick={() => {
                                 setSavedPoints(prev => prev.filter(p => p.id !== pt.id));
@@ -5178,9 +5528,13 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   </div>
 
                   {/* Instructions on Lock state */}
-                  <div className="border border-military-750/50 bg-military-850/40 rounded-xl p-3">
-                    <p className="font-sans text-[9px] text-military-400 leading-normal">
-                      <strong className="text-military-300">📱 PROTEÇÃO DE TELA ATIVA:</strong> Você pode desligar a tela ou bloquear o celular. O sistema mantém o GPS ativo em segundo plano utilizando um processo de áudio inaudível para prevenir suspensão pelo iOS/Android e sincronização de hora absoluta. Certifique-se de manter esta aba aberta no navegador.
+                  <div className="border border-emerald-900/40 bg-emerald-950/20 rounded-xl p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      <span className="font-mono text-[9px] font-black uppercase text-emerald-400 tracking-wider">RASTREAMENTO PERSISTENTE ATIVO</span>
+                    </div>
+                    <p className="font-sans text-[9px] text-military-300 leading-normal">
+                      Você pode desligar a tela ou bloquear o smartphone. O aplicativo mantém o rastreamento GPS ativo em segundo plano com oscilador contínuo de áudio, Worker dedicado e filtro inteligente contra saltos anômalos de antenas celulares.
                     </p>
                   </div>
 
@@ -5194,21 +5548,25 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           return;
                         }
                         const finalName = trackName || `TRILHA GPS ${savedPoints.filter(p => p.isTrack).length + 1}`;
+                        const { cleanedPoints, distanceMeters, anomaliesRemoved } = sanitizeTrackPoints(recordedTrackPoints);
+                        const pointsToSave = cleanedPoints.length >= 2 ? cleanedPoints : recordedTrackPoints;
+                        const distToSave = cleanedPoints.length >= 2 ? distanceMeters : recordedTrackDistance;
+
                         const newTrack: SavedPoint = {
                           id: 'track_' + Date.now(),
                           name: finalName,
-                          lat: recordedTrackPoints[0].lat,
-                          lng: recordedTrackPoints[0].lng,
+                          lat: pointsToSave[0].lat,
+                          lng: pointsToSave[0].lng,
                           isTrack: true,
-                          points: recordedTrackPoints,
-                          distance: recordedTrackDistance,
+                          points: pointsToSave,
+                          distance: distToSave,
                           duration: recordedTrackElapsedTime,
                           createdAt: Date.now()
                         };
                         setSavedPoints(prev => [newTrack, ...prev]);
                         setIsRecordingGpsTrack(false);
                         setActiveTab('pontos');
-                        showTemporaryStatus(`Trilha "${finalName}" salva e listada na aba Pontos Salvos!`);
+                        showTemporaryStatus(`Trilha "${finalName}" salva com sucesso!${anomaliesRemoved > 0 ? ` (${anomaliesRemoved} saltos anômalos removidos)` : ''}`);
                       }}
                       className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 border border-emerald-500 text-white font-sans text-[11px] font-black uppercase rounded-xl tracking-wider shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
                     >
