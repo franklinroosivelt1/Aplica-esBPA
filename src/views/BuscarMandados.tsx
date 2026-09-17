@@ -96,7 +96,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
             return (
               <React.Fragment key={i}>
                 {isMatch ? (
-                  <mark className="bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 px-1 rounded font-extrabold">{word}</mark>
+                  <mark className="bg-emerald-100 text-emerald-950 border border-emerald-300 px-1 rounded font-black">{word}</mark>
                 ) : (
                   <span>{word}</span>
                 )}
@@ -117,7 +117,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
   return (
     <span>
       {before}
-      <mark className="bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 px-1 rounded font-extrabold">
+      <mark className="bg-emerald-100 text-emerald-950 border border-emerald-300 px-1 rounded font-black">
         {match}
       </mark>
       <HighlightedText text={after} query={query} />
@@ -485,14 +485,23 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                   nome = cells[procCellIdx + 1].toUpperCase().trim();
                 }
 
-                if (nome && nome.length > 2 && !nome.includes("PROCESSO") && !nome.includes("NOME") && !nome.includes("PESSOAL")) {
+                // Verify that nome is not a court header
+                const isCourtHeader = /VARA|PLANT[ÃA]O|EXECU[ÇC][ÃA]O|PENAS?|REGIME|FECHADO|COMARCA|TRIBUNAL|DESEMBARGADOR|SECRETARIA|MINIST[ÉE]RIO|PROCESSO|NOME|PESSOAL/i.test(nome);
+
+                if (nome && nome.length > 2 && !isCourtHeader) {
                   const dates = cells.filter(c => /\d{2}\/\d{2}\/\d{4}/.test(c));
                   const nascimento = dates[0] || undefined;
                   const dataExpedicao = dates[1] || undefined;
 
+                  const allRowText = cells.join(' ') + " " + lineText;
+                  const cpfRowMatch = allRowText.match(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/) || allRowText.match(/\b\d{11}\b/);
+                  const rowCpf = cpfRowMatch ? cpfRowMatch[0] : undefined;
+
                   const textCells = cells.slice(procCellIdx + 2).filter(c => 
                     !/\d{2}\/\d{2}\/\d{4}/.test(c) && 
                     !/\d{3,10}-\d{2}/.test(c) &&
+                    !/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/.test(c) &&
+                    !/^\d{11}$/.test(c) &&
                     c.toUpperCase() !== "NÃO INFORMADO" && 
                     c.toUpperCase() !== "NÃO INFORMADA" &&
                     c.toUpperCase() !== "NÃO CONSTA" &&
@@ -528,6 +537,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                   extractedWarrants.push({
                     id: `extracted-${numero}-${lineIdx}-${pageNum}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
                     nome: nome,
+                    cpf: rowCpf,
                     alcunha: alcunha !== "Não Informado" && alcunha !== "Não informado" && alcunha !== "NÃO INFORMADO" ? alcunha : undefined,
                     nomeMae: nomeMae,
                     nomePai: nomePai,
@@ -551,46 +561,92 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
           const pageRawText = pageLines.join(' ');
           const generalWords = pageRawText.toUpperCase();
           if (generalWords.includes("MANDADO") || generalWords.includes("PRISÃO") || generalWords.includes("BNMP")) {
-            const euzenMatch = pageRawText.match(/([A-ZÀ-Ú]{3,}\s+[A-ZÀ-Ú\s]{4,45})/g);
-            if (euzenMatch) {
-              euzenMatch.forEach(nameCandidate => {
-                const cleanCandidate = nameCandidate.trim();
-                const upperCand = cleanCandidate.toUpperCase();
-                if (
-                  cleanCandidate.length > 8 && 
-                  !upperCand.includes("TRIBUNAL") && 
-                  !upperCand.includes("CONSELHO") && 
-                  !upperCand.includes("JUSTIÇA") && 
-                  !upperCand.includes("DOCUMENTO") && 
-                  !upperCand.includes("MANDADO") &&
-                  !upperCand.includes("NACIONAL") &&
-                  !upperCand.includes("PODER") &&
-                  !upperCand.includes("REPÚBLICA") &&
-                  !upperCand.includes("DE POVO") &&
-                  !upperCand.includes("ESTADO DO")
-                ) {
-                  const exists = extractedWarrants.some(w => w.nome.toUpperCase() === upperCand);
-                  if (!exists) {
-                    const processMatch = pageRawText.match(/\b\d{3,7}-\d{2}\.\d{4}\b/) || pageRawText.match(/\b\d{7,10}-\d{2}\b/);
-                    const numero = processMatch ? processMatch[0] : "BNMP-FALL-" + Date.now().toString().slice(-4) + Math.floor(Math.random() * 10).toString();
-                    
-                    const tipifInfo = extractTipificacaoFromText(pageRawText);
+            // First check if there is an explicit labeled name field: NOME: / NOME DA PESSOA: / INDICIADO:
+            const labelNameMatch = pageRawText.match(/(?:NOME(?:\s+DA\s+PESSOA|\s+COMPLETO)?|PESSOA\s+PROCURADA|INDICIADO|CONDENADO)\s*[:.]\s*([A-ZÀ-Ú\s]{4,55})/i);
+            
+            // Extract common BNMP labeled metadata
+            const cpfMatch = pageRawText.match(/(?:CPF(?:\/CNPJ)?)\s*[:.]?\s*(\d{3}\.?\d{3}\.?\d{3}-?\d{2})/i) ||
+                             pageRawText.match(/\b(\d{3}\.\d{3}\.\d{3}-\d{2})\b/);
+            const pageCpf = cpfMatch ? cpfMatch[1].trim() : undefined;
 
-                    extractedWarrants.push({
-                      id: `fall-${numero}-${pageNum}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-                      nome: cleanCandidate.toUpperCase(),
-                      numeroMandado: numero,
-                      status: 'Ativo',
-                      gravidade: 'Média',
-                      artigoLei: tipifInfo.artigo,
-                      naturezaInfracao: tipifInfo.motivo,
-                      orgaoEmissor: "Conselho Nacional de Justiça",
-                      tipoPrisao: "Preventiva",
-                      situacao: "PENDENTE DE CUMPRIMENTO"
-                    });
-                  }
+            const maeMatch = pageRawText.match(/(?:NOME\s+DA\s+MÃE|MÃE|GENITORA|FILIAÇÃO(?:\s*\(MÃE\))?)\s*[:.]\s*([A-ZÀ-Ú\s]{4,55})/i);
+            const pageMae = maeMatch ? maeMatch[1].trim().toUpperCase() : undefined;
+
+            const dataMatch = pageRawText.match(/(?:DATA\s+D[EA]\s+(?:EXPEDIÇÃO|EMISSÃO)|EXPEDIDO\s+EM)\s*[:.]?\s*(\d{2}\/\d{2}\/\d{4})/i) ||
+                              pageRawText.match(/\b(\d{2}\/\d{2}\/\d{4})\b/);
+            const pageDataExp = dataMatch ? dataMatch[1].trim() : undefined;
+
+            let pageSituacao = "PENDENTE DE CUMPRIMENTO";
+            const sitMatch = pageRawText.match(/SITUAÇÃO(?:\s+DO\s+MANDADO)?\s*[:.]\s*([A-ZÀ-Ú\s]{4,30})/i);
+            if (sitMatch) {
+              pageSituacao = sitMatch[1].trim().toUpperCase();
+            } else if (generalWords.includes("CUMPRIDO")) {
+              pageSituacao = "CUMPRIDO";
+            } else if (generalWords.includes("REVOGADO")) {
+              pageSituacao = "REVOGADO";
+            }
+
+            const procMatch = pageRawText.match(/\b\d{3,7}-\d{2}\.\d{4}\b/) || 
+                              pageRawText.match(/\b\d{7,10}-\d{2}\b/) ||
+                              pageRawText.match(/\b\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}\b/);
+            const numero = procMatch ? procMatch[0] : "BNMP-FALL-" + Date.now().toString().slice(-4) + Math.floor(Math.random() * 10).toString();
+
+            const tipifInfo = extractTipificacaoFromText(pageRawText);
+
+            if (labelNameMatch) {
+              const explicitName = labelNameMatch[1].trim().toUpperCase();
+              const isInvalid = /VARA|PLANT[ÃA]O|EXECU[ÇC][ÃA]O|PENAS?|REGIME|FECHADO|COMARCA|TRIBUNAL|JUSTI[ÇC]A/i.test(explicitName);
+              if (!isInvalid && explicitName.length > 3) {
+                const exists = extractedWarrants.some(w => w.nome.toUpperCase() === explicitName);
+                if (!exists) {
+                  extractedWarrants.push({
+                    id: `fall-${numero}-${pageNum}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                    nome: explicitName,
+                    cpf: pageCpf,
+                    nomeMae: pageMae,
+                    situacao: pageSituacao,
+                    dataExpedicao: pageDataExp,
+                    numeroMandado: numero,
+                    status: 'Ativo',
+                    gravidade: 'Média',
+                    artigoLei: tipifInfo.artigo,
+                    naturezaInfracao: tipifInfo.motivo,
+                    orgaoEmissor: "Conselho Nacional de Justiça",
+                    tipoPrisao: "Preventiva"
+                  });
                 }
-              });
+              }
+            } else {
+              // Regex matching with strict exclusions of judicial/administrative terminology
+              const euzenMatch = pageRawText.match(/([A-ZÀ-Ú]{3,}\s+[A-ZÀ-Ú\s]{4,45})/g);
+              if (euzenMatch) {
+                euzenMatch.forEach(nameCandidate => {
+                  const cleanCandidate = nameCandidate.trim();
+                  const upperCand = cleanCandidate.toUpperCase();
+                  const isJudicial = /VARA|PLANT[ÃA]O|EXECU[ÇC][ÃA]O|PENAS?|REGIME|FECHADO|COMARCA|TRIBUNAL|JUSTI[ÇC]A|DOCUMENTO|MANDADO|NACIONAL|PODER|REP[ÚU]BLICA|ESTADO|GABINETE|DESEMBARGADOR|JUIZ|SECRETARIA|SE[ÇC][ÃA]O|MINIST[ÉE]RIO|P[ÚU]BLICO|DEFENSORIA|CART[ÓO]RIO|POL[ÍI]CIA|CIVIL|MILITAR|DELEGACIA|DIRETORIA|INSTITUTO|DIREITO|ASSUNTO|CRIMINAL|C[ÍI]VEL|INF[ÂA]NCIA|JUVENTUDE|ROND[ÔO]NIA|ACRE|AMAZONAS|BRASIL|JUDICI[ÁA]RIO|CERTID[ÃA]O|RELAT[ÓO]RIO|CONSULTA|PORTAL|BANCO|C[ÓO]DIGO|PROCESSO|PENAL|INQU[ÉE]RITO|CUMPRIMENTO|REVOGA[ÇC][ÃA]O|DISTRIBUI[ÇC][ÃA]O|AUTOS|TERMO|AUDI[ÊE]NCIA|PRECAT[ÓO]RIA|OF[ÍI]CIO|ALVAR[ÁA]|SOLTURA|PRIS[ÃA]O/i.test(upperCand);
+                  
+                  if (cleanCandidate.length > 8 && !isJudicial) {
+                    const exists = extractedWarrants.some(w => w.nome.toUpperCase() === upperCand);
+                    if (!exists) {
+                      extractedWarrants.push({
+                        id: `fall-${numero}-${pageNum}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                        nome: cleanCandidate.toUpperCase(),
+                        cpf: pageCpf,
+                        nomeMae: pageMae,
+                        situacao: pageSituacao,
+                        dataExpedicao: pageDataExp,
+                        numeroMandado: numero,
+                        status: 'Ativo',
+                        gravidade: 'Média',
+                        artigoLei: tipifInfo.artigo,
+                        naturezaInfracao: tipifInfo.motivo,
+                        orgaoEmissor: "Conselho Nacional de Justiça",
+                        tipoPrisao: "Preventiva"
+                      });
+                    }
+                  }
+                });
+              }
             }
           }
 
@@ -1176,15 +1232,15 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
         {/* Discovered Warrants Pending Confirmation */}
         {parsedWarrants.length > 0 && (
-          <div className="mt-4 bg-[#141b12] border border-emerald-900/60 rounded-xl p-3.5 space-y-3">
-            <div className="flex items-center justify-between border-b border-military-850 pb-2">
-              <span className="text-[9px] font-mono font-extrabold text-emerald-400 uppercase tracking-widest flex items-center gap-1">
+          <div className="mt-4 bg-military-850 border border-military-750 rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between border-b border-military-750 pb-2">
+              <span className="text-[9px] font-mono font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1">
                 <UserCheck size={11} />
                 Suspeitos Encontrados ({parsedWarrants.length})
               </span>
               <button 
                 onClick={() => setParsedWarrants([])}
-                className="text-military-400 hover:text-red-400 text-[9px] font-bold uppercase cursor-pointer"
+                className="text-military-450 hover:text-red-600 text-[9px] font-bold uppercase cursor-pointer"
               >
                 Limpar
               </button>
@@ -1192,34 +1248,57 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
             <div className="max-h-44 overflow-y-auto space-y-2.5 pr-1">
               {parsedWarrants.map((item, idx) => (
-                <div key={idx} className="bg-black/45 border border-military-850 p-2.5 rounded-lg text-xs">
+                <div key={idx} className="bg-military-800 border border-military-750 p-2.5 rounded-lg text-xs space-y-1.5">
                   <div className="flex justify-between items-start gap-2">
-                    <span className="font-extrabold text-white uppercase text-[11px] block">{item.nome}</span>
-                    <span className="bg-emerald-950/80 border border-emerald-500/30 text-emerald-500 text-[8px] font-bold uppercase px-1 rounded">
-                      {item.tipoPrisao}
+                    <div>
+                      <span className="text-[7.5px] font-mono font-black text-military-500 uppercase block">1. NOME DA PESSOA:</span>
+                      <span className="font-black text-military-100 uppercase text-xs block leading-tight">{item.nome}</span>
+                    </div>
+                    <span className="bg-emerald-100 border border-emerald-300 text-emerald-800 text-[8px] font-black uppercase px-1.5 py-0.5 rounded">
+                      {item.tipoPrisao || 'PREVENTIVA'}
                     </span>
                   </div>
                   
-                  {item.cpf && (
-                    <span className="text-[9px] font-mono text-military-300 block mt-0.5">
-                      CPF: <span className="text-emerald-400 font-black">{item.cpf}</span>
-                    </span>
-                  )}
-                  {item.rg && (
-                    <span className="text-[9px] font-mono text-military-300 block">
-                      RG: {item.rg}
-                    </span>
-                  )}
-                  <span className="text-[8px] font-mono text-military-450 block truncate mt-1 uppercase">
-                    REGISTRO: {item.numeroMandado}
-                  </span>
+                  <div className="grid grid-cols-2 gap-2 text-[9.5px]">
+                    <div>
+                      <span className="text-[7.5px] font-mono font-black text-military-500 uppercase block">2. CPF:</span>
+                      <span className="font-mono font-bold text-military-100 block">
+                        {item.cpf || <span className="text-military-450 italic font-normal">NÃO INFORMADO</span>}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[7.5px] font-mono font-black text-military-500 uppercase block">3. NOME DA MÃE:</span>
+                      <span className="font-bold text-military-100 block truncate">
+                        {item.nomeMae || <span className="text-military-450 italic font-normal">NÃO INFORMADO</span>}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[9.5px] pt-1 border-t border-military-750/60">
+                    <div>
+                      <span className="text-[7.5px] font-mono font-black text-military-500 uppercase block">4. SITUAÇÃO:</span>
+                      <span className="font-black text-emerald-700 text-[9px] uppercase block">
+                        {item.situacao || 'PENDENTE DE CUMPRIMENTO'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[7.5px] font-mono font-black text-military-500 uppercase block">5. DATA DA EMISSÃO:</span>
+                      <span className="font-mono font-bold text-military-100 block">
+                        {item.dataExpedicao || <span className="text-military-450 italic font-normal">NÃO INFORMADO</span>}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 border-t border-military-750/60 text-[8.5px] font-mono text-military-450 block truncate uppercase">
+                    REGISTRO: <span className="font-bold text-military-200">{item.numeroMandado}</span>
+                  </div>
                 </div>
               ))}
             </div>
 
             <button
               onClick={confirmImportWarrants}
-              className="w-full bg-emerald-700 hover:bg-emerald-600 transition-all text-white font-extrabold text-xs py-2.5 rounded-lg uppercase tracking-wider block text-center cursor-pointer shadow opacity-90 hover:opacity-100"
+              className="w-full bg-emerald-700 hover:bg-emerald-600 transition-all text-white font-black text-xs py-2.5 rounded-lg uppercase tracking-wider block text-center cursor-pointer shadow-sm"
             >
               Confirmar Importação de ({parsedWarrants.length}) Mandados
             </button>
@@ -1228,23 +1307,23 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
 
         {/* Integrated List of Loaded/Filtered Warrants */}
         {filteredMandados.length > 0 && (
-          <div className="mt-5 pt-4 border-t border-military-800 space-y-3">
+          <div className="mt-5 pt-4 border-t border-military-750 space-y-3">
             <div className="flex items-center justify-between text-[10px] font-mono text-military-400 px-0.5 pb-1 font-bold">
-              <span className="uppercase tracking-widest flex items-center gap-1">
-                <Database className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="uppercase tracking-widest flex items-center gap-1 text-military-300">
+                <Database className="w-3.5 h-3.5 text-emerald-700" />
                 Mandados Carregados:
               </span>
-              <span className="bg-military-800/80 text-military-300 px-2 py-0.5 rounded font-black">
+              <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded font-black">
                 {filteredMandados.length} ATIVOS LOCAL
               </span>
             </div>
 
-            <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
               {filteredMandados.map((item) => {
                 const isExpanded = expandedId === item.id;
                 const cardBg = isExpanded
-                  ? 'bg-military-850 border-military-600 shadow-md text-military-100'
-                  : 'bg-military-900/90 hover:bg-military-850 border-military-750 text-military-100 transition-all';
+                  ? 'bg-military-800 border-military-600 shadow-md text-military-100'
+                  : 'bg-military-800 hover:border-military-600 border-military-750 text-military-100 transition-all';
 
                 return (
                   <div
@@ -1252,37 +1331,99 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                     onClick={() => setExpandedId(isExpanded ? null : item.id)}
                     className={`w-full text-left rounded-xl border p-3.5 shadow-sm transition-all relative overflow-hidden cursor-pointer ${cardBg}`}
                   >
-                    {/* INITIAL LIST VIEW (COLLAPSED): Nome, Motivo, Numero do Mandado */}
-                    <div className="flex items-start justify-between gap-3 pr-2">
-                      <div className="space-y-1.5 w-full">
-                        <div>
-                          <span className="text-[8px] font-mono font-extrabold text-military-450 uppercase block">NOME:</span>
-                          <h4 className="font-extrabold text-sm tracking-wide text-white uppercase leading-snug">
+                    {/* PRIORIDADE DE EXIBIÇÃO: Nome da pessoa, CPF, Nome da mãe, Situação, Data da Emissão */}
+                    <div className="space-y-2.5">
+                      {/* 1. NOME DA PESSOA */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-[8px] font-mono font-black text-military-500 uppercase block tracking-wider">
+                            NOME DA PESSOA:
+                          </span>
+                          <h4 className="font-black text-sm tracking-wide text-military-100 uppercase leading-snug break-words">
                             <HighlightedText text={item.nome} query={searchQuery || activeSearchQuery || ''} />
                           </h4>
                         </div>
+                        
+                        <div className="text-military-400 flex-shrink-0 pt-0.5">
+                          {isExpanded ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                              <ChevronUp className="w-3.5 h-3.5" />
+                              Menos detalhes
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold text-military-400 bg-military-850 px-2 py-0.5 rounded border border-military-750">
+                              <ChevronDown className="w-3.5 h-3.5" />
+                              Mais detalhes
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                        <div>
-                          <span className="text-[8px] font-mono font-extrabold text-military-450 uppercase block">MOTIVO:</span>
-                          <p className="font-bold text-military-200 text-xs uppercase truncate">
-                            {item.naturezaInfracao || item.artigoLei || 'Mandado de Prisão'}
+                      {/* 2. CPF & 3. NOME DA MÃE */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-military-750/70">
+                        <div className="bg-military-850 p-2 rounded-lg border border-military-750/70">
+                          <span className="text-[8px] font-mono font-black text-military-500 uppercase block tracking-wider">
+                            CPF:
+                          </span>
+                          <p className="font-mono font-black text-xs text-military-100 select-all mt-0.5">
+                            {item.cpf ? (
+                              <HighlightedText text={item.cpf} query={searchQuery || activeSearchQuery || ''} />
+                            ) : (
+                              <span className="text-military-450 italic font-normal text-xs">NÃO INFORMADO</span>
+                            )}
                           </p>
                         </div>
 
-                        <div>
-                          <span className="text-[8px] font-mono font-extrabold text-military-450 uppercase block">NUMERO DO MANDADO:</span>
-                          <p className="font-mono font-extrabold text-emerald-400 text-xs select-all break-all">
-                            {item.numeroMandado}
+                        <div className="bg-military-850 p-2 rounded-lg border border-military-750/70">
+                          <span className="text-[8px] font-mono font-black text-military-500 uppercase block tracking-wider">
+                            NOME DA MÃE:
+                          </span>
+                          <p className="font-bold text-xs text-military-100 uppercase truncate mt-0.5">
+                            {item.nomeMae ? (
+                              <HighlightedText text={item.nomeMae} query={searchQuery || activeSearchQuery || ''} />
+                            ) : (
+                              <span className="text-military-450 italic font-normal text-xs">NÃO INFORMADO</span>
+                            )}
                           </p>
                         </div>
                       </div>
 
-                      <div className="text-military-400 self-center flex-shrink-0 pl-1">
-                        {isExpanded ? <ChevronUp className="w-5 h-5 text-emerald-400" /> : <ChevronDown className="w-5 h-5" />}
+                      {/* 4. SITUAÇÃO & 5. DATA DA EMISSÃO */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-military-750/70">
+                        <div>
+                          <span className="text-[8px] font-mono font-black text-military-500 uppercase block tracking-wider">
+                            SITUAÇÃO:
+                          </span>
+                          <div className="mt-0.5">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[9.5px] font-black uppercase tracking-wider border ${
+                              item.situacao?.toUpperCase().includes('CUMPRIDO')
+                                ? 'bg-blue-100 text-blue-900 border-blue-300'
+                                : item.situacao?.toUpperCase().includes('REVOGADO')
+                                ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                            }`}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                              {item.situacao || 'PENDENTE DE CUMPRIMENTO'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[8px] font-mono font-black text-military-500 uppercase block tracking-wider">
+                            DATA DA EMISSÃO:
+                          </span>
+                          <p className="font-mono font-bold text-xs text-military-100 mt-0.5">
+                            {item.dataExpedicao ? (
+                              <HighlightedText text={item.dataExpedicao} query={searchQuery || activeSearchQuery || ''} />
+                            ) : (
+                              <span className="text-military-450 italic font-normal text-xs">NÃO INFORMADO</span>
+                            )}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
-                    {/* EXPANDED CARD VIEW: Numero, Nome, Alcunha, Nome da Mãe, Data de Nascimento, Situação, Data de Emissão, Órgão Emissor */}
+                    {/* POSTERIORMENTE: DEMAIS DADOS EXISTENTES */}
                     <AnimatePresence>
                       {isExpanded && (
                         <motion.div
@@ -1290,81 +1431,121 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
                           transition={{ duration: 0.15 }}
-                          className="overflow-hidden mt-3 pt-3 border-t border-military-750/80 space-y-3 text-xs text-military-200"
+                          className="overflow-hidden mt-3 pt-3 border-t border-military-750/80 space-y-2.5 text-xs text-military-200"
                           onClick={e => e.stopPropagation()}
                         >
-                          <div className="bg-black/60 p-3.5 rounded-xl border border-military-750 space-y-3 shadow-inner">
-                            {/* 1. Numero */}
-                            <div className="bg-military-900/90 p-2 rounded-lg border border-military-800">
-                              <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">NÚMERO DO MANDADO:</span>
-                              <span className="font-mono font-extrabold text-emerald-400 text-xs block select-all break-all mt-0.5">
+                          <div className="bg-military-850 p-3 rounded-xl border border-military-750 space-y-2.5">
+                            <div className="text-[9px] font-mono font-black text-military-400 uppercase tracking-wider border-b border-military-750 pb-1 flex items-center gap-1">
+                              <FileText size={11} className="text-emerald-700" />
+                              Demais Dados do Mandado
+                            </div>
+
+                            {/* Número do Mandado */}
+                            <div>
+                              <span className="text-[8px] font-mono text-military-500 uppercase font-black block tracking-wider">
+                                NÚMERO DO MANDADO / PROCESSO:
+                              </span>
+                              <span className="font-mono font-black text-emerald-700 text-xs block select-all break-all mt-0.5">
                                 {item.numeroMandado}
                               </span>
                             </div>
 
-                            {/* 2. Nome */}
+                            {/* Motivo / Infração */}
                             <div>
-                              <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">NOME:</span>
-                              <span className="font-black text-white text-xs block uppercase mt-0.5">
-                                <HighlightedText text={item.nome} query={searchQuery || activeSearchQuery || ''} />
+                              <span className="text-[8px] font-mono text-military-500 uppercase font-black block tracking-wider">
+                                MOTIVO / INFRAÇÃO:
                               </span>
-                            </div>
-
-                            {/* 3. Alcunha */}
-                            <div>
-                              <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">ALCUNHA:</span>
-                              <span className="font-bold text-emerald-300 text-xs block uppercase mt-0.5">
-                                {item.alcunha ? <HighlightedText text={item.alcunha} query={searchQuery || activeSearchQuery || ''} /> : 'NÃO INFORMADO'}
-                              </span>
-                            </div>
-
-                            {/* 4. Nome da Mãe */}
-                            <div>
-                              <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">NOME DA MÃE:</span>
                               <span className="font-bold text-military-100 text-xs block uppercase mt-0.5">
-                                {item.nomeMae ? <HighlightedText text={item.nomeMae} query={searchQuery || activeSearchQuery || ''} /> : 'NÃO INFORMADO'}
+                                {item.naturezaInfracao || item.artigoLei || 'MANDADO DE PRISÃO'}
                               </span>
                             </div>
 
-                            {/* 5. Data de Nascimento & 6. Situação */}
-                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-military-800/80">
+                            {/* Alcunha & Data de Nascimento */}
+                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-military-750/60">
                               <div>
-                                <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">DATA DE NASCIMENTO:</span>
+                                <span className="text-[8px] font-mono text-military-500 uppercase font-black block tracking-wider">
+                                  ALCUNHA / VULGO:
+                                </span>
+                                <span className="font-bold text-military-100 text-xs block uppercase mt-0.5">
+                                  {item.alcunha ? <HighlightedText text={item.alcunha} query={searchQuery || activeSearchQuery || ''} /> : 'NÃO INFORMADO'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-[8px] font-mono text-military-500 uppercase font-black block tracking-wider">
+                                  DATA DE NASCIMENTO:
+                                </span>
                                 <span className="font-bold text-military-100 text-xs block mt-0.5">
                                   {item.dataNascimento || 'NÃO INFORMADO'}
                                 </span>
                               </div>
-                              <div>
-                                <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">SITUAÇÃO:</span>
-                                <span className="font-extrabold text-emerald-400 text-xs block uppercase mt-0.5">
-                                  {item.situacao || 'PENDENTE DE CUMPRIMENTO'}
-                                </span>
-                              </div>
                             </div>
 
-                            {/* 7. Data de emissão & 8. Órgão Emissor */}
-                            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-military-800/80">
+                            {/* Órgão Emissor & Tipo de Prisão */}
+                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-military-750/60">
                               <div>
-                                <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">DATA DE EMISSÃO:</span>
-                                <span className="font-bold text-military-100 text-xs block mt-0.5">
-                                  {item.dataExpedicao || 'NÃO INFORMADO'}
+                                <span className="text-[8px] font-mono text-military-500 uppercase font-black block tracking-wider">
+                                  ÓRGÃO EMISSOR:
                                 </span>
-                              </div>
-                              <div>
-                                <span className="text-[8px] font-mono text-military-450 uppercase font-extrabold block">ÓRGÃO EMISSOR:</span>
                                 <span className="font-bold text-military-100 text-xs block uppercase mt-0.5">
                                   {item.orgaoEmissor || 'CONSELHO NACIONAL DE JUSTIÇA'}
                                 </span>
                               </div>
+                              <div>
+                                <span className="text-[8px] font-mono text-military-500 uppercase font-black block tracking-wider">
+                                  TIPO DE PRISÃO:
+                                </span>
+                                <span className="font-bold text-military-100 text-xs block uppercase mt-0.5">
+                                  {item.tipoPrisao || 'PREVENTIVA'}
+                                </span>
+                              </div>
                             </div>
+
+                            {/* RG & Nome do Pai */}
+                            {(item.rg || item.nomePai) && (
+                              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-military-750/60">
+                                {item.rg && (
+                                  <div>
+                                    <span className="text-[8px] font-mono text-military-500 uppercase font-black block tracking-wider">
+                                      RG:
+                                    </span>
+                                    <span className="font-mono font-bold text-military-100 text-xs block mt-0.5">
+                                      {item.rg}
+                                    </span>
+                                  </div>
+                                )}
+                                {item.nomePai && (
+                                  <div>
+                                    <span className="text-[8px] font-mono text-military-500 uppercase font-black block tracking-wider">
+                                      NOME DO PAI:
+                                    </span>
+                                    <span className="font-bold text-military-100 text-xs block uppercase mt-0.5">
+                                      {item.nomePai}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Observações */}
+                            {item.observacoes && (
+                              <div className="pt-1 border-t border-military-750/60">
+                                <span className="text-[8px] font-mono text-military-500 uppercase font-black block tracking-wider">
+                                  OBSERVAÇÕES:
+                                </span>
+                                <p className="text-xs text-military-200 mt-0.5">
+                                  {item.observacoes}
+                                </p>
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex items-center justify-end pt-1">
                             <button
+                              type="button"
                               onClick={(e) => handleDeleteWarrant(item.id, e)}
-                              className="px-2.5 py-1 bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 rounded-md text-[9px] uppercase font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                              className="px-2.5 py-1 bg-red-100 hover:bg-red-200 border border-red-300 text-red-800 rounded-lg text-[9px] uppercase font-black flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                             >
-                              <Trash2 size={11} className="text-red-400" />
+                              <Trash2 size={11} className="text-red-700" />
                               Deletar Registro
                             </button>
                           </div>
