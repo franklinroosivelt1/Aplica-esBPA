@@ -20,6 +20,7 @@ import BpaOperacional from './views/BpaOperacional';
 import PresidentMaps from './views/PresidentMaps';
 import BuscarMandados from './views/BuscarMandados';
 import DiarioDeBordo from './views/DiarioDeBordo';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 function LoadingView({ message = "Carregando módulo..." }: { message?: string }) {
   return (
@@ -141,6 +142,9 @@ export default function App() {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] border border-military-500/20 rotate-45" />
         </div>
       )}
+
+      {/* Autonomous Offline Status Banner */}
+      <OfflineIndicator />
     </div>
   );
 }

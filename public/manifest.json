@@ -1,0 +1,33 @@
+{
+  "id": "/",
+  "name": "Remix: Aplicações BPA",
+  "short_name": "BPA Mobile",
+  "description": "Plataforma operacional para serviços de monitoramento, fotos georreferenciadas, cubagem de madeiras, diário de bordo e conferidor de mandados off-line.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#1b231a",
+  "background_color": "#111611",
+  "categories": ["utilities", "productivity", "government"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

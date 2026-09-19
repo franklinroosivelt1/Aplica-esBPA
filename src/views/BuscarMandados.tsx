@@ -273,7 +273,7 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
   const [parsedWarrants, setParsedWarrants] = useState<Mandado[]>([]);
   const [dragOver, setDragOver] = useState(false);
 
-  // Load PDF.js dynamically
+  // Load PDF.js dynamically with local offline vendor fallback
   const loadPdfJs = (): Promise<any> => {
     return new Promise((resolve, reject) => {
       if ((window as any).pdfjsLib) {
@@ -281,14 +281,27 @@ export default function BuscarMandados({ onBack }: BuscarMandadosProps) {
         return;
       }
       const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      // Use local bundled vendor script for 100% offline execution without internet
+      script.src = '/vendor/pdfjs/pdf.min.js';
       script.async = true;
       script.onload = () => {
         const pdfjsLib = (window as any).pdfjsLib;
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.js';
         resolve(pdfjsLib);
       };
-      script.onerror = (e) => reject(new Error("Erro ao carregar o motor PDF (PDF.js)"));
+      script.onerror = () => {
+        // Fallback to CDN if local fails
+        const fallbackScript = document.createElement('script');
+        fallbackScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        fallbackScript.async = true;
+        fallbackScript.onload = () => {
+          const pdfjsLib = (window as any).pdfjsLib;
+          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          resolve(pdfjsLib);
+        };
+        fallbackScript.onerror = () => reject(new Error("Erro ao carregar o motor PDF (PDF.js)"));
+        document.head.appendChild(fallbackScript);
+      };
       document.head.appendChild(script);
     });
   };

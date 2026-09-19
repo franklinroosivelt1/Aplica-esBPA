@@ -2,13 +2,14 @@ import { motion } from 'motion/react';
 import { 
   Camera, 
   Calculator, 
-  Shield,
-  Map,
-  FileImage,
-  BookOpen,
+  Shield, 
+  Map, 
+  FileImage, 
+  BookOpen, 
   ChevronRight,
   Sparkles
 } from 'lucide-react';
+import { PWAInstallButton } from '../components/PWAInstallButton';
 type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar' | 'diariodebordo';
 
 interface HomeProps {
@@ -89,6 +90,9 @@ export default function Home({ onNavigate }: HomeProps) {
             </p>
           </div>
         </motion.div>
+
+        {/* PWA In-App Install Prompt for field installation */}
+        <PWAInstallButton />
 
         {/* Modules Navigation - List Style Buttons */}
         <div className="w-full space-y-2.5 px-0.5" id="menu-list-container">

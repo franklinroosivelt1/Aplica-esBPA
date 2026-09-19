@@ -369,7 +369,7 @@ const ACRE_MUNICIPIOS_GEO = [
   { name: "Rodrigues Alves", lat: -7.74, lng: -72.65 }
 ];
 
-// Load PDF.js dynamically from CDN to render GeoPDF files offline
+// Load PDF.js dynamically with local offline vendor fallback to render GeoPDF files off-grid
 const loadPdfJs = (): Promise<any> => {
   return new Promise((resolve, reject) => {
     if ((window as any).pdfjsLib) {
@@ -377,14 +377,27 @@ const loadPdfJs = (): Promise<any> => {
       return;
     }
     const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    // Use local bundled vendor script for 100% offline execution without internet
+    script.src = '/vendor/pdfjs/pdf.min.js';
     script.async = true;
     script.onload = () => {
       const pdfjsLib = (window as any).pdfjsLib;
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.js';
       resolve(pdfjsLib);
     };
-    script.onerror = (e) => reject(new Error("Erro ao carregar o visualizador de PDF (PDF.js)"));
+    script.onerror = () => {
+      // Fallback to CDN if local fails
+      const fallbackScript = document.createElement('script');
+      fallbackScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      fallbackScript.async = true;
+      fallbackScript.onload = () => {
+        const pdfjsLib = (window as any).pdfjsLib;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        resolve(pdfjsLib);
+      };
+      fallbackScript.onerror = () => reject(new Error("Erro ao carregar o visualizador de PDF (PDF.js)"));
+      document.head.appendChild(fallbackScript);
+    };
     document.head.appendChild(script);
   });
 };

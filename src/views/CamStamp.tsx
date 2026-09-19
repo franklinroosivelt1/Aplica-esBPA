@@ -123,12 +123,17 @@ export default function CamStamp({ onBack }: CamStampProps) {
   }, [settings]);
 
   useEffect(() => {
-    // Limit saved gallery size in localStorage to 12 items to prevent QuotaExceededError and keep synchronous loading fast on low-spec phones
+    // Limit saved gallery size in localStorage to prevent QuotaExceededError and keep synchronous loading fast on low-spec phones
     try {
-      const limitedGallery = gallery.slice(0, 12);
+      const limitedGallery = gallery.slice(0, 8);
       localStorage.setItem('bpa_camera_gallery', JSON.stringify(limitedGallery));
     } catch (e) {
-      console.warn("localStorage setItem failed:", e);
+      try {
+        const smallerGallery = gallery.slice(0, 4);
+        localStorage.setItem('bpa_camera_gallery', JSON.stringify(smallerGallery));
+      } catch (err2) {
+        console.warn("localStorage quota exceeded:", err2);
+      }
     }
   }, [gallery]);
 

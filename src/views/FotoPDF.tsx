@@ -34,6 +34,42 @@ const loadImage = (src: string): Promise<HTMLImageElement> => {
   });
 };
 
+// Optimized image downscaling helper to prevent Out-Of-Memory (OOM) crashes on low-end smartphones
+const resizeImageFile = (file: File, maxDim = 1600, quality = 0.82): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const src = e.target?.result as string;
+      if (!src) return reject(new Error('Erro ao carregar arquivo'));
+      const img = new Image();
+      img.onload = () => {
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(src);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 export default function FotoPDF({ onBack }: FotoPDFProps) {
   const [images, setImages] = useState<string[]>([]);
   const [mode, setMode] = useState<Mode>('selection');
@@ -52,21 +88,8 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
 
     const fileList = Array.from(files) as File[];
     
-    // Convert all selected images to base64 data URLs
-    const readPromises = fileList.map((file: File) => {
-      return new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          if (event.target?.result && typeof event.target.result === 'string') {
-            resolve(event.target.result);
-          } else {
-            reject(new Error('Falha ao ler arquivo'));
-          }
-        };
-        reader.onerror = (err) => reject(err);
-        reader.readAsDataURL(file);
-      });
-    });
+    // Convert and downscale all selected images to safe dimensions for low-spec mobile RAM
+    const readPromises = fileList.map((file: File) => resizeImageFile(file, 1600, 0.82));
 
     Promise.all(readPromises)
       .then(base64Images => {
