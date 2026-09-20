@@ -44,8 +44,8 @@ export default function Home({ onNavigate }: HomeProps) {
       id: 'bpaoperacional', 
       label: 'Buscar Dados do CAR', 
       icon: Shield,
-      subtitle: 'Pesquisa e Dossiê Territorial do Acre',
-      description: 'Consulta georreferenciada de propriedades e SICAR a partir de coordenadas GPS.'
+      subtitle: 'Consulta e Interseção Espacial SICAR',
+      description: 'Upload de Shapefiles/GPKG e consulta Point in Polygon com identificação de sobreposições.',
     },
     { 
       id: 'mandados', 
