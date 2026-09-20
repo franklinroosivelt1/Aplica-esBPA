@@ -1,6 +1,6 @@
 {
   "name": "Remix: Aplicações BPA",
-  "description": "Plataforma unificada para serviços de monitoramento, fotos georreferenciadas, cubagem de madeiras, diário de bordo e conferidor de mandados.",
+  "description": "Plataforma unificada para serviços de monitoramento, busca geoespacial de dados do CAR, fotos georreferenciadas, cubagem de madeiras, diário de bordo e conferidor de mandados.",
   "requestFramePermissions": [
     "camera",
     "geolocation"

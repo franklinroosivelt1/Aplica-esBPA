@@ -121,6 +121,7 @@ export const SicarMap: React.FC<SicarMapProps> = ({
           });
           layer.bindTooltip(`
             <div style="font-family: sans-serif; font-size: 11px; padding: 2px;">
+              ${prop.layerName ? `<div style="font-weight: 700; color: #047857; text-transform: uppercase; font-size: 9px; margin-bottom: 2px;">Camada: ${prop.layerName}</div>` : ''}
               <strong style="color: #102410;">${prop.municipio}</strong><br/>
               CAR: ${prop.numCar !== 'Informação não disponível nesta base.' ? prop.numCar : prop.codImovel}<br/>
               Área: ${prop.areaHa}

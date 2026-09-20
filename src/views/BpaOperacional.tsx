@@ -12,9 +12,8 @@ import {
   Layers, 
   Compass, 
   RefreshCw,
-  FileSpreadsheet,
-  HelpCircle,
-  ExternalLink,
+  Trash2,
+  Plus,
   Crosshair,
   Maximize2
 } from 'lucide-react';
@@ -25,6 +24,13 @@ import {
   parseUploadedFile, 
   getPreloadedAcreBase 
 } from '../utils/sicarEngine';
+import { 
+  SicarLayer, 
+  getStoredLayers, 
+  saveLayer, 
+  deleteLayer, 
+  clearAllLayers 
+} from '../utils/sicarStorage';
 import { 
   ParsedCoordinate, 
   parseCoordinates, 
@@ -41,10 +47,10 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
   // Spatial Index Instance
   const spatialIndexRef = useRef<SicarSpatialIndex>(new SicarSpatialIndex());
 
-  // Base / Layer State
-  const [layerInfo, setLayerInfo] = useState<SicarLayerInfo | null>(null);
+  // Base / Layer State - Persistent across screen navigation
+  const [layers, setLayers] = useState<SicarLayer[]>([]);
   const [isLoadingBase, setIsLoadingBase] = useState(false);
-  const [loadingMessage, setLoadingMessage] = useState<string>('Processando Base...');
+  const [loadingMessage, setLoadingMessage] = useState<string>('Processando...');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,42 +67,113 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
   const [selectedPropertyId, setSelectedPropertyId] = useState<string | number | null>(null);
   const [showRawAttributes, setShowRawAttributes] = useState(false);
 
-  // Auto-initialize with preloaded Acre base on first mount
+  // Restore persistent layers on mount (IndexedDB + memory cache)
   useEffect(() => {
-    try {
-      const { properties, info } = getPreloadedAcreBase();
-      spatialIndexRef.current.build(properties, info);
-      setLayerInfo(info);
-    } catch (e) {
-      console.warn("Could not load initial demonstrative base", e);
+    let isMounted = true;
+
+    async function initLayers() {
+      setIsLoadingBase(true);
+      setLoadingMessage('Restaurando bases salvas...');
+      try {
+        const stored = await getStoredLayers();
+        if (!isMounted) return;
+
+        if (stored && stored.length > 0) {
+          setLayers(stored);
+          spatialIndexRef.current.setLayers(stored);
+        } else {
+          // If no layers have ever been uploaded, initialize with the Acre demonstrative base
+          const { properties, info } = getPreloadedAcreBase();
+          const demoLayer: SicarLayer = {
+            id: 'demo_acre_sema',
+            layerName: info.layerName,
+            fileName: info.fileName,
+            totalCount: info.totalCount,
+            srid: info.srid,
+            geometryType: info.geometryType,
+            loadedAt: new Date().toISOString(),
+            enabled: true,
+            properties,
+          };
+          setLayers([demoLayer]);
+          spatialIndexRef.current.setLayers([demoLayer]);
+        }
+      } catch (e) {
+        console.warn("Falha ao restaurar camadas do armazenamento:", e);
+      } finally {
+        if (isMounted) setIsLoadingBase(false);
+      }
     }
+
+    initLayers();
 
     // Auto-convert default GMS coordinate
     const converted = parseCoordinates('08°36\'25.88"S 69°47\'17.47"W');
     if (converted) {
       setParsedCoord(converted);
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // Handle File Upload (.zip, .gpkg, .geojson)
+  // Handle File Upload supporting 1, 2 or 3 files simultaneously or sequentially
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const fileList = event.target.files;
+    if (!fileList || fileList.length === 0) return;
 
-    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-    setLoadingMessage(`Lendo ${file.name} (${sizeMb} MB)...`);
+    const files = Array.from(fileList) as File[];
     setIsLoadingBase(true);
     setUploadError(null);
     setUploadSuccessMessage(null);
 
-    try {
-      const { properties, info } = await parseUploadedFile(file);
-      setLoadingMessage(`Indexando ${properties.length.toLocaleString('pt-BR')} imóveis...`);
-      spatialIndexRef.current.build(properties, info);
-      setLayerInfo(info);
+    const newLayersToAdd: SicarLayer[] = [];
 
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+        setLoadingMessage(
+          files.length > 1
+            ? `Processando (${i + 1}/${files.length}): ${file.name} (${sizeMb} MB)...`
+            : `Lendo ${file.name} (${sizeMb} MB)...`
+        );
+
+        const { properties, info } = await parseUploadedFile(file);
+        setLoadingMessage(`Gravando e indexando ${properties.length.toLocaleString('pt-BR')} feições...`);
+
+        const newLayer: SicarLayer = {
+          id: `layer_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          layerName: info.layerName,
+          fileName: file.name,
+          fileSize: file.size,
+          totalCount: properties.length,
+          srid: info.srid,
+          geometryType: info.geometryType,
+          loadedAt: new Date().toISOString(),
+          enabled: true,
+          properties,
+        };
+
+        // Persist to IndexedDB immediately so it's permanent
+        await saveLayer(newLayer);
+        newLayersToAdd.push(newLayer);
+      }
+
+      // Update state: if previous state had only the demonstrative mock base, replace it!
+      setLayers(prev => {
+        const cleanPrev = prev.filter(l => l.id !== 'demo_acre_sema');
+        const combined = [...cleanPrev, ...newLayersToAdd];
+        spatialIndexRef.current.setLayers(combined);
+        return combined;
+      });
+
+      const totalFeaturesAdded = newLayersToAdd.reduce((acc, l) => acc + l.totalCount, 0);
       setUploadSuccessMessage(
-        `Camada: "${info.layerName}" | ${info.totalCount.toLocaleString('pt-BR')} imóveis carregados | SRID: ${info.srid}`
+        files.length === 1
+          ? `Camada "${newLayersToAdd[0].layerName}" adicionada com sucesso! ${totalFeaturesAdded.toLocaleString('pt-BR')} registros salvos no app.`
+          : `${files.length} arquivos adicionados com sucesso! +${totalFeaturesAdded.toLocaleString('pt-BR')} feições integradas à busca.`
       );
 
       // Reset search results for new base
@@ -104,25 +181,58 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
       setHasSearched(false);
     } catch (err: any) {
       console.error("Erro ao processar arquivo:", err);
-      setUploadError(err.message || "Erro ao processar a base geoespacial carregada.");
+      setUploadError(err.message || "Erro ao processar o(s) arquivo(s) carregado(s).");
     } finally {
       setIsLoadingBase(false);
-      setLoadingMessage('Processando Base...');
+      setLoadingMessage('Processando...');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  // Load Preloaded Acre Base
+  // Delete a specific layer
+  const handleDeleteLayer = async (layerId: string, layerName: string) => {
+    if (!window.confirm(`Tem certeza que deseja excluir o arquivo/camada "${layerName}"?`)) {
+      return;
+    }
+
+    try {
+      await deleteLayer(layerId);
+      setLayers(prev => {
+        const remaining = prev.filter(l => l.id !== layerId);
+        spatialIndexRef.current.setLayers(remaining);
+        return remaining;
+      });
+      setSearchResults(prev => prev.filter(p => p.layerId !== layerId));
+      setUploadSuccessMessage(`Camada "${layerName}" excluída com sucesso.`);
+    } catch (err) {
+      console.error("Erro ao excluir camada:", err);
+      setUploadError("Falha ao excluir a camada.");
+    }
+  };
+
+  // Load Preloaded Acre Demonstrative Base
   const handleLoadAcreBase = () => {
     setIsLoadingBase(true);
+    setLoadingMessage("Carregando base Acre (SEMA)...");
     setUploadError(null);
     setTimeout(() => {
       try {
         const { properties, info } = getPreloadedAcreBase();
-        spatialIndexRef.current.build(properties, info);
-        setLayerInfo(info);
+        const demoLayer: SicarLayer = {
+          id: 'demo_acre_sema',
+          layerName: info.layerName,
+          fileName: info.fileName,
+          totalCount: info.totalCount,
+          srid: info.srid,
+          geometryType: info.geometryType,
+          loadedAt: new Date().toISOString(),
+          enabled: true,
+          properties,
+        };
+        setLayers([demoLayer]);
+        spatialIndexRef.current.setLayers([demoLayer]);
         setUploadSuccessMessage(
-          `Camada: "${info.layerName}" | ${info.totalCount} imóveis carregados | SRID: ${info.srid}`
+          `Base demonstrativa "${info.layerName}" carregada | ${info.totalCount} imóveis`
         );
         setSearchResults([]);
         setHasSearched(false);
@@ -175,7 +285,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     );
   };
 
-  // Execute Point In Polygon Spatial Query
+  // Execute Point In Polygon Spatial Query across ALL loaded layers
   const handleBuscarCar = () => {
     let target = parsedCoord;
     if (!target) {
@@ -209,11 +319,24 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     }, 100);
   };
 
-  // Export PDF Report
+  // Export PDF Report with all matching features
   const handleExportPdf = () => {
     if (!parsedCoord) return;
-    exportSicarPdf(searchResults, parsedCoord, layerInfo);
+    const summaryInfo: SicarLayerInfo = {
+      layerName: layers.map(l => l.layerName).join(' + ') || 'SICAR Oficial',
+      totalCount: layers.reduce((acc, l) => acc + l.totalCount, 0),
+      srid: layers[0]?.srid || 'SIRGAS 2000 (EPSG:4674)',
+      geometryType: layers[0]?.geometryType || 'MultiPolygon',
+      loadedAt: new Date(),
+      fileName: layers.map(l => l.fileName).join(', '),
+      sourceType: 'gpkg',
+    };
+    exportSicarPdf(searchResults, parsedCoord, summaryInfo);
   };
+
+  const totalActiveFeatures = layers
+    .filter(l => l.enabled !== false)
+    .reduce((sum, l) => sum + l.totalCount, 0);
 
   const selectedProperty = searchResults.find(p => p.id === selectedPropertyId) || searchResults[0];
 
@@ -261,45 +384,90 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
           </p>
         </div>
 
-        {/* 1. SEÇÃO DE FONTES DE DADOS E UPLOAD */}
+        {/* 1. SEÇÃO DE FONTES DE DADOS E UPLOAD MULTI-CAMADA */}
         <div className="bg-military-850 border border-military-700/80 rounded-2xl p-4 shadow-sm space-y-3" id="secao-fontes-dados">
           <div className="flex items-center justify-between border-b border-military-750 pb-2">
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-military-400" />
               <h3 className="text-xs font-black uppercase tracking-wider text-military-100">
-                Base Geoespacial do SICAR
+                Bases Geoespaciais Anexadas
               </h3>
             </div>
-            <span className="text-[10px] font-mono font-bold text-military-400 uppercase bg-military-800 px-2 py-0.5 rounded border border-military-750">
-              {layerInfo ? `${layerInfo.totalCount.toLocaleString('pt-BR')} Imóveis` : 'Sem Base'}
+            <span className="text-[10px] font-mono font-bold text-military-300 uppercase bg-military-800 px-2 py-0.5 rounded border border-military-750">
+              {layers.length > 0
+                ? `${totalActiveFeatures.toLocaleString('pt-BR')} ${totalActiveFeatures === 1 ? 'Feição' : 'Feições'} (${layers.length} ${layers.length === 1 ? 'Arquivo' : 'Arquivos'})`
+                : 'Nenhum Arquivo'}
             </span>
           </div>
 
-          {/* Active Layer Banner */}
-          {layerInfo && (
-            <div className="bg-military-800/90 border border-military-750 rounded-xl p-3 text-xs space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-military-100 truncate max-w-[280px]">
-                  {layerInfo.layerName}
-                </span>
-                <span className="text-[10px] font-mono text-emerald-600 font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Ativa
-                </span>
-              </div>
-              <div className="text-[11px] text-military-400 flex flex-wrap gap-x-3 gap-y-0.5">
-                <span>Total: <strong className="text-military-200">{layerInfo.totalCount}</strong></span>
-                <span>SRID: <strong className="text-military-200">{layerInfo.srid}</strong></span>
-                <span>Tipo: <strong className="text-military-200">{layerInfo.geometryType}</strong></span>
-              </div>
+          {/* Lista de Camadas Ativas com Botão Excluir */}
+          {layers.length > 0 ? (
+            <div className="space-y-2">
+              {layers.map((layer) => {
+                const isDemo = layer.id === 'demo_acre_sema';
+                const sizeStr = layer.fileSize ? ` • ${(layer.fileSize / (1024 * 1024)).toFixed(1)} MB` : '';
+                return (
+                  <div 
+                    key={layer.id}
+                    className="bg-military-800/90 border border-military-750 rounded-xl p-3 text-xs flex flex-col gap-1.5 transition hover:border-military-650"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="p-1.5 rounded bg-military-750 text-military-300 shrink-0">
+                          <Layers className="w-3.5 h-3.5 text-military-300" />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <strong className="text-military-100 font-bold truncate max-w-[200px] sm:max-w-[280px]">
+                              {layer.layerName}
+                            </strong>
+                            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-700/60 px-1.5 py-0.5 rounded font-bold flex items-center gap-1 shrink-0">
+                              <CheckCircle2 className="w-2.5 h-2.5" /> Ativa
+                            </span>
+                            {isDemo && (
+                              <span className="text-[9px] font-mono text-amber-400 bg-amber-950/60 border border-amber-700/60 px-1.5 py-0.5 rounded font-bold shrink-0">
+                                Demonstrativa
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-military-400 truncate block mt-0.5">
+                            {layer.fileName}{sizeStr}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Botão para Excluir este arquivo */}
+                      <button
+                        onClick={() => handleDeleteLayer(layer.id, layer.layerName)}
+                        title={`Excluir ${layer.fileName}`}
+                        className="py-1 px-2.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/50 transition active:scale-95 cursor-pointer shrink-0 flex items-center gap-1 text-[11px]"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                        <span className="font-bold">Excluir</span>
+                      </button>
+                    </div>
+
+                    <div className="text-[11px] text-military-400 flex flex-wrap gap-x-3 gap-y-0.5 border-t border-military-750/70 pt-1.5">
+                      <span>Total: <strong className="text-military-200">{layer.totalCount.toLocaleString('pt-BR')}</strong></span>
+                      <span>SRID: <strong className="text-military-200">{layer.srid}</strong></span>
+                      <span>Tipo: <strong className="text-military-200">{layer.geometryType}</strong></span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bg-military-800/50 border border-dashed border-military-700 rounded-xl p-3 text-center text-xs text-military-400">
+              Nenhuma base geoespacial anexada. Adicione seus arquivos do SICAR (.gpkg ou .zip) para realizar consultas offline.
             </div>
           )}
 
           {/* Success Message Banner */}
           {uploadSuccessMessage && (
-            <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl p-3 text-xs flex items-start gap-2 shadow-xs">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="bg-emerald-950/40 border border-emerald-700/60 text-emerald-200 rounded-xl p-3 text-xs flex items-start gap-2 shadow-xs">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <div className="leading-snug">
-                <strong className="block font-bold">Base carregada com sucesso!</strong>
+                <strong className="block font-bold text-emerald-300">Atualização de Base:</strong>
                 <span className="text-[11px]">{uploadSuccessMessage}</span>
               </div>
             </div>
@@ -307,22 +475,23 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
           {/* Error Message Banner */}
           {uploadError && (
-            <div className="bg-rose-50 border border-rose-300 text-rose-900 rounded-xl p-3 text-xs flex items-start gap-2 shadow-xs">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div className="bg-rose-950/40 border border-rose-700/60 text-rose-200 rounded-xl p-3 text-xs flex items-start gap-2 shadow-xs">
+              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
               <div className="leading-snug">
-                <strong className="block font-bold">Falha no processamento:</strong>
+                <strong className="block font-bold text-rose-300">Falha no processamento:</strong>
                 <span className="text-[11px]">{uploadError}</span>
               </div>
             </div>
           )}
 
-          {/* Upload Input & Quick Actions */}
+          {/* Upload Input & Actions */}
           <div className="flex flex-col sm:flex-row gap-2 pt-1">
             <input
               type="file"
               ref={fileInputRef}
               onChange={handleFileUpload}
               accept="*/*"
+              multiple
               className="hidden"
               id="car-file-input"
             />
@@ -334,7 +503,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               className="flex-1 py-2.5 px-3 bg-military-800 hover:bg-military-750 text-military-100 border border-military-700 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer shadow-xs"
             >
               <Upload className="w-4 h-4 text-military-400" />
-              <span>{isLoadingBase ? loadingMessage : 'Upload (.GPKG / .ZIP)'}</span>
+              <span>{isLoadingBase ? loadingMessage : '+ Anexar Arquivo (.GPKG / .ZIP)'}</span>
             </button>
 
             <button
@@ -342,7 +511,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               disabled={isLoadingBase}
               id="btn-load-acre-base"
               className="py-2.5 px-3 bg-military-800 hover:bg-military-750 text-military-300 border border-military-700 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition active:scale-95 cursor-pointer shadow-xs"
-              title="Carregar Base SICAR Oficial do Acre"
+              title="Restaurar Base SICAR Oficial Demonstrativa do Acre"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Base Acre (SEMA)</span>
@@ -350,7 +519,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
           </div>
 
           <p className="text-[10px] text-military-400 leading-tight">
-            Compatível com GeoPackage (.gpkg - classificado como "Arquivo em BIN" no Android), Shapefiles (.zip) e GeoJSON. Validação automática de geometrias Polygon e MultiPolygon com índice R-Tree.
+            Os arquivos anexados ficam salvos permanentemente no seu dispositivo (permanecem ativos ao sair e retornar ao módulo). Você pode anexar 2 ou 3 arquivos complementares (ex.: Área do Imóvel, Reserva Legal, APP) para busca conjunta simultânea por coordenadas.
           </p>
         </div>
 
@@ -365,7 +534,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
             </div>
             <button
               onClick={handleGetCurrentLocation}
-              className="text-[11px] font-bold text-military-300 hover:text-military-100 flex items-center gap-1 transition"
+              className="text-[11px] font-bold text-military-300 hover:text-military-100 flex items-center gap-1 transition cursor-pointer"
             >
               <Crosshair className="w-3.5 h-3.5" />
               <span>GPS Atual</span>
@@ -393,21 +562,21 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
             <button
               type="button"
               onClick={() => setGmsInput('08°36\'25.88"S 69°47\'17.47"W')}
-              className="px-2 py-0.5 rounded bg-military-800 hover:bg-military-750 border border-military-700 text-military-300 font-mono transition"
+              className="px-2 py-0.5 rounded bg-military-800 hover:bg-military-750 border border-military-700 text-military-300 font-mono transition cursor-pointer"
             >
               08°36'25.88"S 69°47'17.47"W
             </button>
             <button
               type="button"
               onClick={() => setGmsInput('8°36\'25.88" S, 69°47\'17.47" W')}
-              className="px-2 py-0.5 rounded bg-military-800 hover:bg-military-750 border border-military-700 text-military-300 font-mono transition"
+              className="px-2 py-0.5 rounded bg-military-800 hover:bg-military-750 border border-military-700 text-military-300 font-mono transition cursor-pointer"
             >
               8°36'25.88" S, 69°47'17.47" W
             </button>
             <button
               type="button"
               onClick={() => setGmsInput('08 36 25.88 S / 69 47 17.47 W')}
-              className="px-2 py-0.5 rounded bg-military-800 hover:bg-military-750 border border-military-700 text-military-300 font-mono transition"
+              className="px-2 py-0.5 rounded bg-military-800 hover:bg-military-750 border border-military-700 text-military-300 font-mono transition cursor-pointer"
             >
               08 36 25.88 S / 69 47 17.47 W
             </button>
@@ -424,7 +593,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
 
           {/* Conversion Error */}
           {conversionError && (
-            <p className="text-xs text-rose-600 font-medium">
+            <p className="text-xs text-rose-400 font-medium">
               {conversionError}
             </p>
           )}
@@ -461,9 +630,9 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
           {/* 3. BOTÃO BUSCAR CAR */}
           <button
             onClick={handleBuscarCar}
-            disabled={isSearching}
+            disabled={isSearching || layers.length === 0}
             id="btn-buscar-car"
-            className="w-full py-3.5 px-4 bg-military-300 hover:bg-military-200 text-military-950 font-black rounded-xl text-sm uppercase tracking-wider shadow-md transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-3.5 px-4 bg-military-300 hover:bg-military-200 text-military-950 font-black rounded-xl text-sm uppercase tracking-wider shadow-md transition active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
             <Search className="w-4 h-4" />
             <span>{isSearching ? 'Processando Interseção Espacial...' : '[ BUSCAR CAR ]'}</span>
@@ -476,18 +645,19 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
             {/* OVERLAP ALERT OU RESULTADO ÚNICO */}
             {searchResults.length > 1 ? (
               <div className="bg-amber-500/15 border-2 border-amber-500/60 rounded-2xl p-4 text-center shadow-md">
-                <div className="flex items-center justify-center gap-2 text-amber-500 font-black text-sm uppercase tracking-wider mb-1">
-                  <AlertTriangle className="w-5 h-5" />
-                  <span>FORAM ENCONTRADOS {searchResults.length} IMÓVEIS SOBREPOSTOS NESTA COORDENADA</span>
+                <div className="flex items-center justify-center gap-2 text-amber-400 font-black text-sm uppercase tracking-wider mb-1">
+                  <AlertTriangle className="w-5 h-5 text-amber-400" />
+                  <span>FORAM ENCONTRADOS {searchResults.length} REGISTROS / POLÍGONOS NESTA COORDENADA</span>
                 </div>
                 <p className="text-xs text-military-300">
-                  A coordenada consultada está inserida na poligonal de mais de um cadastro ambiental. Selecione cada CAR abaixo para inspecionar os detalhes:
+                  A coordenada consultada intersecta polígonos nas bases carregadas (sobreposições ou dados complementares). Selecione abaixo para inspecionar cada elemento:
                 </p>
 
-                {/* Overlapping CAR Selection Tabs */}
-                <div className="flex items-center justify-center gap-2 mt-3 overflow-x-auto pb-1">
+                {/* Overlapping Selection Tabs */}
+                <div className="flex items-center justify-center gap-2 mt-3 overflow-x-auto pb-1 max-w-full">
                   {searchResults.map((prop, idx) => {
                     const isSelected = selectedProperty?.id === prop.id;
+                    const label = prop.layerName ? `${prop.layerName} #${idx + 1}` : `CAR ${idx + 1}`;
                     return (
                       <button
                         key={prop.id}
@@ -498,7 +668,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                             : 'bg-military-850 text-military-300 border-military-700 hover:bg-military-800'
                         }`}
                       >
-                        CAR {idx + 1}
+                        {label}
                       </button>
                     );
                   })}
@@ -508,22 +678,22 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               <div className="bg-emerald-500/15 border border-emerald-500/50 rounded-2xl p-3.5 text-center shadow-sm">
                 <div className="flex items-center justify-center gap-2 text-emerald-400 font-black text-xs uppercase tracking-wider">
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>1 Imóvel Rural Encontrado no SICAR</span>
+                  <span>1 Polígono / Imóvel Encontrado no SICAR</span>
                 </div>
               </div>
             ) : (
               <div className="bg-rose-500/15 border border-rose-500/50 rounded-2xl p-4 text-center shadow-sm">
                 <div className="flex items-center justify-center gap-2 text-rose-400 font-black text-xs uppercase tracking-wider mb-1">
                   <AlertTriangle className="w-4 h-4" />
-                  <span>Nenhum Imóvel Encontrado</span>
+                  <span>Nenhum Polígono Encontrado</span>
                 </div>
                 <p className="text-xs text-military-300">
-                  A coordenada consultada não intersecta nenhum polígono da base do CAR atualmente carregada.
+                  A coordenada consultada não intersecta nenhum polígono nas bases ativas do CAR atualmente carregadas.
                 </p>
               </div>
             )}
 
-            {/* MAPA INTERATIVO DOS IMÓVEIS ENCONTRADOS */}
+            {/* MAPA INTERATIVO DOS POLÍGONOS ENCONTRADOS */}
             {searchResults.length > 0 && parsedCoord && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between px-1">
@@ -544,7 +714,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               </div>
             )}
 
-            {/* DETALHAMENTO DO IMÓVEL SELECIONADO */}
+            {/* DETALHAMENTO DO ELEMENTO SELECIONADO */}
             {selectedProperty && parsedCoord && (
               <div className="bg-military-850 border border-military-700/80 rounded-2xl p-4 shadow-sm space-y-3">
                 <div className="flex items-center justify-between border-b border-military-750 pb-2">
@@ -552,7 +722,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                     <FileText className="w-4 h-4 text-military-400" />
                     <h3 className="text-xs font-black uppercase tracking-wider text-military-100">
                       {searchResults.length > 1
-                        ? `CAR ${searchResults.findIndex(p => p.id === selectedProperty.id) + 1} de ${searchResults.length}`
+                        ? `Registro ${searchResults.findIndex(p => p.id === selectedProperty.id) + 1} de ${searchResults.length}`
                         : 'Informações do Imóvel Rural'}
                     </h3>
                   </div>
@@ -566,7 +736,20 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                   </button>
                 </div>
 
-                {/* Lista formatada exatamente conforme especificado */}
+                {/* Camada de Origem */}
+                {selectedProperty.layerName && (
+                  <div className="bg-military-800/80 p-2 rounded-xl border border-military-750 flex items-center justify-between text-xs">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-military-400">
+                      Camada de Origem:
+                    </span>
+                    <span className="font-mono font-bold text-emerald-400 flex items-center gap-1">
+                      <Layers className="w-3.5 h-3.5" />
+                      {selectedProperty.layerName} {selectedProperty.fileName ? `(${selectedProperty.fileName})` : ''}
+                    </span>
+                  </div>
+                )}
+
+                {/* Lista formatada de atributos */}
                 <div className="space-y-2.5 text-xs">
                   <div className="bg-military-800 p-2.5 rounded-xl border border-military-750">
                     <span className="block text-[10px] font-bold uppercase tracking-wider text-military-400">
@@ -672,7 +855,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
                 <div className="pt-2 border-t border-military-750">
                   <button
                     onClick={() => setShowRawAttributes(!showRawAttributes)}
-                    className="w-full flex items-center justify-between text-xs font-bold text-military-300 hover:text-military-100 transition py-1"
+                    className="w-full flex items-center justify-between text-xs font-bold text-military-300 hover:text-military-100 transition py-1 cursor-pointer"
                   >
                     <span>Todos os Atributos da Camada ({Object.keys(selectedProperty.properties).length})</span>
                     <span className="text-[10px] font-mono">{showRawAttributes ? '▲ Ocultar' : '▼ Expandir'}</span>

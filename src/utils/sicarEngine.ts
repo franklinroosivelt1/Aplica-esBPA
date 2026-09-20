@@ -30,6 +30,9 @@ export interface SicarProperty {
   dataCadastro: string;
   reservaLegalHa: string;
   appHa: string;
+  layerId?: string;
+  layerName?: string;
+  fileName?: string;
 }
 
 export interface SicarLayerInfo {
@@ -242,6 +245,36 @@ export class SicarSpatialIndex {
   properties: SicarProperty[] = [];
   index: Flatbush | null = null;
   info: SicarLayerInfo | null = null;
+  layers: any[] = [];
+
+  setLayers(layers: Array<{ id: string; layerName: string; fileName: string; enabled?: boolean; properties: SicarProperty[] }>) {
+    this.layers = layers;
+    const combined: SicarProperty[] = [];
+    for (const layer of layers) {
+      if (layer.enabled !== false) {
+        for (const prop of layer.properties) {
+          combined.push({
+            ...prop,
+            layerId: layer.id,
+            layerName: layer.layerName,
+            fileName: layer.fileName,
+          });
+        }
+      }
+    }
+    this.properties = combined;
+    if (combined.length === 0) {
+      this.index = null;
+      return;
+    }
+    const flatbush = new Flatbush(combined.length);
+    for (const prop of combined) {
+      const [minX, minY, maxX, maxY] = prop.bbox;
+      flatbush.add(minX, minY, maxX, maxY);
+    }
+    flatbush.finish();
+    this.index = flatbush;
+  }
 
   build(properties: SicarProperty[], info: SicarLayerInfo) {
     this.properties = properties;
