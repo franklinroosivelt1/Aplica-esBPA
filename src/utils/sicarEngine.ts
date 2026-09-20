@@ -1,6 +1,20 @@
 import shp from 'shpjs';
 import Flatbush from 'flatbush';
 import { GeoPackageAPI } from '@ngageoint/geopackage';
+import proj4 from 'proj4';
+
+// Register Brazilian and standard CRS definitions in proj4 for bulletproof reprojections
+try {
+  proj4.defs("EPSG:4674", "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs");
+  proj4.defs("urn:ogc:def:crs:EPSG::4674", "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs");
+  proj4.defs("EPSG:4618", "+proj=longlat +ellps=aust_SA +towgs84=-67.35,3.88,-38.22,0,0,0,0 +no_defs");
+  proj4.defs("EPSG:31988", "+proj=utm +zone=18 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+  proj4.defs("EPSG:31989", "+proj=utm +zone=19 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs");
+  proj4.defs("EPSG:32718", "+proj=utm +zone=18 +south +datum=WGS84 +units=m +no_defs");
+  proj4.defs("EPSG:32719", "+proj=utm +zone=19 +south +datum=WGS84 +units=m +no_defs");
+} catch (e) {
+  console.warn("Proj4 CRS definition notice:", e);
+}
 
 export interface SicarProperty {
   id: string | number;
@@ -272,10 +286,23 @@ export class SicarSpatialIndex {
 // File loader supporting .zip (Shapefiles), .gpkg (GeoPackage), .geojson/.json
 export async function parseUploadedFile(file: File): Promise<{ properties: SicarProperty[]; info: SicarLayerInfo }> {
   const fileName = file.name.toLowerCase();
+  const buffer = await file.arrayBuffer();
+  const firstBytes = new Uint8Array(buffer.slice(0, 16));
+
+  // Magic bytes check
+  const isSqlite = firstBytes.length >= 16 &&
+    firstBytes[0] === 0x53 && firstBytes[1] === 0x51 && firstBytes[2] === 0x4C &&
+    firstBytes[3] === 0x69 && firstBytes[4] === 0x74 && firstBytes[5] === 0x65 &&
+    firstBytes[6] === 0x20 && firstBytes[7] === 0x66 && firstBytes[8] === 0x6F &&
+    firstBytes[9] === 0x72 && firstBytes[10] === 0x6D && firstBytes[11] === 0x61 &&
+    firstBytes[12] === 0x74 && firstBytes[13] === 0x20 && firstBytes[14] === 0x33 &&
+    firstBytes[15] === 0x00;
+
+  const isZip = (firstBytes.length >= 2 && firstBytes[0] === 0x50 && firstBytes[1] === 0x4B) || fileName.endsWith('.zip');
+  const isGpkg = isSqlite || fileName.endsWith('.gpkg') || fileName.includes('.gpkg');
 
   // 1. ZIP File (Shapefile set .shp, .shx, .dbf, .prj)
-  if (fileName.endsWith('.zip')) {
-    const buffer = await file.arrayBuffer();
+  if (isZip && !isSqlite) {
     const parsed = await shp(buffer);
 
     let features: any[] = [];
@@ -327,8 +354,7 @@ export async function parseUploadedFile(file: File): Promise<{ properties: Sicar
   }
 
   // 2. GeoPackage (.gpkg)
-  if (fileName.endsWith('.gpkg')) {
-    const buffer = await file.arrayBuffer();
+  if (isGpkg) {
     const gpkgUint8 = new Uint8Array(buffer);
     const geoPackage = await GeoPackageAPI.open(gpkgUint8);
     const tables = geoPackage.getFeatureTables();
@@ -337,13 +363,55 @@ export async function parseUploadedFile(file: File): Promise<{ properties: Sicar
       throw new Error("O arquivo GeoPackage (.gpkg) não contém tabelas de feições vetoriais.");
     }
 
-    // Pick first feature table with polygons (or first table)
     let selectedTable = tables[0];
     let allFeatures: any[] = [];
+    let detectedSrid = 'SIRGAS 2000 (EPSG:4674)';
 
     for (const tbl of tables) {
       try {
-        const feats = (geoPackage as any).queryForGeoJSONFeaturesInTable(tbl, undefined);
+        const featureDao = geoPackage.getFeatureDao(tbl);
+        if (featureDao.srs) {
+          const srsName = featureDao.srs.srs_name || 'SIRGAS 2000';
+          const srsId = featureDao.srs.srs_id || 4674;
+          detectedSrid = `${srsName} (EPSG:${srsId})`;
+        }
+
+        let feats: any[] = [];
+        try {
+          feats = (geoPackage as any).queryForGeoJSONFeaturesInTable(tbl, undefined);
+        } catch (queryErr) {
+          console.warn(`Query padrão em ${tbl} falhou, tentando iteração direta:`, queryErr);
+        }
+
+        // Resilient fallback: iterate rows directly if query returned empty or failed
+        if (!feats || feats.length === 0) {
+          feats = [];
+          try {
+            const iterator = featureDao.queryForEach();
+            let row = iterator.next();
+            while (!row.done) {
+              try {
+                const featureRow = featureDao.getRow(row.value);
+                const rawGeom: any = featureRow.geometry?.toGeoJSON();
+                const actualGeom = rawGeom?.type === 'Feature' ? rawGeom.geometry : rawGeom;
+                if (actualGeom && (actualGeom.type === 'Polygon' || actualGeom.type === 'MultiPolygon')) {
+                  feats.push({
+                    type: 'Feature',
+                    id: featureRow.id,
+                    geometry: actualGeom,
+                    properties: featureRow.values || {},
+                  });
+                }
+              } catch (e) {
+                // skip corrupted individual feature row
+              }
+              row = iterator.next();
+            }
+          } catch (iterErr) {
+            console.warn(`Iteração direta falhou em ${tbl}:`, iterErr);
+          }
+        }
+
         if (feats && feats.length > 0) {
           const hasPolys = feats.some((f: any) => 
             f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')
@@ -355,12 +423,16 @@ export async function parseUploadedFile(file: File): Promise<{ properties: Sicar
           }
         }
       } catch (e) {
-        console.warn(`Erro lendo tabela ${tbl}:`, e);
+        console.warn(`Erro ao ler tabela ${tbl}:`, e);
       }
     }
 
-    if (allFeatures.length === 0) {
-      allFeatures = (geoPackage as any).queryForGeoJSONFeaturesInTable(selectedTable, undefined);
+    if (allFeatures.length === 0 && tables.length > 0) {
+      try {
+        allFeatures = (geoPackage as any).queryForGeoJSONFeaturesInTable(selectedTable, undefined);
+      } catch (e) {
+        console.warn("Erro ao buscar feições da tabela padrão:", e);
+      }
     }
 
     const properties: SicarProperty[] = [];
@@ -376,7 +448,7 @@ export async function parseUploadedFile(file: File): Promise<{ properties: Sicar
     const info: SicarLayerInfo = {
       layerName: selectedTable,
       totalCount: properties.length,
-      srid: 'SIRGAS 2000 (EPSG:4674) / OGC GeoPackage',
+      srid: detectedSrid,
       geometryType: properties[0]?.geometry?.type || 'Polygon',
       loadedAt: new Date(),
       fileName: file.name,
@@ -388,7 +460,7 @@ export async function parseUploadedFile(file: File): Promise<{ properties: Sicar
 
   // 3. GeoJSON or JSON
   if (fileName.endsWith('.geojson') || fileName.endsWith('.json')) {
-    const text = await file.text();
+    const text = new TextDecoder('utf-8').decode(buffer);
     const json = JSON.parse(text);
     const rawFeatures = json.features || (Array.isArray(json) ? json : [json]);
 
@@ -415,7 +487,7 @@ export async function parseUploadedFile(file: File): Promise<{ properties: Sicar
     return { properties, info };
   }
 
-  throw new Error("Formato não suportado. Por favor, carregue um arquivo compactado .ZIP (Shapefile SICAR), .GPKG (GeoPackage) ou .GEOJSON.");
+  throw new Error("Formato não suportado. Por favor, carregue um arquivo .GPKG (GeoPackage), .ZIP (Shapefile SICAR) ou .GEOJSON.");
 }
 
 // Preloaded Demonstrative Acre SICAR Base

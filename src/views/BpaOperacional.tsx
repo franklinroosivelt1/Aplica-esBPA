@@ -44,6 +44,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
   // Base / Layer State
   const [layerInfo, setLayerInfo] = useState<SicarLayerInfo | null>(null);
   const [isLoadingBase, setIsLoadingBase] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState<string>('Processando Base...');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccessMessage, setUploadSuccessMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -82,12 +83,15 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    setLoadingMessage(`Lendo ${file.name} (${sizeMb} MB)...`);
     setIsLoadingBase(true);
     setUploadError(null);
     setUploadSuccessMessage(null);
 
     try {
       const { properties, info } = await parseUploadedFile(file);
+      setLoadingMessage(`Indexando ${properties.length.toLocaleString('pt-BR')} imóveis...`);
       spatialIndexRef.current.build(properties, info);
       setLayerInfo(info);
 
@@ -103,6 +107,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
       setUploadError(err.message || "Erro ao processar a base geoespacial carregada.");
     } finally {
       setIsLoadingBase(false);
+      setLoadingMessage('Processando Base...');
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -317,7 +322,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               type="file"
               ref={fileInputRef}
               onChange={handleFileUpload}
-              accept=".zip,.gpkg,.geojson,.json"
+              accept="*/*"
               className="hidden"
               id="car-file-input"
             />
@@ -329,7 +334,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               className="flex-1 py-2.5 px-3 bg-military-800 hover:bg-military-750 text-military-100 border border-military-700 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer shadow-xs"
             >
               <Upload className="w-4 h-4 text-military-400" />
-              <span>{isLoadingBase ? 'Processando Base...' : 'Upload (.ZIP / .GPKG)'}</span>
+              <span>{isLoadingBase ? loadingMessage : 'Upload (.GPKG / .ZIP)'}</span>
             </button>
 
             <button
@@ -345,7 +350,7 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
           </div>
 
           <p className="text-[10px] text-military-400 leading-tight">
-            Suporta shapefiles compactados (.zip), GeoPackage (.gpkg) e GeoJSON. Validação automática de geometrias Polygon e MultiPolygon com índice espacial R-Tree.
+            Compatível com GeoPackage (.gpkg - classificado como "Arquivo em BIN" no Android), Shapefiles (.zip) e GeoJSON. Validação automática de geometrias Polygon e MultiPolygon com índice R-Tree.
           </p>
         </div>
 
