@@ -648,9 +648,11 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     description?: string;
     type: string;
     layerName: string;
+    layerColor?: string;
     lat: number;
     lng: number;
     coordinates?: Array<{ lat: number; lng: number }>;
+    rings?: Array<Array<{ lat: number; lng: number }>>;
     numCar?: string;
     municipio?: string;
     areaHa?: string;
@@ -1125,7 +1127,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       triggerRedraw();
     });
     return () => cancelAnimationFrame(frameId);
-  }, [center, zoom, rotation, activeMapIds, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, dimensions, importedMaps, isRecordingGpsTrack, recordedTrackPoints]);
+  }, [center, zoom, rotation, activeMapIds, baseMap, kmlLayers, selectedFeature, gpsCoords, simulatedGps, simGpsCoords, dimensions, importedMaps, isRecordingGpsTrack, recordedTrackPoints]);
 
   // Handle drawing operation over HTML5 Canvas
   useEffect(() => {
@@ -1344,7 +1346,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     kmlLayers.forEach(layer => {
       if (!layer.visible) return;
 
-      const strokeColor = layer.color || '#22c55e'; // High-visibility emerald green default
+      const strokeColor = layer.color || '#eab308'; // High-visibility tactical amber default
       let lineWidth = 3; // Default (Grossa)
       if (layer.thickness === 'fina') {
         lineWidth = 1;
@@ -1412,32 +1414,112 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           }
           ctx.stroke();
           // NO ctx.fill()! Center remains 100% transparent!
-
-          // Display subtle CAR identification label when zoomed in close (zoom >= 13.5)
-          if (zoom >= 13.5 && (feat.numCar || feat.name)) {
-            const centroid = feat.coordinates[0];
-            const wPx = latLngToWorldPixel(centroid.lat, centroid.lng, zoom);
-            const cx = wPx.x - centerPixel.x;
-            const cy = wPx.y - centerPixel.y;
-            const rawLabel = feat.numCar && !feat.numCar.includes('não disponível')
-              ? (feat.numCar.length > 18 ? feat.numCar.slice(-12) : feat.numCar)
-              : feat.name;
-
-            ctx.save();
-            ctx.font = 'bold 9px monospace';
-            const tWidth = ctx.measureText(rawLabel).width;
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-            ctx.fillRect(cx - 3, cy - 8, tWidth + 6, 12);
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = 1;
-            ctx.strokeRect(cx - 3, cy - 8, tWidth + 6, 12);
-            ctx.fillStyle = '#ffffff';
-            ctx.fillText(rawLabel, cx, cy + 1);
-            ctx.restore();
-          }
+          // Polygon labels are removed per user request to keep visual clean and uncluttered without visual pollution.
         }
       });
     });
+
+    // 3.5. DRAW HIGHLIGHT FOR CURRENTLY SELECTED VECTOR / CAR PROPERTY
+    if (selectedFeature && selectedFeature.coordinates && selectedFeature.coordinates.length > 0) {
+      if (selectedFeature.type === 'Polygon' || selectedFeature.type === 'MultiPolygon') {
+        const ringsToDraw = (selectedFeature.rings && selectedFeature.rings.length > 0)
+          ? selectedFeature.rings
+          : [selectedFeature.coordinates];
+
+        ctx.save();
+        ctx.beginPath();
+        for (const ring of ringsToDraw) {
+          if (ring.length < 2) continue;
+          const wPx0 = latLngToWorldPixel(ring[0].lat, ring[0].lng, zoom);
+          ctx.moveTo(wPx0.x - centerPixel.x, wPx0.y - centerPixel.y);
+          for (let i = 1; i < ring.length; i++) {
+            const wPxi = latLngToWorldPixel(ring[i].lat, ring[i].lng, zoom);
+            ctx.lineTo(wPxi.x - centerPixel.x, wPxi.y - centerPixel.y);
+          }
+          ctx.closePath();
+        }
+
+        // 1. Semi-transparent tactical highlight fill (so the operator can clearly see the exact area and shape)
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.32)'; // Tactical Blue fill at 32%
+        ctx.fill();
+
+        // 2. Thick outer glowing border
+        ctx.strokeStyle = '#38bdf8'; // Tactical Cyan / Sky Blue
+        ctx.lineWidth = 4.5;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        // 3. Crisp inner white border
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 4. Highlight vertices (geodesic corners of the selected property)
+        for (const ring of ringsToDraw) {
+          for (const pt of ring) {
+            const wPx = latLngToWorldPixel(pt.lat, pt.lng, zoom);
+            const vx = wPx.x - centerPixel.x;
+            const vy = wPx.y - centerPixel.y;
+            ctx.beginPath();
+            ctx.arc(vx, vy, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.strokeStyle = '#0284c7';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+        }
+
+        // 5. Centroid target crosshair
+        const centroid = averageLatLng(selectedFeature.coordinates);
+        const cwPx = latLngToWorldPixel(centroid.lat, centroid.lng, zoom);
+        const cx = cwPx.x - centerPixel.x;
+        const cy = cwPx.y - centerPixel.y;
+        
+        ctx.beginPath();
+        ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+        ctx.restore();
+      } else if (selectedFeature.type === 'LineString') {
+        ctx.save();
+        ctx.beginPath();
+        const wPx0 = latLngToWorldPixel(selectedFeature.coordinates[0].lat, selectedFeature.coordinates[0].lng, zoom);
+        ctx.moveTo(wPx0.x - centerPixel.x, wPx0.y - centerPixel.y);
+        for (let i = 1; i < selectedFeature.coordinates.length; i++) {
+          const wPxi = latLngToWorldPixel(selectedFeature.coordinates[i].lat, selectedFeature.coordinates[i].lng, zoom);
+          ctx.lineTo(wPxi.x - centerPixel.x, wPxi.y - centerPixel.y);
+        }
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 5;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      } else if (selectedFeature.type === 'Point') {
+        const pt = selectedFeature.coordinates[0];
+        const wPx = latLngToWorldPixel(pt.lat, pt.lng, zoom);
+        const px = wPx.x - centerPixel.x;
+        const py = wPx.y - centerPixel.y;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(px, py, 14, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.35)';
+        ctx.fill();
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
 
     // 4. DRAW GPS USER POSITION (Active Beacon)
     const positionToShow = simulatedGps ? simGpsCoords : gpsCoords;
@@ -1869,7 +1951,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
     // 5. DRAW COMPASS ACCENT (Static decal)
     ctx.lineWidth = 2;
-  }, [paintCount, dimensions, center, zoom, rotation, activeMapIds, baseMap, kmlLayers, gpsCoords, simulatedGps, simGpsCoords, savedPoints, savedDistances, savedAreas, measurePoints, areaPoints, measuringMode, isRecordingGpsTrack, recordedTrackPoints]);
+  }, [paintCount, dimensions, center, zoom, rotation, activeMapIds, baseMap, kmlLayers, selectedFeature, gpsCoords, simulatedGps, simGpsCoords, savedPoints, savedDistances, savedAreas, measurePoints, areaPoints, measuringMode, isRecordingGpsTrack, recordedTrackPoints]);
 
   // Helpers for locating screen coordinate of lat/lng
   const getScreenPos = (lat: number, lng: number) => {
@@ -2019,9 +2101,11 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             description: feat.description,
             type: feat.type,
             layerName: layer.name,
+            layerColor: layer.color,
             lat: feat.coordinates[0].lat,
             lng: feat.coordinates[0].lng,
             coordinates: feat.coordinates,
+            rings: feat.rings,
             numCar: feat.numCar,
             municipio: feat.municipio,
             areaHa: feat.areaHa,
@@ -3235,7 +3319,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             id: file.name + '_' + Date.now() + '_' + i,
             name: baseName,
             visible: true,
-            color: '#22c55e', // Emerald green default for CAR boundaries
+            color: '#eab308', // Tactical amber default for CAR boundaries
             thickness: 'grossa',
             format: ext === 'gpkg' ? 'gpkg' : ext === 'zip' ? 'zip' : 'geojson',
             features
@@ -3288,7 +3372,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             id: sl.id || (sl.layerName + '_' + Date.now()),
             name: sl.layerName || sl.fileName.replace(/\.[^/.]+$/, ""),
             visible: true,
-            color: '#22c55e',
+            color: '#eab308',
             thickness: 'grossa',
             format: sl.fileName.toLowerCase().endsWith('.gpkg') ? 'gpkg' : 'zip',
             features
@@ -3674,7 +3758,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           );
         })()}
 
-        {/* selectedFeature Balloon (Floating on the vector feature's position) */}
+        {/* selectedFeature Attribute Card / Balloon */}
         {selectedFeature && (() => {
           // Fallback to first point, but for LineString or Polygon we can float on centroid
           const positionCoords = (selectedFeature.coordinates && selectedFeature.coordinates.length > 0)
@@ -3682,8 +3766,6 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             : { lat: selectedFeature.lat, lng: selectedFeature.lng };
 
           const screenPos = getScreenPos(positionCoords.lat, positionCoords.lng);
-          const isOffScreen = screenPos.x < 0 || screenPos.x > dimensions.width || screenPos.y < 0 || screenPos.y > dimensions.height;
-          if (isOffScreen) return null;
 
           // Calculations
           let featureLengthKm = 0;
@@ -3695,7 +3777,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               for (let i = 1; i < coords.length; i++) {
                 featureLengthKm += calculateHaversineDistance(coords[i-1], coords[i]);
               }
-            } else if (selectedFeature.type === 'Polygon') {
+            } else if (selectedFeature.type === 'Polygon' || selectedFeature.type === 'MultiPolygon') {
               // Perimeter
               for (let i = 0; i < coords.length; i++) {
                 const next = coords[(i + 1) % coords.length];
@@ -3717,13 +3799,35 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             }
           }
 
+          // GUARANTEED VIEWPORT SAFETY & CLAMPING:
+          // The attribute card must NEVER render outside the user's screen.
+          const cardWidth = Math.min(320, dimensions.width - 24);
+          
+          // Clamp X so the card is always completely within [12px, dimensions.width - cardWidth - 12px]
+          const minX = 12;
+          const maxX = Math.max(12, dimensions.width - cardWidth - 12);
+          const clampedX = Math.max(minX, Math.min(maxX, screenPos.x - cardWidth / 2));
+
+          // Safe vertical bounds:
+          // Top margin safe: 56px (below header / back buttons)
+          // Bottom margin safe: dimensions.height - 70px (above bottom GPS and coordinate controls)
+          const safeTop = 56;
+          const safeBottom = Math.max(safeTop + 160, dimensions.height - 70);
+
+          // If the feature centroid is in the upper half of screen, anchor card below centroid.
+          // Otherwise anchor card above centroid.
+          const anchorBelow = screenPos.y < (dimensions.height * 0.46);
+          const targetY = anchorBelow ? (screenPos.y + 16) : (screenPos.y - 330);
+          const clampedY = Math.max(safeTop, Math.min(safeBottom - 240, targetY));
+
           return (
             <div 
               style={{ 
-                left: screenPos.x, 
-                top: screenPos.y,
+                left: clampedX, 
+                top: clampedY,
+                width: cardWidth,
               }}
-              className="absolute pointer-events-auto z-40 -translate-x-1/2 -translate-y-[105%] flex flex-col items-center select-text animate-fade-in"
+              className="absolute pointer-events-auto z-40 flex flex-col items-center select-text animate-fade-in"
               id="selected-kml-feature-overlay"
               onMouseDown={e => e.stopPropagation()}
               onMouseUp={e => e.stopPropagation()}
@@ -3731,49 +3835,69 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               onTouchEnd={e => e.stopPropagation()}
               onClick={e => e.stopPropagation()}
             >
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xl w-[260px] flex flex-col gap-2.5 relative text-slate-800">
-                {/* Header */}
-                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
+              <div className="bg-military-900/95 border border-military-600/90 rounded-2xl p-3.5 shadow-2xl w-full flex flex-col gap-2 relative text-military-100 backdrop-blur-md">
+                {/* Header with Title, Layer, Focar Button and Close Button */}
+                <div className="flex items-start justify-between gap-2 border-b border-military-700/80 pb-2">
                   <div className="flex flex-col flex-grow min-w-0">
-                    <h4 className="font-sans text-xs font-black text-slate-800 uppercase tracking-wide truncate pr-1">
-                      {selectedFeature.name || "Elemento Vetorial"}
-                    </h4>
-                    <span className="text-[7.5px] font-mono text-emerald-600 uppercase tracking-widest font-black mt-0.5 truncate">
-                      Camada: {selectedFeature.layerName || "Inserida"}
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                      <h4 className="font-sans text-xs font-black text-military-100 uppercase tracking-wide truncate pr-1">
+                        {selectedFeature.name || "Propriedade / CAR"}
+                      </h4>
+                    </div>
+                    <span className="text-[7.5px] font-mono text-blue-400 uppercase tracking-widest font-black mt-0.5 truncate">
+                      Camada: {selectedFeature.layerName || "Base Vetorial"}
                     </span>
                   </div>
-                  <button 
-                    onClick={() => setSelectedFeature(null)}
-                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
-                    title="Fechar Balão"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Focar no Imóvel */}
+                    <button
+                      onClick={() => {
+                        setCenter(positionCoords);
+                        setZoom(Math.max(zoom, 14.5));
+                        showTemporaryStatus("Mapa centralizado no imóvel selecionado.");
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/60 text-blue-300 hover:text-white font-mono text-[8px] font-bold uppercase transition-all"
+                      title="Centralizar e focar visualização nesta propriedade"
+                    >
+                      <Crosshair className="w-3 h-3" />
+                      <span>Focar</span>
+                    </button>
+
+                    {/* Fechar */}
+                    <button 
+                      onClick={() => setSelectedFeature(null)}
+                      className="p-1 rounded-md text-military-400 hover:text-military-100 hover:bg-military-800 transition-colors"
+                      title="Fechar Balão e Desmarcar"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Body / Attribute Table Details */}
-                <div className="flex flex-col gap-2 text-[10px] font-mono select-all">
-                  
+                {/* Body / Attribute Table Details - Scrollable if tall */}
+                <div className="flex flex-col gap-2 text-[10px] font-mono select-all max-h-[min(50vh,340px)] overflow-y-auto pr-0.5 scrollbar-thin">
                   {/* CAR NUMBER & BADGE (If feature originates from CAR) */}
                   {selectedFeature.numCar && (
-                    <div className="flex flex-col gap-1 bg-emerald-50/90 border border-emerald-300/80 p-2.5 rounded-xl">
+                    <div className="flex flex-col gap-1 bg-military-950/90 border border-military-700/90 p-2 rounded-xl">
                       <div className="flex items-center justify-between">
-                        <span className="text-[7.5px] font-black uppercase text-emerald-800 tracking-wider flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                          NÚMERO DO CAR
+                        <span className="text-[7.5px] font-black uppercase text-military-300 tracking-wider flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                          NÚMERO DO CAR (SICAR)
                         </span>
                         <button
                           onClick={() => {
                             navigator.clipboard.writeText(selectedFeature.numCar || '');
                             showTemporaryStatus("Nº do CAR copiado!");
                           }}
-                          className="p-1 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-200/50 rounded transition-colors"
+                          className="p-1 text-blue-400 hover:text-blue-200 hover:bg-military-800 rounded transition-colors"
                           title="Copiar Número do CAR"
                         >
                           <Copy className="w-3 h-3" />
                         </button>
                       </div>
-                      <div className="font-mono font-bold text-[9.5px] text-emerald-950 break-all select-all leading-tight">
+                      <div className="font-mono font-bold text-[9.5px] text-military-100 break-all select-all leading-tight">
                         {selectedFeature.numCar}
                       </div>
                     </div>
@@ -3781,165 +3905,184 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
                   {/* CAR Specific Attributes: Município, Situação, Proprietário */}
                   {selectedFeature.municipio && (
-                    <div className="flex justify-between items-center bg-[#f8fafc] px-2.5 py-1.5 rounded-lg border border-slate-200 text-[9px]">
-                      <span className="text-slate-500 font-bold uppercase text-[7.5px]">Município</span>
-                      <span className="font-black text-slate-800">{selectedFeature.municipio}</span>
+                    <div className="flex justify-between items-center bg-military-950/60 px-2.5 py-1.5 rounded-lg border border-military-800/80 text-[9px]">
+                      <span className="text-military-400 font-bold uppercase text-[7.5px]">Município</span>
+                      <span className="font-bold text-military-100">{selectedFeature.municipio}</span>
                     </div>
                   )}
 
                   {selectedFeature.areaHa && (
-                    <div className="flex justify-between items-center bg-[#f8fafc] px-2.5 py-1.5 rounded-lg border border-slate-200 text-[9px]">
-                      <span className="text-slate-500 font-bold uppercase text-[7.5px]">Área Declarada (CAR)</span>
-                      <span className="font-black text-emerald-700">{selectedFeature.areaHa}</span>
+                    <div className="flex justify-between items-center bg-military-950/60 px-2.5 py-1.5 rounded-lg border border-military-800/80 text-[9px]">
+                      <span className="text-military-400 font-bold uppercase text-[7.5px]">Área Declarada (CAR)</span>
+                      <span className="font-bold text-blue-400">{selectedFeature.areaHa}</span>
                     </div>
                   )}
 
                   {selectedFeature.situacao && (
-                    <div className="flex justify-between items-center bg-[#f8fafc] px-2.5 py-1.5 rounded-lg border border-slate-200 text-[9px]">
-                      <span className="text-slate-500 font-bold uppercase text-[7.5px]">Situação</span>
-                      <span className="font-bold text-slate-700">{selectedFeature.situacao}</span>
+                    <div className="flex justify-between items-center bg-military-950/60 px-2.5 py-1.5 rounded-lg border border-military-800/80 text-[9px]">
+                      <span className="text-military-400 font-bold uppercase text-[7.5px]">Situação</span>
+                      <span className="font-bold text-military-200">{selectedFeature.situacao}</span>
                     </div>
                   )}
 
                   {selectedFeature.proprietario && (
-                    <div className="flex flex-col gap-0.5 bg-[#f8fafc] p-2 rounded-lg border border-slate-200 text-[9px]">
-                      <span className="text-slate-500 font-bold uppercase text-[7.5px]">Titular / Proprietário</span>
-                      <span className="font-bold text-slate-800 text-[9.5px] leading-tight">{selectedFeature.proprietario}</span>
+                    <div className="flex flex-col gap-0.5 bg-military-950/60 p-2 rounded-lg border border-military-800/80 text-[9px]">
+                      <span className="text-military-400 font-bold uppercase text-[7.5px]">Titular / Proprietário</span>
+                      <span className="font-bold text-military-100 text-[9.5px] leading-tight">{selectedFeature.proprietario}</span>
                     </div>
                   )}
 
                   {/* General details based on feature type */}
-                  <div className="flex justify-between items-center bg-[#f8fafc] px-2 py-1 rounded-lg border border-slate-250/20 text-[9px] text-slate-500 font-sans font-bold">
+                  <div className="flex justify-between items-center bg-military-950/60 px-2 py-1 rounded-lg border border-military-800/80 text-[9px] text-military-300 font-sans font-bold">
                     <span className="uppercase text-[7.5px]">Tipo da Feição</span>
-                    <span className="font-black text-blue-600 uppercase">
+                    <span className="font-black text-blue-400 uppercase">
                       {selectedFeature.type === 'Point' ? 'PONTO / MARCO' : selectedFeature.type === 'LineString' ? 'LINHA / TRAJETO' : 'POLÍGONO (DELIMITAÇÃO)'}
                     </span>
                   </div>
 
                   {/* LINESTRING SPECIFIC DETAILS: Length / Extension */}
                   {selectedFeature.type === 'LineString' && (
-                    <>
+                    <div className="flex flex-col gap-1">
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Extensão da Linha</span>
-                        <div className="bg-[#f0f9ff] px-2.5 py-1.5 rounded-lg text-blue-700 border border-blue-100 text-xs font-black font-mono">
+                        <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Extensão Total</span>
+                        <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-blue-400 border border-military-800/80 text-xs font-black font-mono">
                           {featureLengthKm.toFixed(3)} km
                         </div>
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Extensão em Metros</span>
-                        <div className="bg-[#f8fafc] px-2.5 py-1.5 rounded-lg text-slate-700 border border-slate-200 text-xs font-black font-mono">
+                        <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Metros</span>
+                        <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-military-200 border border-military-800/80 text-xs font-black font-mono">
                           {(featureLengthKm * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m
                         </div>
                       </div>
-                    </>
+                    </div>
                   )}
 
                   {/* POLYGON SPECIFIC DETAILS: Area & Perimeter */}
-                  {selectedFeature.type === 'Polygon' && (
-                    <>
+                  {(selectedFeature.type === 'Polygon' || selectedFeature.type === 'MultiPolygon') && (
+                    <div className="flex flex-col gap-1">
+                      {!selectedFeature.areaHa && (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Área Calculada</span>
+                          <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-blue-400 border border-military-800/80 text-xs font-black font-mono">
+                            {featureAreaHectares.toFixed(2)} ha
+                          </div>
+                        </div>
+                      )}
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Área Calculada</span>
-                        <div className="bg-emerald-950/20 px-2.5 py-1.5 rounded-lg text-emerald-300 border border-emerald-800/60 text-xs font-black font-mono">
-                          {featureAreaHectares.toFixed(3)} ha
+                        <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Perímetro dos Limites</span>
+                        <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-military-200 border border-military-800/80 text-xs font-black font-mono">
+                          {featureLengthKm.toFixed(3)} km
                         </div>
                       </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Metros Quadrados</span>
-                        <div className="bg-[#f0f9ff] px-2.5 py-1.5 rounded-lg text-blue-700 border border-blue-100 text-xs font-black font-mono">
-                          {(featureAreaHectares * 10000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m²
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Perímetro (Extensão)</span>
-                        <div className="bg-[#f8fafc] px-2.5 py-1.5 rounded-lg text-slate-700 border border-slate-200 text-xs font-black font-mono">
-                          {featureLengthKm.toFixed(3)} km ({(featureLengthKm * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m)
-                        </div>
-                      </div>
-                    </>
+                    </div>
                   )}
 
-                  {/* POINT SPECIFIC DETAILS: Coordinates (GMS & Decimal) */}
+                  {/* POINT SPECIFIC DETAILS: Coordinates */}
                   {selectedFeature.type === 'Point' && (
-                    <>
+                    <div className="flex flex-col gap-1">
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Graus Minutos Segundos (GMS)</span>
-                        <div className="bg-[#f0f9ff] px-2.5 py-1.5 rounded-lg text-blue-800 border border-blue-100 text-[8.5px] leading-relaxed">
+                        <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Graus Minutos Segundos (GMS)</span>
+                        <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-military-200 border border-military-800/80 text-[8.5px] leading-relaxed">
                           <div>LAT: {decimalToDMS(selectedFeature.lat, 'lat')}</div>
                           <div>LNG: {decimalToDMS(selectedFeature.lng, 'lng')}</div>
                         </div>
                       </div>
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Coordenadas Decimais</span>
-                        <div className="bg-[#f8fafc] px-2 py-1 rounded-lg text-slate-600 border border-slate-200 text-[9px]">
+                        <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Coordenadas Decimais</span>
+                        <div className="bg-military-950/70 px-2 py-1 rounded-lg text-military-300 border border-military-800/80 text-[9px]">
                           <div>LAT: {selectedFeature.lat.toFixed(6)}</div>
                           <div>LNG: {selectedFeature.lng.toFixed(6)}</div>
                         </div>
                       </div>
-                    </>
+                    </div>
                   )}
 
-                  {/* Feature description / Attribute table display */}
+                  {/* Feature description / Attribute table */}
                   {selectedFeature.description && selectedFeature.description.trim() && (
                     <div className="flex flex-col gap-0.5 mt-0.5">
-                      <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Atributos Adicionais</span>
+                      <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Atributos GIS / KML</span>
                       <div 
-                        className="max-h-[85px] overflow-y-auto border border-slate-200/80 rounded-xl p-2.5 bg-[#f8fafc] text-[8.5px] leading-normal text-slate-600 select-text scrollbar-thin overflow-x-hidden"
+                        className="max-h-[85px] overflow-y-auto border border-military-800/80 rounded-xl p-2.5 bg-military-950/60 text-[8.5px] leading-normal text-military-300 select-text scrollbar-thin overflow-x-hidden"
                         dangerouslySetInnerHTML={{ __html: selectedFeature.description }}
                       />
                     </div>
                   )}
 
                   {selectedFeature.coordinates && selectedFeature.coordinates.length > 0 && (
-                    <div className="flex justify-between items-center text-[7.5px] text-slate-400 font-black mt-1">
+                    <div className="flex justify-between items-center text-[7.5px] text-military-400 font-bold mt-1">
                       <span>NÓS: {selectedFeature.coordinates.length} PONTOS</span>
-                      <span>CENTRO COORD: {positionCoords.lat.toFixed(4)}, {positionCoords.lng.toFixed(4)}</span>
+                      <span>CENTRO: {positionCoords.lat.toFixed(4)}, {positionCoords.lng.toFixed(4)}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Footer Action */}
-                <div className="flex gap-1.5 mt-1 border-t border-slate-100 pt-2.5">
+                <div className="flex gap-1.5 mt-1 border-t border-military-700/70 pt-2">
                   <button
                     onClick={() => {
-                      let copyText = `Elemento: ${selectedFeature.name || "Elemento Vetorial"}\nCamada: ${selectedFeature.layerName}\nTipo: ${selectedFeature.type}\nCoordenadas Centro: ${positionCoords.lat.toFixed(6)}, ${positionCoords.lng.toFixed(6)}`;
+                      let copyText = `Propriedade: ${selectedFeature.name || "Imóvel CAR"}\nCamada: ${selectedFeature.layerName}\nTipo: ${selectedFeature.type}\nCoordenadas Centro: ${positionCoords.lat.toFixed(6)}, ${positionCoords.lng.toFixed(6)}`;
+                      if (selectedFeature.numCar) {
+                        copyText += `\nNº do CAR: ${selectedFeature.numCar}`;
+                      }
+                      if (selectedFeature.municipio) {
+                        copyText += `\nMunicípio: ${selectedFeature.municipio}`;
+                      }
+                      if (selectedFeature.areaHa) {
+                        copyText += `\nÁrea Declarada: ${selectedFeature.areaHa}`;
+                      }
+                      if (selectedFeature.situacao) {
+                        copyText += `\nSituação: ${selectedFeature.situacao}`;
+                      }
+                      if (selectedFeature.proprietario) {
+                        copyText += `\nTitular: ${selectedFeature.proprietario}`;
+                      }
                       if (selectedFeature.type === 'LineString') {
                         copyText += `\nExtensão: ${featureLengthKm.toFixed(3)} km (${(featureLengthKm * 1000).toLocaleString('pt-BR')} m)`;
-                      } else if (selectedFeature.type === 'Polygon') {
-                        copyText += `\nÁrea: ${featureAreaHectares.toFixed(2)} ha / Perímetro: ${featureLengthKm.toFixed(3)} km`;
+                      } else if (selectedFeature.type === 'Polygon' || selectedFeature.type === 'MultiPolygon') {
+                        copyText += `\nÁrea Calculada: ${featureAreaHectares.toFixed(2)} ha / Perímetro: ${featureLengthKm.toFixed(3)} km`;
                       }
                       if (selectedFeature.description) {
                         copyText += `\nAtributos: ${selectedFeature.description.replace(/<[^>]*>/g, ' ').trim()}`;
                       }
                       navigator.clipboard.writeText(copyText);
-                      showTemporaryStatus("Atributos copiados com sucesso!");
+                      showTemporaryStatus("Todos os dados do imóvel copiados!");
                     }}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-[10px] font-mono text-white font-extrabold uppercase tracking-widest transition-all"
+                    className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-[10px] font-mono text-white font-extrabold uppercase tracking-widest transition-all shadow"
                   >
-                    Copiar Atributos
+                    <Copy className="w-3 h-3" />
+                    <span>Copiar Todos os Dados</span>
                   </button>
                 </div>
               </div>
-
-              {/* Speech pointer */}
-              <div className="w-3 h-3 bg-white border-r border-b border-slate-200/80 rotate-45 -translate-y-1.5 shadow" />
             </div>
           );
         })()}
 
-        {/* selectedDistance Balloon (Floating on the trajectory's center position) */}
+        {/* selectedDistance Balloon (Clamped inside viewport with tactical military theme) */}
         {selectedDistance && (() => {
           const centroid = averageLatLng(selectedDistance.points);
           const screenPos = getScreenPos(centroid.lat, centroid.lng);
-          const isOffScreen = screenPos.x < 0 || screenPos.x > dimensions.width || screenPos.y < 0 || screenPos.y > dimensions.height;
-          if (isOffScreen) return null;
+
+          const cardWidth = Math.min(270, dimensions.width - 24);
+          const minX = 12;
+          const maxX = Math.max(12, dimensions.width - cardWidth - 12);
+          const clampedX = Math.max(minX, Math.min(maxX, screenPos.x - cardWidth / 2));
+
+          const safeTop = 56;
+          const safeBottom = Math.max(safeTop + 140, dimensions.height - 70);
+          const anchorBelow = screenPos.y < (dimensions.height * 0.46);
+          const targetY = anchorBelow ? (screenPos.y + 16) : (screenPos.y - 250);
+          const clampedY = Math.max(safeTop, Math.min(safeBottom - 200, targetY));
 
           return (
             <div 
               style={{ 
-                left: screenPos.x, 
-                top: screenPos.y,
+                left: clampedX, 
+                top: clampedY,
+                width: cardWidth,
               }}
-              className="absolute pointer-events-auto z-40 -translate-x-1/2 -translate-y-[105%] flex flex-col items-center select-text"
+              className="absolute pointer-events-auto z-40 flex flex-col items-center select-text animate-fade-in"
               id="saved-distance-balloon-overlay"
               onMouseDown={e => e.stopPropagation()}
               onMouseUp={e => e.stopPropagation()}
@@ -3947,18 +4090,18 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               onTouchEnd={e => e.stopPropagation()}
               onClick={e => e.stopPropagation()}
             >
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xl w-[250px] flex flex-col gap-2.5 relative text-slate-800">
+              <div className="bg-military-900/95 border border-military-600/90 rounded-2xl p-3.5 shadow-2xl w-full flex flex-col gap-2 relative text-military-100 backdrop-blur-md">
                 {/* Header */}
-                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
-                  <div className="flex flex-col animate-fade-in">
-                    <h4 className="font-sans text-xs font-black text-slate-800 uppercase tracking-wide truncate max-w-[190px]">
-                      {selectedDistance.name || "Sem Nome"}
+                <div className="flex items-start justify-between gap-2 border-b border-military-700/80 pb-2">
+                  <div className="flex flex-col min-w-0">
+                    <h4 className="font-sans text-xs font-black text-military-100 uppercase tracking-wide truncate">
+                      {selectedDistance.name || "Trajeto Medido"}
                     </h4>
-                    <span className="text-[7.5px] font-mono text-slate-400 uppercase tracking-widest font-black mt-0.5">Dispositivo Medidor de Linhas</span>
+                    <span className="text-[7.5px] font-mono text-military-400 uppercase tracking-widest font-black mt-0.5">Dispositivo Medidor de Linhas</span>
                   </div>
                   <button 
                     onClick={() => setSelectedDistance(null)}
-                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+                    className="p-1 rounded-md text-military-400 hover:text-military-100 hover:bg-military-800 transition-colors shrink-0"
                     title="Fechar Balão"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -3968,32 +4111,32 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 {/* Body Details */}
                 <div className="flex flex-col gap-2 text-[10px] font-mono select-all">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Distância Medida</span>
-                    <div className="bg-[#ecfdf5] px-2.5 py-1.5 rounded-lg text-emerald-700 border border-emerald-100 text-xs font-black font-mono">
-                      {selectedDistance.distance.toFixed(2)} km
+                    <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Distância Total</span>
+                    <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-blue-400 border border-military-800/80 text-xs font-black font-mono">
+                      {selectedDistance.distance.toFixed(3)} km
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Metros</span>
-                    <div className="bg-[#f0f9ff] px-2.5 py-1.5 rounded-lg text-blue-700 border border-blue-100 text-xs font-black font-mono">
+                    <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Metros</span>
+                    <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-military-200 border border-military-800/80 text-xs font-black font-mono">
                       {(selectedDistance.distance * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Quantidade de Nós / Pontos</span>
-                    <div className="bg-[#f8fafc] px-2.5 py-1.5 rounded-lg text-slate-700 border border-slate-200 text-xs font-black font-mono">
+                    <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Nós / Vértices</span>
+                    <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-military-300 border border-military-800/80 text-xs font-black font-mono">
                       {selectedDistance.points.length} pontos
                     </div>
                   </div>
                 </div>
 
                 {/* Footer Copy */}
-                <div className="flex gap-1.5 mt-1">
+                <div className="flex gap-1.5 mt-1 border-t border-military-700/70 pt-2">
                   <button
                     onClick={() => {
-                      const text = `${selectedDistance.name} | Distância: ${selectedDistance.distance.toFixed(2)} km | ${selectedDistance.points.length} pontos`;
+                      const text = `${selectedDistance.name} | Distância: ${selectedDistance.distance.toFixed(3)} km | ${selectedDistance.points.length} pontos`;
                       navigator.clipboard.writeText(text);
                       showTemporaryStatus("Informações de trajeto copiadas!");
                     }}
@@ -4003,27 +4146,34 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   </button>
                 </div>
               </div>
-
-              {/* Speech pointer */}
-              <div className="w-3 h-3 bg-white border-r border-b border-slate-200/80 rotate-45 -translate-y-1.5 shadow" />
             </div>
           );
         })()}
 
-        {/* selectedArea Balloon (Floating on the polygon's center position) */}
+        {/* selectedArea Balloon (Clamped inside viewport with tactical military theme) */}
         {selectedArea && (() => {
           const centroid = averageLatLng(selectedArea.points);
           const screenPos = getScreenPos(centroid.lat, centroid.lng);
-          const isOffScreen = screenPos.x < 0 || screenPos.x > dimensions.width || screenPos.y < 0 || screenPos.y > dimensions.height;
-          if (isOffScreen) return null;
+
+          const cardWidth = Math.min(270, dimensions.width - 24);
+          const minX = 12;
+          const maxX = Math.max(12, dimensions.width - cardWidth - 12);
+          const clampedX = Math.max(minX, Math.min(maxX, screenPos.x - cardWidth / 2));
+
+          const safeTop = 56;
+          const safeBottom = Math.max(safeTop + 140, dimensions.height - 70);
+          const anchorBelow = screenPos.y < (dimensions.height * 0.46);
+          const targetY = anchorBelow ? (screenPos.y + 16) : (screenPos.y - 250);
+          const clampedY = Math.max(safeTop, Math.min(safeBottom - 200, targetY));
 
           return (
             <div 
               style={{ 
-                left: screenPos.x, 
-                top: screenPos.y,
+                left: clampedX, 
+                top: clampedY,
+                width: cardWidth,
               }}
-              className="absolute pointer-events-auto z-40 -translate-x-1/2 -translate-y-[105%] flex flex-col items-center select-text"
+              className="absolute pointer-events-auto z-40 flex flex-col items-center select-text animate-fade-in"
               id="saved-area-balloon-overlay"
               onMouseDown={e => e.stopPropagation()}
               onMouseUp={e => e.stopPropagation()}
@@ -4031,18 +4181,18 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               onTouchEnd={e => e.stopPropagation()}
               onClick={e => e.stopPropagation()}
             >
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xl w-[250px] flex flex-col gap-2.5 relative text-slate-800">
+              <div className="bg-military-900/95 border border-military-600/90 rounded-2xl p-3.5 shadow-2xl w-full flex flex-col gap-2 relative text-military-100 backdrop-blur-md">
                 {/* Header */}
-                <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2">
-                  <div className="flex flex-col animate-fade-in">
-                    <h4 className="font-sans text-xs font-black text-slate-800 uppercase tracking-wide truncate max-w-[190px]">
-                      {selectedArea.name || "Sem Nome"}
+                <div className="flex items-start justify-between gap-2 border-b border-military-700/80 pb-2">
+                  <div className="flex flex-col min-w-0">
+                    <h4 className="font-sans text-xs font-black text-military-100 uppercase tracking-wide truncate">
+                      {selectedArea.name || "Área Medida"}
                     </h4>
-                    <span className="text-[7.5px] font-mono text-slate-400 uppercase tracking-widest font-black mt-0.5">Dispositivo Medidor de Polígonos</span>
+                    <span className="text-[7.5px] font-mono text-military-400 uppercase tracking-widest font-black mt-0.5">Dispositivo Medidor de Polígonos</span>
                   </div>
                   <button 
                     onClick={() => setSelectedArea(null)}
-                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+                    className="p-1 rounded-md text-military-400 hover:text-military-100 hover:bg-military-800 transition-colors shrink-0"
                     title="Fechar Balão"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -4052,32 +4202,32 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 {/* Body Details */}
                 <div className="flex flex-col gap-2 text-[10px] font-mono select-all">
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Área Calculada</span>
-                    <div className="bg-emerald-950/20 px-2.5 py-1.5 rounded-lg text-emerald-300 border border-emerald-800/60 text-xs font-black font-mono">
+                    <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Área Calculada</span>
+                    <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-blue-400 border border-military-800/80 text-xs font-black font-mono">
                       {selectedArea.area.toFixed(2)} ha
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Metros Quadrados</span>
-                    <div className="bg-[#f0f9ff] px-2.5 py-1.5 rounded-lg text-blue-700 border border-blue-100 text-xs font-black font-mono">
+                    <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Metros Quadrados</span>
+                    <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-military-200 border border-military-800/80 text-xs font-black font-mono">
                       {(selectedArea.area * 10000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m²
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[7.5px] text-slate-450 uppercase font-black tracking-wider">Quantidade de Vértices</span>
-                    <div className="bg-[#f8fafc] px-2.5 py-1.5 rounded-lg text-slate-700 border border-slate-200 text-xs font-black font-mono">
-                      {selectedArea.points.length} vertices
+                    <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Quantidade de Vértices</span>
+                    <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-military-300 border border-military-800/80 text-xs font-black font-mono">
+                      {selectedArea.points.length} vértices
                     </div>
                   </div>
                 </div>
 
                 {/* Footer Action */}
-                <div className="flex gap-1.5 mt-1">
+                <div className="flex gap-1.5 mt-1 border-t border-military-700/70 pt-2">
                   <button
                     onClick={() => {
-                      const text = `${selectedArea.name} | Área: ${selectedArea.area.toFixed(2)} ha | ${selectedArea.points.length} vertices`;
+                      const text = `${selectedArea.name} | Área: ${selectedArea.area.toFixed(2)} ha | ${selectedArea.points.length} vértices`;
                       navigator.clipboard.writeText(text);
                       showTemporaryStatus("Informações de área copiadas!");
                     }}
@@ -4087,9 +4237,6 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   </button>
                 </div>
               </div>
-
-              {/* Speech pointer */}
-              <div className="w-3 h-3 bg-white border-r border-b border-slate-200/80 rotate-45 -translate-y-1.5 shadow" />
             </div>
           );
         })()}
@@ -4834,11 +4981,11 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   className="w-full flex items-center justify-between px-4 py-3 bg-military-800/80 hover:bg-military-850 transition-colors border-b border-military-700/60 font-mono"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
                     <span className="text-xs uppercase font-extrabold text-military-100 tracking-wider">Camadas Vetoriais</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-[8px] text-emerald-300 bg-emerald-950/60 border border-emerald-700/80 px-1.5 py-0.5 rounded tracking-widest font-black uppercase">
+                    <span className="font-mono text-[8px] text-military-200 bg-military-900 border border-military-700 px-1.5 py-0.5 rounded tracking-widest font-black uppercase">
                       GPKG / ZIP / KML
                     </span>
                     {kmlLayers.length > 0 && (
@@ -4855,18 +5002,18 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     
                     {/* Processing / Uploading Status Indicator */}
                     {isProcessingVectorFile && (
-                      <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-950/50 border border-emerald-600/60 text-emerald-300 font-mono text-[9.5px]">
-                        <Loader2 className="w-4 h-4 animate-spin text-emerald-400 shrink-0" />
+                      <div className="flex items-center gap-2 p-2.5 rounded-lg bg-military-950/80 border border-blue-600/60 text-blue-300 font-mono text-[9.5px]">
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-400 shrink-0" />
                         <span className="truncate">{vectorUploadStatus || "Processando arquivo vetorial..."}</span>
                       </div>
                     )}
 
                     {/* Upload Multi-format vector input */}
                     <div className="space-y-1.5">
-                      <label className="flex flex-col items-center justify-center gap-1.5 border border-dashed border-emerald-600/70 hover:border-emerald-400 hover:bg-military-800/50 transition-all p-3.5 rounded-xl cursor-pointer bg-military-900/40 text-military-100 group">
+                      <label className="flex flex-col items-center justify-center gap-1.5 border border-dashed border-military-650 hover:border-blue-500 hover:bg-military-800/50 transition-all p-3.5 rounded-xl cursor-pointer bg-military-900/40 text-military-100 group">
                         <div className="flex items-center gap-2">
-                          <Upload className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
-                          <span className="font-mono text-[11px] font-black uppercase tracking-wider text-emerald-300 group-hover:text-emerald-200">
+                          <Upload className="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
+                          <span className="font-mono text-[11px] font-black uppercase tracking-wider text-military-100 group-hover:text-blue-300">
                             Inserir Camada (.GPKG, .ZIP ou .KML)
                           </span>
                         </div>
@@ -4892,7 +5039,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg bg-military-800/80 hover:bg-military-750 border border-military-700 text-military-200 font-mono text-[8.5px] font-bold uppercase transition-all disabled:opacity-50"
                           title="Carregar camadas já anexadas na Busca de Dados do CAR"
                         >
-                          <RefreshCw className="w-3 h-3 text-emerald-400 shrink-0" />
+                          <RefreshCw className="w-3 h-3 text-blue-400 shrink-0" />
                           <span className="truncate">Sincronizar Módulo CAR</span>
                         </button>
 
@@ -4911,9 +5058,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
                     {/* Notice on transparent centers */}
                     <div className="p-2 bg-military-900/50 border border-military-750/50 rounded-lg flex items-start gap-2">
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      <ShieldCheck className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
                       <p className="font-mono text-[8px] text-military-300 leading-tight">
-                        <strong className="text-emerald-300 uppercase">Centro dos polígonos transparente:</strong> Apenas os limites dos imóveis são destacados para manter a visão total do relevo e imagens de satélite.
+                        <strong className="text-military-100 uppercase">Centro dos polígonos transparente:</strong> Apenas os limites dos imóveis são destacados para manter a visão total do relevo e imagens de satélite.
                       </p>
                     </div>
 
@@ -4931,8 +5078,8 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                             className="flex flex-col border border-military-750 bg-military-850/60 hover:border-military-600 p-3 rounded-xl transition-all"
                           >
                             {/* Nome com letreiro eletrônico */}
-                            <div className="bg-[#f0fdf4] border border-emerald-200/60 rounded-lg px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2">
-                              <div className="inline-block animate-[marquee_45s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11px] font-black uppercase tracking-normal text-slate-800 pr-12">
+                            <div className="bg-military-900/90 border border-military-700/80 rounded-lg px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2">
+                              <div className="inline-block animate-[marquee_45s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11px] font-bold uppercase tracking-normal text-military-100 pr-12">
                                 {k.name} &nbsp;&bull;&nbsp; {k.name} &nbsp;&bull;&nbsp; {k.name}
                               </div>
                             </div>
@@ -4940,14 +5087,14 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                             <div className="flex items-center justify-between border-t border-military-750/30 pt-2">
                               <div className="flex flex-col gap-0.5">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="font-mono text-[8px] px-1 py-0.2 rounded bg-military-900 border border-military-700 text-emerald-400 uppercase font-black">
+                                  <span className="font-mono text-[8px] px-1 py-0.2 rounded bg-military-900 border border-military-700 text-blue-400 uppercase font-black">
                                     {k.format ? k.format.toUpperCase() : 'VETORIAL'}
                                   </span>
                                   <span className="font-mono text-[7.5px] text-military-400 font-bold uppercase">
                                     {k.features.length} feições
                                   </span>
                                 </div>
-                                <span className="font-mono text-[7.5px] text-emerald-400/90 font-semibold">
+                                <span className="font-mono text-[7.5px] text-military-300 font-semibold">
                                   Limites Sem Preenchimento
                                 </span>
                               </div>
@@ -4956,7 +5103,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                 {/* Focus layer on map */}
                                 <button
                                   onClick={() => focusOnLayer(k)}
-                                  className="p-1.5 rounded text-military-300 hover:text-emerald-300 hover:bg-emerald-950/30 transition-all"
+                                  className="p-1.5 rounded text-military-300 hover:text-blue-300 hover:bg-blue-950/30 transition-all"
                                   title="Centralizar e visualizar no mapa"
                                 >
                                   <Maximize2 className="w-3.5 h-3.5 shrink-0" />
@@ -4991,26 +5138,26 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                               <span className="font-mono text-[8px] text-military-400 uppercase tracking-wider font-bold">Cor das Linhas:</span>
                               <div className="flex items-center gap-1.5">
                                 {[
-                                  { name: 'Verde', hex: '#22c55e' },
-                                  { name: 'Azul', hex: '#3b82f6' },
-                                  { name: 'Amarelo', hex: '#eab308' },
-                                  { name: 'Vermelho', hex: '#ef4444' },
-                                  { name: 'Roxo', hex: '#a855f7' },
-                                  { name: 'Branco', hex: '#ffffff' },
+                                  { name: 'Âmbar Tático', hex: '#eab308' },
+                                  { name: 'Azul Militar', hex: '#3b82f6' },
+                                  { name: 'Branco Alta Visibilidade', hex: '#ffffff' },
+                                  { name: 'Verde Oliva', hex: '#16a34a' },
+                                  { name: 'Vermelho Operacional', hex: '#dc2626' },
+                                  { name: 'Laranja Ocre', hex: '#f97316' },
                                 ].map(colorOption => (
                                   <button
                                     key={colorOption.hex}
                                     onClick={() => changeKmlColor(k.id, colorOption.hex)}
                                     style={{ backgroundColor: colorOption.hex }}
-                                    className={`w-4 h-4 rounded-full border transition-all hover:scale-125 ${ (k.color || '#22c55e') === colorOption.hex ? 'border-white scale-110 shadow-sm shadow-white/60' : 'border-transparent opacity-80 hover:opacity-100' }`}
+                                    className={`w-4 h-4 rounded-full border transition-all hover:scale-125 ${ (k.color || '#eab308') === colorOption.hex ? 'border-white scale-110 shadow-sm shadow-white/60' : 'border-transparent opacity-80 hover:opacity-100' }`}
                                     title={colorOption.name}
                                   />
                                 ))}
                                 {/* Custom picker */}
-                                <label className="relative cursor-pointer w-4 h-4 rounded-full border border-military-500/50 flex items-center justify-center overflow-hidden bg-gradient-to-tr from-red-500 via-green-500 to-blue-500 hover:scale-125 transition-transform" title="Cor Personalizada">
+                                <label className="relative cursor-pointer w-4 h-4 rounded-full border border-military-500/50 flex items-center justify-center overflow-hidden bg-gradient-to-tr from-amber-500 via-blue-500 to-red-500 hover:scale-125 transition-transform" title="Cor Personalizada">
                                   <input 
                                     type="color"
-                                    value={k.color || '#22c55e'}
+                                    value={k.color || '#eab308'}
                                     onChange={(e) => changeKmlColor(k.id, e.target.value)}
                                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                                   />
