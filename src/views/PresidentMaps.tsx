@@ -27,10 +27,17 @@ import {
   Pencil,
   RotateCcw,
   Crosshair,
-  ShieldCheck
+  ShieldCheck,
+  Maximize2,
+  Loader2,
+  FileText,
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
 import { decimalToDMS } from '../utils/coords';
 import brandLogo from '../assets/images/batalhao_ambiental_logo_1779854041969.png';
+import { parseUploadedFile, SicarProperty, getPreloadedAcreBase } from '../utils/sicarEngine';
+import { getStoredLayers } from '../utils/sicarStorage';
 
 // --- DATABASE PERSISTENCE SYSTEM (IndexedDB) ---
 const DB_NAME = 'PresidentMapsDB_v2';
@@ -53,12 +60,136 @@ export interface KmlData {
   visible: boolean;
   color?: string;
   thickness?: 'grossa' | 'media' | 'fina';
+  format?: 'kml' | 'gpkg' | 'zip' | 'geojson';
   features: Array<{
-    type: 'Point' | 'LineString' | 'Polygon';
+    type: 'Point' | 'LineString' | 'Polygon' | 'MultiPolygon';
     name: string;
     description?: string;
     coordinates: Array<{ lat: number; lng: number }>;
+    rings?: Array<Array<{ lat: number; lng: number }>>;
+    bbox?: [number, number, number, number];
+    properties?: Record<string, any>;
+    numCar?: string;
+    municipio?: string;
+    areaHa?: string;
+    proprietario?: string;
+    situacao?: string;
   }>;
+}
+
+// Extract ring coordinates from GeoJSON Polygon / MultiPolygon
+function extractRingsFromGeometry(geom: any): Array<Array<{ lat: number; lng: number }>> {
+  const rings: Array<Array<{ lat: number; lng: number }>> = [];
+  if (!geom || !geom.coordinates) return rings;
+
+  if (geom.type === 'Polygon') {
+    for (const rawRing of geom.coordinates) {
+      if (Array.isArray(rawRing) && rawRing.length > 0) {
+        const ring: Array<{ lat: number; lng: number }> = [];
+        for (const pt of rawRing) {
+          if (Array.isArray(pt) && pt.length >= 2) {
+            const lng = Number(pt[0]);
+            const lat = Number(pt[1]);
+            if (!isNaN(lat) && !isNaN(lng)) {
+              ring.push({
+                lat: Math.round(lat * 1000000) / 1000000,
+                lng: Math.round(lng * 1000000) / 1000000
+              });
+            }
+          }
+        }
+        if (ring.length >= 3) {
+          rings.push(ring);
+        }
+      }
+    }
+  } else if (geom.type === 'MultiPolygon') {
+    for (const poly of geom.coordinates) {
+      if (Array.isArray(poly)) {
+        for (const rawRing of poly) {
+          if (Array.isArray(rawRing) && rawRing.length > 0) {
+            const ring: Array<{ lat: number; lng: number }> = [];
+            for (const pt of rawRing) {
+              if (Array.isArray(pt) && pt.length >= 2) {
+                const lng = Number(pt[0]);
+                const lat = Number(pt[1]);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                  ring.push({
+                    lat: Math.round(lat * 1000000) / 1000000,
+                    lng: Math.round(lng * 1000000) / 1000000
+                  });
+                }
+              }
+            }
+            if (ring.length >= 3) {
+              rings.push(ring);
+            }
+          }
+        }
+      }
+    }
+  }
+  return rings;
+}
+
+// Convert SicarProperty objects (from GPKG or Shapefile ZIP) to vector layer features
+function convertSicarPropertiesToFeatures(properties: SicarProperty[]): KmlData['features'] {
+  const features: KmlData['features'] = [];
+
+  properties.forEach((prop, idx) => {
+    const rings = extractRingsFromGeometry(prop.geometry);
+    if (rings.length === 0) return;
+
+    const primaryRing = rings[0];
+    const featName = (prop.numCar && !prop.numCar.includes('não disponível'))
+      ? prop.numCar
+      : (prop.codImovel && !prop.codImovel.includes('não disponível'))
+        ? prop.codImovel
+        : `Imóvel Rural #${idx + 1}`;
+
+    const descLines: string[] = [];
+    if (prop.numCar && !prop.numCar.includes('não disponível')) {
+      descLines.push(`<div><b>Nº CAR:</b> ${prop.numCar}</div>`);
+    }
+    if (prop.codImovel && !prop.codImovel.includes('não disponível')) {
+      descLines.push(`<div><b>Código do Imóvel:</b> ${prop.codImovel}</div>`);
+    }
+    if (prop.municipio && !prop.municipio.includes('não disponível')) {
+      descLines.push(`<div><b>Município:</b> ${prop.municipio}</div>`);
+    }
+    if (prop.areaHa && !prop.areaHa.includes('não disponível')) {
+      descLines.push(`<div><b>Área Declarada:</b> ${prop.areaHa}</div>`);
+    }
+    if (prop.situacao && !prop.situacao.includes('não disponível')) {
+      descLines.push(`<div><b>Situação Cadastral:</b> ${prop.situacao}</div>`);
+    }
+    if (prop.proprietario && !prop.proprietario.includes('não disponível')) {
+      descLines.push(`<div><b>Proprietário / Titular:</b> ${prop.proprietario}</div>`);
+    }
+    if (prop.reservaLegalHa && !prop.reservaLegalHa.includes('não disponível')) {
+      descLines.push(`<div><b>Reserva Legal (RL):</b> ${prop.reservaLegalHa}</div>`);
+    }
+    if (prop.appHa && !prop.appHa.includes('não disponível')) {
+      descLines.push(`<div><b>Área Preservação (APP):</b> ${prop.appHa}</div>`);
+    }
+
+    features.push({
+      type: 'Polygon',
+      name: featName,
+      description: descLines.length > 0 ? descLines.join('') : undefined,
+      coordinates: primaryRing,
+      rings: rings,
+      bbox: prop.bbox,
+      numCar: prop.numCar && !prop.numCar.includes('não disponível') ? prop.numCar : undefined,
+      municipio: prop.municipio && !prop.municipio.includes('não disponível') ? prop.municipio : undefined,
+      areaHa: prop.areaHa && !prop.areaHa.includes('não disponível') ? prop.areaHa : undefined,
+      proprietario: prop.proprietario && !prop.proprietario.includes('não disponível') ? prop.proprietario : undefined,
+      situacao: prop.situacao && !prop.situacao.includes('não disponível') ? prop.situacao : undefined,
+      properties: prop.properties
+    });
+  });
+
+  return features;
 }
 
 let cachedDbConnection: IDBDatabase | null = null;
@@ -520,7 +651,15 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     lat: number;
     lng: number;
     coordinates?: Array<{ lat: number; lng: number }>;
+    numCar?: string;
+    municipio?: string;
+    areaHa?: string;
+    proprietario?: string;
+    situacao?: string;
   } | null>(null);
+
+  const [isProcessingVectorFile, setIsProcessingVectorFile] = useState(false);
+  const [vectorUploadStatus, setVectorUploadStatus] = useState<string | null>(null);
 
   const [selectedSavedPoint, setSelectedSavedPoint] = useState<SavedPoint | null>(null);
   const [selectedDistance, setSelectedDistance] = useState<SavedDistance | null>(null);
@@ -1192,74 +1331,110 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       }
     });
 
-    // 3. RENDER KML VECTOR LAYERS
+    // 3. RENDER VECTOR LAYERS (CAR / GPKG / ZIP / KML)
+    // Calculate visible viewport lat/lng bounding box with safety margin for high-speed spatial culling
+    const cMargin = 100;
+    const vpNW = worldPixelToLatLng(centerPixel.x - dimensions.width / 2 - cMargin, centerPixel.y - dimensions.height / 2 - cMargin, zoom);
+    const vpSE = worldPixelToLatLng(centerPixel.x + dimensions.width / 2 + cMargin, centerPixel.y + dimensions.height / 2 + cMargin, zoom);
+    const vpMinLng = Math.min(vpNW.lng, vpSE.lng);
+    const vpMaxLng = Math.max(vpNW.lng, vpSE.lng);
+    const vpMinLat = Math.min(vpNW.lat, vpSE.lat);
+    const vpMaxLat = Math.max(vpNW.lat, vpSE.lat);
+
     kmlLayers.forEach(layer => {
       if (!layer.visible) return;
 
+      const strokeColor = layer.color || '#22c55e'; // High-visibility emerald green default
+      let lineWidth = 3; // Default (Grossa)
+      if (layer.thickness === 'fina') {
+        lineWidth = 1;
+      } else if (layer.thickness === 'media') {
+        lineWidth = 2;
+      }
+
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = lineWidth;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+
       layer.features.forEach(feat => {
-        if (feat.coordinates.length === 0) return;
+        if (!feat.coordinates || feat.coordinates.length === 0) return;
 
-        const strokeColor = layer.color || '#3b82f6';
-        let fillColor = 'rgba(59, 130, 246, 0.15)';
-        if (layer.color) {
-          const hex = layer.color.replace('#', '');
-          const r = parseInt(hex.substring(0, 2), 16) || 59;
-          const g = parseInt(hex.substring(2, 4), 16) || 130;
-          const b = parseInt(hex.substring(4, 6), 16) || 246;
-          fillColor = `rgba(${r}, ${g}, ${b}, 0.15)`;
+        // Viewport culling: skip features located completely outside the screen viewport
+        if (feat.bbox) {
+          const [fMinLng, fMinLat, fMaxLng, fMaxLat] = feat.bbox;
+          if (fMaxLng < vpMinLng || fMinLng > vpMaxLng || fMaxLat < vpMinLat || fMinLat > vpMaxLat) {
+            return;
+          }
         }
-
-        ctx.strokeStyle = strokeColor;
-        ctx.fillStyle = fillColor;
-
-        // Custom line thickness based on user preference
-        let lineWidth = 3; // Default (Grossa)
-        if (layer.thickness === 'fina') {
-          lineWidth = 1;
-        } else if (layer.thickness === 'media') {
-          lineWidth = 2;
-        }
-        ctx.lineWidth = lineWidth;
-
-        const pts = feat.coordinates.map(pt => {
-          const wPx = latLngToWorldPixel(pt.lat, pt.lng, zoom);
-          return {
-            x: wPx.x - centerPixel.x,
-            y: wPx.y - centerPixel.y
-          };
-        });
 
         if (feat.type === 'Point') {
-          pts.forEach(p => {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-            ctx.fillStyle = '#059669'; // Emerald military point
-            ctx.fill();
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
+          const pt = feat.coordinates[0];
+          const wPx = latLngToWorldPixel(pt.lat, pt.lng, zoom);
+          const px = wPx.x - centerPixel.x;
+          const py = wPx.y - centerPixel.y;
+          ctx.beginPath();
+          ctx.arc(px, py, 6, 0, Math.PI * 2);
+          ctx.fillStyle = strokeColor;
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
 
-            // Render Point Label
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '10px monospace';
-            ctx.fillText(feat.name || 'Ponto KML', p.x + 8, p.y + 4);
-          });
+          // Render Point Label
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '10px monospace';
+          ctx.fillText(feat.name || 'Ponto', px + 8, py + 4);
         } else if (feat.type === 'LineString') {
           ctx.beginPath();
-          ctx.moveTo(pts[0].x, pts[0].y);
-          for (let i = 1; i < pts.length; i++) {
-            ctx.lineTo(pts[i].x, pts[i].y);
+          const wPx0 = latLngToWorldPixel(feat.coordinates[0].lat, feat.coordinates[0].lng, zoom);
+          ctx.moveTo(wPx0.x - centerPixel.x, wPx0.y - centerPixel.y);
+          for (let i = 1; i < feat.coordinates.length; i++) {
+            const wPxi = latLngToWorldPixel(feat.coordinates[i].lat, feat.coordinates[i].lng, zoom);
+            ctx.lineTo(wPxi.x - centerPixel.x, wPxi.y - centerPixel.y);
           }
           ctx.stroke();
-        } else if (feat.type === 'Polygon') {
+        } else if (feat.type === 'Polygon' || feat.type === 'MultiPolygon') {
+          // DIRECTIVE: "Necessito que seja apenas marcado os limites, o centro dos polígonos não deve ser preenchido, pois é necessário ver as características físicas do local"
+          // We strictly stroke polygon boundary lines and NEVER call ctx.fill() so underlying physical terrain and satellite imagery remain 100% visible!
+          const ringsToDraw = (feat.rings && feat.rings.length > 0) ? feat.rings : [feat.coordinates];
+
           ctx.beginPath();
-          ctx.moveTo(pts[0].x, pts[0].y);
-          for (let i = 1; i < pts.length; i++) {
-            ctx.lineTo(pts[i].x, pts[i].y);
+          for (const ring of ringsToDraw) {
+            if (ring.length < 2) continue;
+            const wPx0 = latLngToWorldPixel(ring[0].lat, ring[0].lng, zoom);
+            ctx.moveTo(wPx0.x - centerPixel.x, wPx0.y - centerPixel.y);
+            for (let i = 1; i < ring.length; i++) {
+              const wPxi = latLngToWorldPixel(ring[i].lat, ring[i].lng, zoom);
+              ctx.lineTo(wPxi.x - centerPixel.x, wPxi.y - centerPixel.y);
+            }
+            ctx.closePath();
           }
-          ctx.closePath();
-          ctx.fill();
           ctx.stroke();
+          // NO ctx.fill()! Center remains 100% transparent!
+
+          // Display subtle CAR identification label when zoomed in close (zoom >= 13.5)
+          if (zoom >= 13.5 && (feat.numCar || feat.name)) {
+            const centroid = feat.coordinates[0];
+            const wPx = latLngToWorldPixel(centroid.lat, centroid.lng, zoom);
+            const cx = wPx.x - centerPixel.x;
+            const cy = wPx.y - centerPixel.y;
+            const rawLabel = feat.numCar && !feat.numCar.includes('não disponível')
+              ? (feat.numCar.length > 18 ? feat.numCar.slice(-12) : feat.numCar)
+              : feat.name;
+
+            ctx.save();
+            ctx.font = 'bold 9px monospace';
+            const tWidth = ctx.measureText(rawLabel).width;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.fillRect(cx - 3, cy - 8, tWidth + 6, 12);
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(cx - 3, cy - 8, tWidth + 6, 12);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(rawLabel, cx, cy + 1);
+            ctx.restore();
+          }
         }
       });
     });
@@ -1762,10 +1937,13 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     for (const layer of kmlLayers) {
       if (!layer.visible) continue;
       for (const feat of layer.features) {
-        if (feat.coordinates.length === 0) continue;
+        if (!feat.coordinates || feat.coordinates.length === 0) continue;
         
-        // Map all feature points to current screen pixels
-        const pts = feat.coordinates.map(pt => {
+        const ringsToCheck = (feat.rings && feat.rings.length > 0) ? feat.rings : [feat.coordinates];
+        let matched = false;
+
+        if (feat.type === 'Point') {
+          const pt = feat.coordinates[0];
           const wPx = latLngToWorldPixel(pt.lat, pt.lng, zoom);
           const cx = wPx.x - centerPixel.x;
           const cy = wPx.y - centerPixel.y;
@@ -1773,20 +1951,26 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           const sinAngle = Math.sin(-rotation);
           const rx = cx * cosAngle - cy * sinAngle;
           const ry = cx * sinAngle + cy * cosAngle;
-          return {
-            x: rx + dimensions.width / 2,
-            y: ry + dimensions.height / 2
-          };
-        });
-        
-        let matched = false;
-        if (feat.type === 'Point') {
-          const p = pts[0];
-          const dist = Math.sqrt((sx - p.x)**2 + (sy - p.y)**2);
+          const px = rx + dimensions.width / 2;
+          const py = ry + dimensions.height / 2;
+          const dist = Math.sqrt((sx - px)**2 + (sy - py)**2);
           if (dist <= 20) {
             matched = true;
           }
         } else if (feat.type === 'LineString') {
+          const pts = feat.coordinates.map(pt => {
+            const wPx = latLngToWorldPixel(pt.lat, pt.lng, zoom);
+            const cx = wPx.x - centerPixel.x;
+            const cy = wPx.y - centerPixel.y;
+            const cosAngle = Math.cos(-rotation);
+            const sinAngle = Math.sin(-rotation);
+            const rx = cx * cosAngle - cy * sinAngle;
+            const ry = cx * sinAngle + cy * cosAngle;
+            return {
+              x: rx + dimensions.width / 2,
+              y: ry + dimensions.height / 2
+            };
+          });
           for (let i = 0; i < pts.length - 1; i++) {
             const dist = distToSegment({ x: sx, y: sy }, pts[i], pts[i+1]);
             if (dist <= 12) {
@@ -1794,17 +1978,37 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               break;
             }
           }
-        } else if (feat.type === 'Polygon') {
-          if (isPointInPolygon({ x: sx, y: sy }, pts)) {
-            matched = true;
-          } else {
-            for (let i = 0; i < pts.length; i++) {
-              const nextIdx = (i + 1) % pts.length;
-              const dist = distToSegment({ x: sx, y: sy }, pts[i], pts[nextIdx]);
+        } else if (feat.type === 'Polygon' || feat.type === 'MultiPolygon') {
+          for (const ring of ringsToCheck) {
+            const ringPts = ring.map(pt => {
+              const wPx = latLngToWorldPixel(pt.lat, pt.lng, zoom);
+              const cx = wPx.x - centerPixel.x;
+              const cy = wPx.y - centerPixel.y;
+              const cosAngle = Math.cos(-rotation);
+              const sinAngle = Math.sin(-rotation);
+              const rx = cx * cosAngle - cy * sinAngle;
+              const ry = cx * sinAngle + cy * cosAngle;
+              return {
+                x: rx + dimensions.width / 2,
+                y: ry + dimensions.height / 2
+              };
+            });
+
+            // 1. Check distance to boundary edges (within 12px)
+            for (let i = 0; i < ringPts.length; i++) {
+              const nextIdx = (i + 1) % ringPts.length;
+              const dist = distToSegment({ x: sx, y: sy }, ringPts[i], ringPts[nextIdx]);
               if (dist <= 12) {
                 matched = true;
                 break;
               }
+            }
+            if (matched) break;
+
+            // 2. Also check if clicked inside the polygon
+            if (isPointInPolygon({ x: sx, y: sy }, ringPts)) {
+              matched = true;
+              break;
             }
           }
         }
@@ -1817,7 +2021,12 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             layerName: layer.name,
             lat: feat.coordinates[0].lat,
             lng: feat.coordinates[0].lng,
-            coordinates: feat.coordinates
+            coordinates: feat.coordinates,
+            numCar: feat.numCar,
+            municipio: feat.municipio,
+            areaHa: feat.areaHa,
+            proprietario: feat.proprietario,
+            situacao: feat.situacao,
           };
         }
       }
@@ -2849,119 +3058,293 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     }
   };
 
-  // --- PARSE VECTOR KML FILE ---
-  const handleKmlUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // --- FOCUS MAP ON VECTOR LAYER BOUNDS ---
+  const focusOnLayer = (layer: KmlData) => {
+    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    let hasCoords = false;
 
-    showTemporaryStatus("Importando camada vetorial KML...");
+    layer.features.forEach(f => {
+      if (f.bbox) {
+        const [bMinLng, bMinLat, bMaxLng, bMaxLat] = f.bbox;
+        minLng = Math.min(minLng, bMinLng);
+        maxLng = Math.max(maxLng, bMaxLng);
+        minLat = Math.min(minLat, bMinLat);
+        maxLat = Math.max(maxLat, bMaxLat);
+        hasCoords = true;
+      } else if (f.coordinates) {
+        f.coordinates.forEach(pt => {
+          minLat = Math.min(minLat, pt.lat);
+          maxLat = Math.max(maxLat, pt.lat);
+          minLng = Math.min(minLng, pt.lng);
+          maxLng = Math.max(maxLng, pt.lng);
+          hasCoords = true;
+        });
+      }
+    });
+
+    if (hasCoords) {
+      setCenter({
+        lat: (minLat + maxLat) / 2,
+        lng: (minLng + maxLng) / 2
+      });
+      const dLat = Math.abs(maxLat - minLat);
+      const dLng = Math.abs(maxLng - minLng);
+      const maxDelta = Math.max(dLat, dLng);
+      if (maxDelta < 0.03) setZoom(15);
+      else if (maxDelta < 0.1) setZoom(13);
+      else if (maxDelta < 0.3) setZoom(11);
+      else setZoom(9);
+
+      showTemporaryStatus(`Visualizando limites da camada '${layer.name}'`);
+    }
+  };
+
+  // --- PARSE MULTI-FORMAT VECTOR FILES (.GPKG, .ZIP, .KML, .GEOJSON) ---
+  const handleVectorFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsProcessingVectorFile(true);
+    const fileList: File[] = Array.from(files);
+    let successCount = 0;
 
     try {
-      const text = await file.text();
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(text, "text/xml");
-      
-      const placemarks = xmlDoc.querySelectorAll("Placemark");
-      const features: KmlData['features'] = [];
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        const ext = file.name.toLowerCase().split('.').pop() || '';
+        const baseName = file.name.replace(/\.[^/.]+$/, "");
+        setVectorUploadStatus(`[${i + 1}/${fileList.length}] Processando ${file.name}...`);
 
-      placemarks.forEach(pm => {
-        const name = pm.querySelector("name")?.textContent || "Feição Vetorial";
-        const descDesc = pm.querySelector("description")?.textContent || "";
+        if (ext === 'kml') {
+          setVectorUploadStatus(`Lendo feições KML (${file.name})...`);
+          const text = await file.text();
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(text, "text/xml");
+          
+          const placemarks = xmlDoc.querySelectorAll("Placemark");
+          const features: KmlData['features'] = [];
 
-        // Look for Point
-        const ptCoordsNode = pm.querySelector("Point coordinates");
-        if (ptCoordsNode) {
-          const coordsStr = ptCoordsNode.textContent || "";
-          const parts = coordsStr.trim().split(",");
-          if (parts.length >= 2) {
-            const lng = parseFloat(parts[0]);
-            const lat = parseFloat(parts[1]);
-            if (!isNaN(lat) && !isNaN(lng)) {
-              features.push({
-                type: 'Point',
-                name,
-                description: descDesc,
-                coordinates: [{ lat, lng }]
+          placemarks.forEach(pm => {
+            const name = pm.querySelector("name")?.textContent || "Feição Vetorial";
+            const descDesc = pm.querySelector("description")?.textContent || "";
+
+            // Look for Point
+            const ptCoordsNode = pm.querySelector("Point coordinates");
+            if (ptCoordsNode) {
+              const coordsStr = ptCoordsNode.textContent || "";
+              const parts = coordsStr.trim().split(",");
+              if (parts.length >= 2) {
+                const lng = parseFloat(parts[0]);
+                const lat = parseFloat(parts[1]);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                  features.push({
+                    type: 'Point',
+                    name,
+                    description: descDesc,
+                    coordinates: [{ lat, lng }]
+                  });
+                }
+              }
+            }
+
+            // Look for LineString
+            const lineCoordsNode = pm.querySelector("LineString coordinates");
+            if (lineCoordsNode) {
+              const coordsStr = lineCoordsNode.textContent || "";
+              const pointsStr = coordsStr.trim().split(/\s+/);
+              const pts: Array<{ lat: number, lng: number }> = [];
+              
+              pointsStr.forEach(pStr => {
+                const parts = pStr.split(",");
+                if (parts.length >= 2) {
+                  const lng = parseFloat(parts[0]);
+                  const lat = parseFloat(parts[1]);
+                  if (!isNaN(lat) && !isNaN(lng)) {
+                    pts.push({ lat, lng });
+                  }
+                }
               });
-            }
-          }
-        }
 
-        // Look for LineString
-        const lineCoordsNode = pm.querySelector("LineString coordinates");
-        if (lineCoordsNode) {
-          const coordsStr = lineCoordsNode.textContent || "";
-          const pointsStr = coordsStr.trim().split(/\s+/);
-          const pts: Array<{ lat: number, lng: number }> = [];
-          
-          pointsStr.forEach(pStr => {
-            const parts = pStr.split(",");
-            if (parts.length >= 2) {
-              const lng = parseFloat(parts[0]);
-              const lat = parseFloat(parts[1]);
-              if (!isNaN(lat) && !isNaN(lng)) {
-                pts.push({ lat, lng });
+              if (pts.length > 0) {
+                features.push({
+                  type: 'LineString',
+                  name,
+                  description: descDesc,
+                  coordinates: pts
+                });
+              }
+            }
+
+            // Look for Polygon
+            const polyCoordsNode = pm.querySelector("Polygon outerBoundaryIs coordinates");
+            if (polyCoordsNode) {
+              const coordsStr = polyCoordsNode.textContent || "";
+              const pointsStr = coordsStr.trim().split(/\s+/);
+              const pts: Array<{ lat: number, lng: number }> = [];
+              
+              pointsStr.forEach(pStr => {
+                const parts = pStr.split(",");
+                if (parts.length >= 2) {
+                  const lng = parseFloat(parts[0]);
+                  const lat = parseFloat(parts[1]);
+                  if (!isNaN(lat) && !isNaN(lng)) {
+                    pts.push({ lat, lng });
+                  }
+                }
+              });
+
+              if (pts.length > 0) {
+                features.push({
+                  type: 'Polygon',
+                  name,
+                  description: descDesc,
+                  coordinates: pts,
+                  rings: [pts]
+                });
               }
             }
           });
 
-          if (pts.length > 0) {
-            features.push({
-              type: 'LineString',
-              name,
-              description: descDesc,
-              coordinates: pts
-            });
+          if (features.length === 0) {
+            throw new Error(`Nenhum elemento geográfico compatível encontrado no KML '${file.name}'.`);
           }
-        }
 
-        // Look for Polygon
-        const polyCoordsNode = pm.querySelector("Polygon outerBoundaryIs coordinates");
-        if (polyCoordsNode) {
-          const coordsStr = polyCoordsNode.textContent || "";
-          const pointsStr = coordsStr.trim().split(/\s+/);
-          const pts: Array<{ lat: number, lng: number }> = [];
-          
-          pointsStr.forEach(pStr => {
-            const parts = pStr.split(",");
-            if (parts.length >= 2) {
-              const lng = parseFloat(parts[0]);
-              const lat = parseFloat(parts[1]);
-              if (!isNaN(lat) && !isNaN(lng)) {
-                pts.push({ lat, lng });
-              }
-            }
-          });
+          const newKml: KmlData = {
+            id: file.name + '_' + Date.now() + '_' + i,
+            name: baseName,
+            visible: true,
+            color: '#3b82f6',
+            thickness: 'grossa',
+            format: 'kml',
+            features
+          };
 
-          if (pts.length > 0) {
-            features.push({
-              type: 'Polygon',
-              name,
-              description: descDesc,
-              coordinates: pts
-            });
+          await dbSaveKml(newKml);
+          successCount++;
+        } else if (ext === 'gpkg' || ext === 'zip' || ext === 'geojson' || ext === 'json') {
+          // Parse GPKG or Shapefile ZIP or GeoJSON with SICAR Engine
+          setVectorUploadStatus(`Carregando banco geoespacial ${ext.toUpperCase()} (${file.name})...`);
+          const result = await parseUploadedFile(file);
+          const features = convertSicarPropertiesToFeatures(result.properties);
+
+          if (features.length === 0) {
+            throw new Error(`Nenhuma delimitação de imóvel compatível encontrada no arquivo '${file.name}'.`);
           }
-        }
-      });
 
-      if (features.length === 0) {
-        throw new Error("Nenhum elemento geográfico compatível (Placemark) encontrado no arquivo KML.");
+          const newLayer: KmlData = {
+            id: file.name + '_' + Date.now() + '_' + i,
+            name: baseName,
+            visible: true,
+            color: '#22c55e', // Emerald green default for CAR boundaries
+            thickness: 'grossa',
+            format: ext === 'gpkg' ? 'gpkg' : ext === 'zip' ? 'zip' : 'geojson',
+            features
+          };
+
+          await dbSaveKml(newLayer);
+          successCount++;
+
+          // Auto center on first loaded feature if single file
+          if (fileList.length === 1 && features.length > 0) {
+            focusOnLayer(newLayer);
+          }
+        } else {
+          throw new Error(`Formato .${ext} não suportado. Por favor, envie arquivos .gpkg, .zip ou .kml.`);
+        }
       }
 
-      const newKml: KmlData = {
-        id: file.name + '_' + Date.now(),
-        name: file.name.replace(/\.[^/.]+$/, ""),
+      const updated = await dbGetKmls();
+      setKmlLayers(updated);
+      showTemporaryStatus(`Sucesso! ${successCount} camada(s) vetorial(is) adicionada(s) ao mapa.`);
+    } catch (err: any) {
+      console.error("Erro na importação de arquivo vetorial:", err);
+      showTemporaryStatus(`Erro: ${err.message || 'Falha ao processar arquivo'}`);
+    } finally {
+      setIsProcessingVectorFile(false);
+      setVectorUploadStatus(null);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  // --- SYNC CAR LAYERS FROM SICAR MODULE STORAGE ---
+  const handleSyncFromSicar = async () => {
+    setIsProcessingVectorFile(true);
+    setVectorUploadStatus("Buscando camadas salvas no módulo CAR...");
+    try {
+      const sicarLayers = await getStoredLayers();
+      if (!sicarLayers || sicarLayers.length === 0) {
+        showTemporaryStatus("Nenhuma camada armazenada no módulo CAR. Importe arquivos .gpkg ou .zip!");
+        return;
+      }
+
+      let addedCount = 0;
+      for (const sl of sicarLayers) {
+        const existing = kmlLayers.some(k => k.id === sl.id || k.name === (sl.layerName || sl.fileName));
+        if (existing) continue;
+
+        const features = convertSicarPropertiesToFeatures(sl.properties);
+        if (features.length > 0) {
+          const newLayer: KmlData = {
+            id: sl.id || (sl.layerName + '_' + Date.now()),
+            name: sl.layerName || sl.fileName.replace(/\.[^/.]+$/, ""),
+            visible: true,
+            color: '#22c55e',
+            thickness: 'grossa',
+            format: sl.fileName.toLowerCase().endsWith('.gpkg') ? 'gpkg' : 'zip',
+            features
+          };
+          await dbSaveKml(newLayer);
+          addedCount++;
+        }
+      }
+
+      const updated = await dbGetKmls();
+      setKmlLayers(updated);
+
+      if (addedCount > 0) {
+        showTemporaryStatus(`${addedCount} camada(s) do CAR sincronizada(s) para o mapa!`);
+        if (updated.length > 0) {
+          focusOnLayer(updated[updated.length - 1]);
+        }
+      } else {
+        showTemporaryStatus("Todas as camadas do módulo CAR já estão ativas nas Camadas Vetoriais.");
+      }
+    } catch (err: any) {
+      console.error("Erro na sincronização CAR:", err);
+      showTemporaryStatus(`Falha na sincronização: ${err.message || err}`);
+    } finally {
+      setIsProcessingVectorFile(false);
+      setVectorUploadStatus(null);
+    }
+  };
+
+  // --- LOAD DEMONSTRATIVE ACRE CAR BASE ---
+  const handleLoadDemoAcre = async () => {
+    setIsProcessingVectorFile(true);
+    setVectorUploadStatus("Carregando base demonstrativa do Acre (CAR SEMA)...");
+    try {
+      const demo = getPreloadedAcreBase();
+      const features = convertSicarPropertiesToFeatures(demo.properties);
+      const newLayer: KmlData = {
+        id: 'demo_acre_car_' + Date.now(),
+        name: 'CAR_SEMA_Acre_Demonstrativo',
         visible: true,
+        color: '#eab308', // Amber gold
+        thickness: 'grossa',
+        format: 'zip',
         features
       };
-
-      await dbSaveKml(newKml);
-      const kmls = await dbGetKmls();
-      setKmlLayers(kmls);
-      showTemporaryStatus(`Camada KML '${newKml.name}' ativada com sucesso! (${features.length} feições)`);
+      await dbSaveKml(newLayer);
+      const updated = await dbGetKmls();
+      setKmlLayers(updated);
+      setCenter({ lat: -8.607189, lng: -69.788186 });
+      setZoom(13.5);
+      showTemporaryStatus(`Base do Acre carregada com sucesso! (${features.length} delimitações do CAR)`);
     } catch (err: any) {
-      console.error(err);
-      showTemporaryStatus(`Falha no KML: ${err.message || 'Erro de leitura de arquivo'}`);
+      showTemporaryStatus(`Erro ao carregar base: ${err.message || err}`);
+    } finally {
+      setIsProcessingVectorFile(false);
+      setVectorUploadStatus(null);
     }
   };
 
@@ -3371,11 +3754,65 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 {/* Body / Attribute Table Details */}
                 <div className="flex flex-col gap-2 text-[10px] font-mono select-all">
                   
+                  {/* CAR NUMBER & BADGE (If feature originates from CAR) */}
+                  {selectedFeature.numCar && (
+                    <div className="flex flex-col gap-1 bg-emerald-50/90 border border-emerald-300/80 p-2.5 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[7.5px] font-black uppercase text-emerald-800 tracking-wider flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                          NÚMERO DO CAR
+                        </span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(selectedFeature.numCar || '');
+                            showTemporaryStatus("Nº do CAR copiado!");
+                          }}
+                          className="p-1 text-emerald-700 hover:text-emerald-950 hover:bg-emerald-200/50 rounded transition-colors"
+                          title="Copiar Número do CAR"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="font-mono font-bold text-[9.5px] text-emerald-950 break-all select-all leading-tight">
+                        {selectedFeature.numCar}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CAR Specific Attributes: Município, Situação, Proprietário */}
+                  {selectedFeature.municipio && (
+                    <div className="flex justify-between items-center bg-[#f8fafc] px-2.5 py-1.5 rounded-lg border border-slate-200 text-[9px]">
+                      <span className="text-slate-500 font-bold uppercase text-[7.5px]">Município</span>
+                      <span className="font-black text-slate-800">{selectedFeature.municipio}</span>
+                    </div>
+                  )}
+
+                  {selectedFeature.areaHa && (
+                    <div className="flex justify-between items-center bg-[#f8fafc] px-2.5 py-1.5 rounded-lg border border-slate-200 text-[9px]">
+                      <span className="text-slate-500 font-bold uppercase text-[7.5px]">Área Declarada (CAR)</span>
+                      <span className="font-black text-emerald-700">{selectedFeature.areaHa}</span>
+                    </div>
+                  )}
+
+                  {selectedFeature.situacao && (
+                    <div className="flex justify-between items-center bg-[#f8fafc] px-2.5 py-1.5 rounded-lg border border-slate-200 text-[9px]">
+                      <span className="text-slate-500 font-bold uppercase text-[7.5px]">Situação</span>
+                      <span className="font-bold text-slate-700">{selectedFeature.situacao}</span>
+                    </div>
+                  )}
+
+                  {selectedFeature.proprietario && (
+                    <div className="flex flex-col gap-0.5 bg-[#f8fafc] p-2 rounded-lg border border-slate-200 text-[9px]">
+                      <span className="text-slate-500 font-bold uppercase text-[7.5px]">Titular / Proprietário</span>
+                      <span className="font-bold text-slate-800 text-[9.5px] leading-tight">{selectedFeature.proprietario}</span>
+                    </div>
+                  )}
+
                   {/* General details based on feature type */}
                   <div className="flex justify-between items-center bg-[#f8fafc] px-2 py-1 rounded-lg border border-slate-250/20 text-[9px] text-slate-500 font-sans font-bold">
                     <span className="uppercase text-[7.5px]">Tipo da Feição</span>
                     <span className="font-black text-blue-600 uppercase">
-                      {selectedFeature.type === 'Point' ? 'PONTO / MARCO' : selectedFeature.type === 'LineString' ? 'LINHA / TRAJETO' : 'POLÍGONO / ÁREA'}
+                      {selectedFeature.type === 'Point' ? 'PONTO / MARCO' : selectedFeature.type === 'LineString' ? 'LINHA / TRAJETO' : 'POLÍGONO (DELIMITAÇÃO)'}
                     </span>
                   </div>
 
@@ -4390,7 +4827,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 )}
               </div>
 
-              {/* SECTION C: CAMADAS VETORIAIS */}
+              {/* SECTION C: CAMADAS VETORIAIS (CAR GPKG / ZIP / KML) */}
               <div className="border border-military-700/60 rounded-xl overflow-hidden bg-military-850/30">
                 <button
                   onClick={() => setIsVectorLayersOpen(!isVectorLayersOpen)}
@@ -4400,31 +4837,92 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                     <span className="text-xs uppercase font-extrabold text-military-100 tracking-wider">Camadas Vetoriais</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[8px] text-military-300 bg-military-900 border border-military-700 px-1 py-0.5 rounded tracking-widest font-black uppercase">KML</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[8px] text-emerald-300 bg-emerald-950/60 border border-emerald-700/80 px-1.5 py-0.5 rounded tracking-widest font-black uppercase">
+                      GPKG / ZIP / KML
+                    </span>
+                    {kmlLayers.length > 0 && (
+                      <span className="font-mono text-[8px] text-blue-300 bg-blue-950/60 border border-blue-700/80 px-1.5 py-0.5 rounded font-black">
+                        {kmlLayers.length}
+                      </span>
+                    )}
                     {isVectorLayersOpen ? <ChevronUp className="w-4 h-4 text-military-400" /> : <ChevronDown className="w-4 h-4 text-military-400" />}
                   </div>
                 </button>
 
                 {isVectorLayersOpen && (
                   <div className="p-3 space-y-3">
-                    {/* Upload Tracker vector inputs */}
-                    <label className="flex items-center justify-center gap-2 border border-dashed border-military-650 hover:border-blue-500 hover:bg-military-800/30 transition-all p-3 rounded-lg cursor-pointer text-military-205">
-                      <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span className="font-mono text-[11px] font-bold uppercase tracking-wider">Inserir Camada KML</span>
-                      <input 
-                        type="file" 
-                        accept=".kml" 
-                        onChange={handleKmlUpload}
-                        className="hidden" 
-                      />
-                    </label>
+                    
+                    {/* Processing / Uploading Status Indicator */}
+                    {isProcessingVectorFile && (
+                      <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-950/50 border border-emerald-600/60 text-emerald-300 font-mono text-[9.5px]">
+                        <Loader2 className="w-4 h-4 animate-spin text-emerald-400 shrink-0" />
+                        <span className="truncate">{vectorUploadStatus || "Processando arquivo vetorial..."}</span>
+                      </div>
+                    )}
+
+                    {/* Upload Multi-format vector input */}
+                    <div className="space-y-1.5">
+                      <label className="flex flex-col items-center justify-center gap-1.5 border border-dashed border-emerald-600/70 hover:border-emerald-400 hover:bg-military-800/50 transition-all p-3.5 rounded-xl cursor-pointer bg-military-900/40 text-military-100 group">
+                        <div className="flex items-center gap-2">
+                          <Upload className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform shrink-0" />
+                          <span className="font-mono text-[11px] font-black uppercase tracking-wider text-emerald-300 group-hover:text-emerald-200">
+                            Inserir Camada (.GPKG, .ZIP ou .KML)
+                          </span>
+                        </div>
+                        <span className="text-[8.5px] font-mono text-military-400 text-center leading-tight">
+                          Selecione 1 ou múltiplos arquivos (.gpkg, shapefiles .zip do CAR ou .kml)
+                        </span>
+                        <input 
+                          type="file" 
+                          accept=".gpkg,.zip,.kml,.kmz,.geojson,.json"
+                          multiple
+                          disabled={isProcessingVectorFile}
+                          onChange={handleVectorFileUpload}
+                          className="hidden" 
+                        />
+                      </label>
+
+                      {/* Secondary helper actions: Sync from CAR module & Demo Base */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSyncFromSicar}
+                          disabled={isProcessingVectorFile}
+                          className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg bg-military-800/80 hover:bg-military-750 border border-military-700 text-military-200 font-mono text-[8.5px] font-bold uppercase transition-all disabled:opacity-50"
+                          title="Carregar camadas já anexadas na Busca de Dados do CAR"
+                        >
+                          <RefreshCw className="w-3 h-3 text-emerald-400 shrink-0" />
+                          <span className="truncate">Sincronizar Módulo CAR</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleLoadDemoAcre}
+                          disabled={isProcessingVectorFile}
+                          className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg bg-military-800/80 hover:bg-military-750 border border-military-700 text-military-200 font-mono text-[8.5px] font-bold uppercase transition-all disabled:opacity-50"
+                          title="Carregar base demonstrativa do CAR no Acre"
+                        >
+                          <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span className="truncate">Base Demonstrativa CAR</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Notice on transparent centers */}
+                    <div className="p-2 bg-military-900/50 border border-military-750/50 rounded-lg flex items-start gap-2">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      <p className="font-mono text-[8px] text-military-300 leading-tight">
+                        <strong className="text-emerald-300 uppercase">Centro dos polígonos transparente:</strong> Apenas os limites dos imóveis são destacados para manter a visão total do relevo e imagens de satélite.
+                      </p>
+                    </div>
 
                     {/* Vector Listings */}
                     <div className="space-y-3">
                       {kmlLayers.length === 0 ? (
-                        <div className="text-center p-3 border border-military-800/50 rounded-lg bg-military-800/10">
-                          <p className="font-mono text-[9px] text-military-400 tracking-wider">NENHUMA CAMADA VETORIAL ANEXADA</p>
+                        <div className="text-center p-3.5 border border-military-800/50 rounded-lg bg-military-800/10">
+                          <p className="font-mono text-[9px] text-military-400 tracking-wider">NENHUMA CAMADA VETORIAL ATIVA</p>
+                          <p className="font-mono text-[8px] text-military-500 mt-1">Anexe arquivos .gpkg ou .zip acima para visualizar as propriedades no mapa.</p>
                         </div>
                       ) : (
                         kmlLayers.map(k => (
@@ -4432,22 +4930,39 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                             key={k.id}
                             className="flex flex-col border border-military-750 bg-military-850/60 hover:border-military-600 p-3 rounded-xl transition-all"
                           >
-                            {/* Nome com letreiro eletrônico com destaque discreto (slower marquee) */}
-                            <div className="bg-[#f0fdf4] border border-emerald-200/60 rounded-lg px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2.5">
-                              <div className="inline-block animate-[marquee_45s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11.5px] font-black uppercase tracking-normal text-slate-800 pr-12">
+                            {/* Nome com letreiro eletrônico */}
+                            <div className="bg-[#f0fdf4] border border-emerald-200/60 rounded-lg px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2">
+                              <div className="inline-block animate-[marquee_45s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11px] font-black uppercase tracking-normal text-slate-800 pr-12">
                                 {k.name} &nbsp;&bull;&nbsp; {k.name} &nbsp;&bull;&nbsp; {k.name}
                               </div>
                             </div>
 
-                            <div className="flex items-center justify-between border-t border-military-750/30 pt-2.5">
+                            <div className="flex items-center justify-between border-t border-military-750/30 pt-2">
                               <div className="flex flex-col gap-0.5">
-                                <span className="font-mono text-[8px] text-military-400 uppercase tracking-wider font-bold">INFO CAMADA</span>
-                                <span className="font-mono text-[9.5px] text-military-200">
-                                  {k.features.length} feições gravadas
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono text-[8px] px-1 py-0.2 rounded bg-military-900 border border-military-700 text-emerald-400 uppercase font-black">
+                                    {k.format ? k.format.toUpperCase() : 'VETORIAL'}
+                                  </span>
+                                  <span className="font-mono text-[7.5px] text-military-400 font-bold uppercase">
+                                    {k.features.length} feições
+                                  </span>
+                                </div>
+                                <span className="font-mono text-[7.5px] text-emerald-400/90 font-semibold">
+                                  Limites Sem Preenchimento
                                 </span>
                               </div>
 
                               <div className="flex items-center gap-1 bg-military-900/60 p-1 border border-military-700/80 rounded-lg scale-95 origin-right shrink-0">
+                                {/* Focus layer on map */}
+                                <button
+                                  onClick={() => focusOnLayer(k)}
+                                  className="p-1.5 rounded text-military-300 hover:text-emerald-300 hover:bg-emerald-950/30 transition-all"
+                                  title="Centralizar e visualizar no mapa"
+                                >
+                                  <Maximize2 className="w-3.5 h-3.5 shrink-0" />
+                                </button>
+                                
+                                {/* Toggle visibility */}
                                 <button
                                   onClick={() => toggleKmlVisible(k.id)}
                                   className={`p-1.5 rounded transition-all ${k.visible ? 'bg-blue-600/20 text-blue-400' : 'text-military-400 hover:text-military-100 hover:bg-military-700'}`}
@@ -4459,6 +4974,8 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                     <EyeOff className="w-3.5 h-3.5 shrink-0" />
                                   )}
                                 </button>
+
+                                {/* Delete layer */}
                                 <button
                                   onClick={() => removeKml(k.id, k.name)}
                                   className="p-1.5 rounded text-military-400 hover:text-red-400 hover:bg-red-950/20 transition-all"
@@ -4471,20 +4988,21 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
                             {/* Dynamic Color Selector Section */}
                             <div className="flex items-center justify-between mt-2 pt-2 border-t border-military-750/20">
-                              <span className="font-mono text-[8px] text-military-400 uppercase tracking-wider font-bold">Alterar Cor:</span>
+                              <span className="font-mono text-[8px] text-military-400 uppercase tracking-wider font-bold">Cor das Linhas:</span>
                               <div className="flex items-center gap-1.5">
                                 {[
-                                  { name: 'Azul', hex: '#3b82f6' },
                                   { name: 'Verde', hex: '#22c55e' },
-                                  { name: 'Vermelho', hex: '#ef4444' },
+                                  { name: 'Azul', hex: '#3b82f6' },
                                   { name: 'Amarelo', hex: '#eab308' },
+                                  { name: 'Vermelho', hex: '#ef4444' },
                                   { name: 'Roxo', hex: '#a855f7' },
+                                  { name: 'Branco', hex: '#ffffff' },
                                 ].map(colorOption => (
                                   <button
                                     key={colorOption.hex}
                                     onClick={() => changeKmlColor(k.id, colorOption.hex)}
                                     style={{ backgroundColor: colorOption.hex }}
-                                    className={`w-4 h-4 rounded-full border transition-all hover:scale-125 ${ (k.color || '#3b82f6') === colorOption.hex ? 'border-white scale-110 shadow-sm shadow-white/60' : 'border-transparent opacity-80 hover:opacity-100' }`}
+                                    className={`w-4 h-4 rounded-full border transition-all hover:scale-125 ${ (k.color || '#22c55e') === colorOption.hex ? 'border-white scale-110 shadow-sm shadow-white/60' : 'border-transparent opacity-80 hover:opacity-100' }`}
                                     title={colorOption.name}
                                   />
                                 ))}
@@ -4492,7 +5010,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                 <label className="relative cursor-pointer w-4 h-4 rounded-full border border-military-500/50 flex items-center justify-center overflow-hidden bg-gradient-to-tr from-red-500 via-green-500 to-blue-500 hover:scale-125 transition-transform" title="Cor Personalizada">
                                   <input 
                                     type="color"
-                                    value={k.color || '#3b82f6'}
+                                    value={k.color || '#22c55e'}
                                     onChange={(e) => changeKmlColor(k.id, e.target.value)}
                                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                                   />
