@@ -660,6 +660,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     situacao?: string;
   } | null>(null);
 
+  // Modal display state for large CAR info window
+  const [isCarDetailsModalOpen, setIsCarDetailsModalOpen] = useState(false);
+
   const [isProcessingVectorFile, setIsProcessingVectorFile] = useState(false);
   const [vectorUploadStatus, setVectorUploadStatus] = useState<string | null>(null);
 
@@ -2205,8 +2208,10 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   const matched = findFeatureAt(sx, sy);
                   if (matched) {
                     setSelectedFeature(matched);
+                    setIsCarDetailsModalOpen(false);
                   } else {
                     setSelectedFeature(null);
+                    setIsCarDetailsModalOpen(false);
                   }
                 }
               }
@@ -2343,8 +2348,10 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   const matched = findFeatureAt(sx, sy);
                   if (matched) {
                     setSelectedFeature(matched);
+                    setIsCarDetailsModalOpen(false);
                   } else {
                     setSelectedFeature(null);
+                    setIsCarDetailsModalOpen(false);
                   }
                 }
               }
@@ -3758,16 +3765,13 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           );
         })()}
 
-        {/* selectedFeature Attribute Card / Balloon */}
+        {/* UPPER BALLOON & DETAILED MODAL FOR SELECTED CAR / VECTOR FEATURE */}
         {selectedFeature && (() => {
-          // Fallback to first point, but for LineString or Polygon we can float on centroid
           const positionCoords = (selectedFeature.coordinates && selectedFeature.coordinates.length > 0)
             ? averageLatLng(selectedFeature.coordinates)
             : { lat: selectedFeature.lat, lng: selectedFeature.lng };
 
-          const screenPos = getScreenPos(positionCoords.lat, positionCoords.lng);
-
-          // Calculations
+          // Calculations for geometry
           let featureLengthKm = 0;
           let featureAreaHectares = 0;
 
@@ -3799,263 +3803,312 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             }
           }
 
-          // GUARANTEED VIEWPORT SAFETY & CLAMPING:
-          // The attribute card must NEVER render outside the user's screen.
-          const cardWidth = Math.min(320, dimensions.width - 24);
-          
-          // Clamp X so the card is always completely within [12px, dimensions.width - cardWidth - 12px]
-          const minX = 12;
-          const maxX = Math.max(12, dimensions.width - cardWidth - 12);
-          const clampedX = Math.max(minX, Math.min(maxX, screenPos.x - cardWidth / 2));
-
-          // Safe vertical bounds:
-          // Top margin safe: 56px (below header / back buttons)
-          // Bottom margin safe: dimensions.height - 70px (above bottom GPS and coordinate controls)
-          const safeTop = 56;
-          const safeBottom = Math.max(safeTop + 160, dimensions.height - 70);
-
-          // If the feature centroid is in the upper half of screen, anchor card below centroid.
-          // Otherwise anchor card above centroid.
-          const anchorBelow = screenPos.y < (dimensions.height * 0.46);
-          const targetY = anchorBelow ? (screenPos.y + 16) : (screenPos.y - 330);
-          const clampedY = Math.max(safeTop, Math.min(safeBottom - 240, targetY));
-
           return (
-            <div 
-              style={{ 
-                left: clampedX, 
-                top: clampedY,
-                width: cardWidth,
-              }}
-              className="absolute pointer-events-auto z-40 flex flex-col items-center select-text animate-fade-in"
-              id="selected-kml-feature-overlay"
-              onMouseDown={e => e.stopPropagation()}
-              onMouseUp={e => e.stopPropagation()}
-              onTouchStart={e => e.stopPropagation()}
-              onTouchEnd={e => e.stopPropagation()}
-              onClick={e => e.stopPropagation()}
-            >
-              <div className="bg-military-900/95 border border-military-600/90 rounded-2xl p-3.5 shadow-2xl w-full flex flex-col gap-2 relative text-military-100 backdrop-blur-md">
-                {/* Header with Title, Layer, Focar Button and Close Button */}
-                <div className="flex items-start justify-between gap-2 border-b border-military-700/80 pb-2">
-                  <div className="flex flex-col flex-grow min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
-                      <h4 className="font-sans text-xs font-black text-military-100 uppercase tracking-wide truncate pr-1">
-                        {selectedFeature.name || "Propriedade / CAR"}
-                      </h4>
+            <React.Fragment>
+              {/* 1. BALÃO COMPACTO NA PARTE SUPERIOR DA TELA: "Informações Sobre o CAR" */}
+              <div 
+                className="absolute top-4 left-[132px] sm:left-1/2 sm:-translate-x-1/2 right-3 sm:right-auto z-40 max-w-sm sm:max-w-md pointer-events-auto select-none animate-fade-in"
+                id="car-top-info-balloon"
+                onMouseDown={e => e.stopPropagation()}
+                onMouseUp={e => e.stopPropagation()}
+                onTouchStart={e => e.stopPropagation()}
+                onTouchEnd={e => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
+              >
+                <div 
+                  onClick={() => setIsCarDetailsModalOpen(true)}
+                  className="bg-military-900/95 hover:bg-military-850/95 border border-military-600/90 hover:border-amber-500/80 rounded-2xl p-2 sm:px-3.5 sm:py-2.5 shadow-2xl backdrop-blur-md flex items-center justify-between gap-2 text-military-100 cursor-pointer transition-all active:scale-98 group"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-grow">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 text-amber-400 group-hover:scale-105 transition-transform">
+                      <FileText className="w-4 h-4" />
                     </div>
-                    <span className="text-[7.5px] font-mono text-blue-400 uppercase tracking-widest font-black mt-0.5 truncate">
-                      Camada: {selectedFeature.layerName || "Base Vetorial"}
-                    </span>
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                        <h4 className="font-mono text-[11px] sm:text-xs font-black uppercase text-amber-300 tracking-wider truncate">
+                          Informações Sobre o CAR
+                        </h4>
+                      </div>
+                      <span className="font-mono text-[9px] sm:text-[10px] text-military-300 truncate font-semibold">
+                        {selectedFeature.numCar || selectedFeature.name || "Toque para abrir detalhes"}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
                     {/* Focar no Imóvel */}
                     <button
                       onClick={() => {
                         setCenter(positionCoords);
                         setZoom(Math.max(zoom, 14.5));
-                        showTemporaryStatus("Mapa centralizado no imóvel selecionado.");
+                        showTemporaryStatus("Centralizado no imóvel.");
                       }}
-                      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/60 text-blue-300 hover:text-white font-mono text-[8px] font-bold uppercase transition-all"
-                      title="Centralizar e focar visualização nesta propriedade"
+                      className="p-1.5 rounded-lg bg-military-800 hover:bg-military-750 text-military-300 hover:text-white border border-military-700/80 transition-all"
+                      title="Centralizar no Mapa"
                     >
-                      <Crosshair className="w-3 h-3" />
-                      <span>Focar</span>
+                      <Crosshair className="w-3.5 h-3.5" />
                     </button>
 
-                    {/* Fechar */}
-                    <button 
-                      onClick={() => setSelectedFeature(null)}
-                      className="p-1 rounded-md text-military-400 hover:text-military-100 hover:bg-military-800 transition-colors"
-                      title="Fechar Balão e Desmarcar"
+                    {/* Botão de Abertura da Janela Maior */}
+                    <button
+                      onClick={() => setIsCarDetailsModalOpen(true)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-mono text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-sm active:scale-95"
+                      title="Abrir janela com informações completas"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span className="hidden xs:inline">Abrir</span>
+                    </button>
+
+                    {/* Desmarcar Imóvel */}
+                    <button
+                      onClick={() => {
+                        setSelectedFeature(null);
+                        setIsCarDetailsModalOpen(false);
+                      }}
+                      className="p-1.5 rounded-lg bg-military-800 hover:bg-military-750 text-military-400 hover:text-military-100 border border-military-700/80 transition-all"
+                      title="Desmarcar Imóvel"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
+              </div>
 
-                {/* Body / Attribute Table Details - Scrollable if tall */}
-                <div className="flex flex-col gap-2 text-[10px] font-mono select-all max-h-[min(50vh,340px)] overflow-y-auto pr-0.5 scrollbar-thin">
-                  {/* CAR NUMBER & BADGE (If feature originates from CAR) */}
-                  {selectedFeature.numCar && (
-                    <div className="flex flex-col gap-1 bg-military-950/90 border border-military-700/90 p-2 rounded-xl">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[7.5px] font-black uppercase text-military-300 tracking-wider flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                          NÚMERO DO CAR (SICAR)
-                        </span>
+              {/* 2. JANELA MAIOR COM INFORMAÇÕES COMPLETAS (SOMENTE AO SER SELECIONADO / ROLÁVEL COM FONTE LEGÍVEL) */}
+              {isCarDetailsModalOpen && (
+                <div 
+                  className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 pointer-events-auto select-text animate-fade-in"
+                  id="car-details-modal-overlay"
+                  onClick={() => setIsCarDetailsModalOpen(false)}
+                  onMouseDown={e => e.stopPropagation()}
+                  onMouseUp={e => e.stopPropagation()}
+                  onTouchStart={e => e.stopPropagation()}
+                  onTouchEnd={e => e.stopPropagation()}
+                >
+                  <div 
+                    className="bg-military-900 border border-military-600/90 rounded-2xl shadow-2xl w-full max-w-xl max-h-[88vh] flex flex-col text-military-100 overflow-hidden relative"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between p-4 sm:p-5 border-b border-military-750 bg-military-950/70">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 text-amber-400">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                            <h3 className="font-mono text-sm sm:text-base font-black uppercase text-military-100 tracking-wider truncate">
+                              Informações Sobre o CAR
+                            </h3>
+                          </div>
+                          <span className="font-mono text-xs text-blue-400 font-bold uppercase truncate mt-0.5">
+                            Camada: {selectedFeature.layerName || "Base Vetorial"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           onClick={() => {
-                            navigator.clipboard.writeText(selectedFeature.numCar || '');
-                            showTemporaryStatus("Nº do CAR copiado!");
+                            setCenter(positionCoords);
+                            setZoom(Math.max(zoom, 14.5));
+                            setIsCarDetailsModalOpen(false);
+                            showTemporaryStatus("Mapa centralizado no imóvel.");
                           }}
-                          className="p-1 text-blue-400 hover:text-blue-200 hover:bg-military-800 rounded transition-colors"
-                          title="Copiar Número do CAR"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/60 text-blue-300 hover:text-white font-mono text-xs font-bold uppercase transition-all"
+                          title="Centralizar no Mapa e fechar modal"
                         >
-                          <Copy className="w-3 h-3" />
+                          <Crosshair className="w-3.5 h-3.5" />
+                          <span className="hidden xs:inline">Focar</span>
+                        </button>
+
+                        <button
+                          onClick={() => setIsCarDetailsModalOpen(false)}
+                          className="p-1.5 rounded-xl bg-military-800 hover:bg-military-750 text-military-400 hover:text-military-100 border border-military-700/80 transition-all"
+                          title="Fechar Janela"
+                        >
+                          <X className="w-5 h-5" />
                         </button>
                       </div>
-                      <div className="font-mono font-bold text-[9.5px] text-military-100 break-all select-all leading-tight">
-                        {selectedFeature.numCar}
-                      </div>
                     </div>
-                  )}
 
-                  {/* CAR Specific Attributes: Município, Situação, Proprietário */}
-                  {selectedFeature.municipio && (
-                    <div className="flex justify-between items-center bg-military-950/60 px-2.5 py-1.5 rounded-lg border border-military-800/80 text-[9px]">
-                      <span className="text-military-400 font-bold uppercase text-[7.5px]">Município</span>
-                      <span className="font-bold text-military-100">{selectedFeature.municipio}</span>
-                    </div>
-                  )}
-
-                  {selectedFeature.areaHa && (
-                    <div className="flex justify-between items-center bg-military-950/60 px-2.5 py-1.5 rounded-lg border border-military-800/80 text-[9px]">
-                      <span className="text-military-400 font-bold uppercase text-[7.5px]">Área Declarada (CAR)</span>
-                      <span className="font-bold text-blue-400">{selectedFeature.areaHa}</span>
-                    </div>
-                  )}
-
-                  {selectedFeature.situacao && (
-                    <div className="flex justify-between items-center bg-military-950/60 px-2.5 py-1.5 rounded-lg border border-military-800/80 text-[9px]">
-                      <span className="text-military-400 font-bold uppercase text-[7.5px]">Situação</span>
-                      <span className="font-bold text-military-200">{selectedFeature.situacao}</span>
-                    </div>
-                  )}
-
-                  {selectedFeature.proprietario && (
-                    <div className="flex flex-col gap-0.5 bg-military-950/60 p-2 rounded-lg border border-military-800/80 text-[9px]">
-                      <span className="text-military-400 font-bold uppercase text-[7.5px]">Titular / Proprietário</span>
-                      <span className="font-bold text-military-100 text-[9.5px] leading-tight">{selectedFeature.proprietario}</span>
-                    </div>
-                  )}
-
-                  {/* General details based on feature type */}
-                  <div className="flex justify-between items-center bg-military-950/60 px-2 py-1 rounded-lg border border-military-800/80 text-[9px] text-military-300 font-sans font-bold">
-                    <span className="uppercase text-[7.5px]">Tipo da Feição</span>
-                    <span className="font-black text-blue-400 uppercase">
-                      {selectedFeature.type === 'Point' ? 'PONTO / MARCO' : selectedFeature.type === 'LineString' ? 'LINHA / TRAJETO' : 'POLÍGONO (DELIMITAÇÃO)'}
-                    </span>
-                  </div>
-
-                  {/* LINESTRING SPECIFIC DETAILS: Length / Extension */}
-                  {selectedFeature.type === 'LineString' && (
-                    <div className="flex flex-col gap-1">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Extensão Total</span>
-                        <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-blue-400 border border-military-800/80 text-xs font-black font-mono">
-                          {featureLengthKm.toFixed(3)} km
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Metros</span>
-                        <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-military-200 border border-military-800/80 text-xs font-black font-mono">
-                          {(featureLengthKm * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} m
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* POLYGON SPECIFIC DETAILS: Area & Perimeter */}
-                  {(selectedFeature.type === 'Polygon' || selectedFeature.type === 'MultiPolygon') && (
-                    <div className="flex flex-col gap-1">
-                      {!selectedFeature.areaHa && (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Área Calculada</span>
-                          <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-blue-400 border border-military-800/80 text-xs font-black font-mono">
-                            {featureAreaHectares.toFixed(2)} ha
+                    {/* Scrollable Content Body with Clear & Comfortable Typography */}
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 font-sans scrollbar-thin">
+                      {/* SICAR Code Card */}
+                      {selectedFeature.numCar && (
+                        <div className="flex flex-col gap-1.5 bg-military-950 p-3.5 sm:p-4 rounded-xl border border-military-700">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black uppercase text-military-300 tracking-wider flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-amber-400" />
+                              Número do CAR (SICAR)
+                            </span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(selectedFeature.numCar || '');
+                                showTemporaryStatus("Nº do CAR copiado!");
+                              }}
+                              className="flex items-center gap-1 text-xs font-mono font-bold text-amber-400 hover:text-amber-200 bg-military-800/80 hover:bg-military-800 px-2.5 py-1 rounded-lg transition-colors border border-military-700"
+                              title="Copiar Número do CAR"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copiar</span>
+                            </button>
+                          </div>
+                          <div className="font-mono font-black text-xs sm:text-sm text-amber-300 break-all select-all leading-relaxed bg-military-900/80 p-3 rounded-lg border border-military-800">
+                            {selectedFeature.numCar}
                           </div>
                         </div>
                       )}
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Perímetro dos Limites</span>
-                        <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-military-200 border border-military-800/80 text-xs font-black font-mono">
-                          {featureLengthKm.toFixed(3)} km
+
+                      {/* Property Name */}
+                      {selectedFeature.name && (
+                        <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                          <span className="text-xs font-bold uppercase text-military-400">Denominação / Imóvel</span>
+                          <span className="text-sm sm:text-base font-bold text-military-100">{selectedFeature.name}</span>
+                        </div>
+                      )}
+
+                      {/* City & Status Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {selectedFeature.municipio && (
+                          <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                            <span className="text-xs font-bold uppercase text-military-400">Município</span>
+                            <span className="text-sm sm:text-base font-bold text-military-100">{selectedFeature.municipio}</span>
+                          </div>
+                        )}
+
+                        {selectedFeature.situacao && (
+                          <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                            <span className="text-xs font-bold uppercase text-military-400">Situação Cadastral</span>
+                            <div>
+                              <span className="inline-block px-3 py-1 rounded-md bg-military-800 border border-military-700 text-sm font-bold text-military-100">
+                                {selectedFeature.situacao}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Areas & Perimeter */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                          <span className="text-xs font-bold uppercase text-military-400">Área Declarada (CAR)</span>
+                          <span className="text-base sm:text-lg font-mono font-black text-amber-400">
+                            {selectedFeature.areaHa || (featureAreaHectares > 0 ? `${featureAreaHectares.toFixed(2)} ha` : "Não informada")}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                          <span className="text-xs font-bold uppercase text-military-400">Perímetro dos Limites</span>
+                          <span className="text-base sm:text-lg font-mono font-black text-military-100">
+                            {featureLengthKm > 0 ? `${featureLengthKm.toFixed(3)} km` : "—"}
+                          </span>
+                          {featureLengthKm > 0 && (
+                            <span className="text-xs font-mono text-military-400">
+                              ({(featureLengthKm * 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} metros)
+                            </span>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  )}
 
-                  {/* POINT SPECIFIC DETAILS: Coordinates */}
-                  {selectedFeature.type === 'Point' && (
-                    <div className="flex flex-col gap-1">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Graus Minutos Segundos (GMS)</span>
-                        <div className="bg-military-950/70 px-2.5 py-1.5 rounded-lg text-military-200 border border-military-800/80 text-[8.5px] leading-relaxed">
-                          <div>LAT: {decimalToDMS(selectedFeature.lat, 'lat')}</div>
-                          <div>LNG: {decimalToDMS(selectedFeature.lng, 'lng')}</div>
+                      {/* Owner / Titular */}
+                      {selectedFeature.proprietario && (
+                        <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                          <span className="text-xs font-bold uppercase text-military-400">Titular / Proprietário</span>
+                          <span className="text-sm sm:text-base font-bold text-military-100 leading-snug">{selectedFeature.proprietario}</span>
                         </div>
+                      )}
+
+                      {/* Spatial Feature Type */}
+                      <div className="flex justify-between items-center bg-military-950/60 px-3.5 py-2.5 rounded-xl border border-military-800">
+                        <span className="text-xs font-bold uppercase text-military-400">Tipo de Feição Espacial</span>
+                        <span className="text-xs sm:text-sm font-black text-blue-400 uppercase font-mono">
+                          {selectedFeature.type === 'Point' ? 'PONTO / MARCO' : selectedFeature.type === 'LineString' ? 'LINHA / TRAJETO' : 'POLÍGONO (DELIMITAÇÃO DO IMÓVEL)'}
+                        </span>
                       </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Coordenadas Decimais</span>
-                        <div className="bg-military-950/70 px-2 py-1 rounded-lg text-military-300 border border-military-800/80 text-[9px]">
-                          <div>LAT: {selectedFeature.lat.toFixed(6)}</div>
-                          <div>LNG: {selectedFeature.lng.toFixed(6)}</div>
+
+                      {/* Coordinates Section */}
+                      <div className="flex flex-col gap-2 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                        <span className="text-xs font-bold uppercase text-military-400">Coordenadas do Centroide</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs font-mono">
+                          <div className="bg-military-900 p-2.5 rounded-lg border border-military-800">
+                            <div className="text-military-400 font-bold mb-1 text-[11px]">GRAUS MINUTOS SEGUNDOS (GMS)</div>
+                            <div className="text-military-200">LAT: {decimalToDMS(positionCoords.lat, 'lat')}</div>
+                            <div className="text-military-200">LNG: {decimalToDMS(positionCoords.lng, 'lng')}</div>
+                          </div>
+                          <div className="bg-military-900 p-2.5 rounded-lg border border-military-800">
+                            <div className="text-military-400 font-bold mb-1 text-[11px]">COORDENADAS DECIMAIS</div>
+                            <div className="text-military-200">LAT: {positionCoords.lat.toFixed(6)}</div>
+                            <div className="text-military-200">LNG: {positionCoords.lng.toFixed(6)}</div>
+                          </div>
                         </div>
+                        {selectedFeature.coordinates && selectedFeature.coordinates.length > 0 && (
+                          <div className="text-xs font-mono text-military-400 flex items-center justify-between pt-1">
+                            <span>Vértices do Perímetro: <strong className="text-military-200">{selectedFeature.coordinates.length} pontos</strong></span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
 
-                  {/* Feature description / Attribute table */}
-                  {selectedFeature.description && selectedFeature.description.trim() && (
-                    <div className="flex flex-col gap-0.5 mt-0.5">
-                      <span className="text-[7.5px] text-military-400 uppercase font-black tracking-wider">Atributos GIS / KML</span>
-                      <div 
-                        className="max-h-[85px] overflow-y-auto border border-military-800/80 rounded-xl p-2.5 bg-military-950/60 text-[8.5px] leading-normal text-military-300 select-text scrollbar-thin overflow-x-hidden"
-                        dangerouslySetInnerHTML={{ __html: selectedFeature.description }}
-                      />
+                      {/* GIS / KML Description Table */}
+                      {selectedFeature.description && selectedFeature.description.trim() && (
+                        <div className="flex flex-col gap-1.5">
+                          <span className="text-xs font-bold uppercase text-military-300">Tabela de Atributos GIS / KML</span>
+                          <div 
+                            className="max-h-[160px] overflow-y-auto border border-military-800 rounded-xl p-3 bg-military-950 text-xs sm:text-[13px] leading-relaxed text-military-200 select-text scrollbar-thin overflow-x-hidden font-mono"
+                            dangerouslySetInnerHTML={{ __html: selectedFeature.description }}
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
 
-                  {selectedFeature.coordinates && selectedFeature.coordinates.length > 0 && (
-                    <div className="flex justify-between items-center text-[7.5px] text-military-400 font-bold mt-1">
-                      <span>NÓS: {selectedFeature.coordinates.length} PONTOS</span>
-                      <span>CENTRO: {positionCoords.lat.toFixed(4)}, {positionCoords.lng.toFixed(4)}</span>
+                    {/* Modal Footer Actions */}
+                    <div className="p-4 sm:p-5 border-t border-military-750 bg-military-950/90 flex flex-col sm:flex-row gap-2.5">
+                      <button
+                        onClick={() => {
+                          let copyText = `--- DADOS DO IMÓVEL (CAR) ---\nPropriedade: ${selectedFeature.name || "Imóvel CAR"}\nCamada: ${selectedFeature.layerName}\nTipo: ${selectedFeature.type}\nCoordenadas Centro: ${positionCoords.lat.toFixed(6)}, ${positionCoords.lng.toFixed(6)} (${decimalToDMS(positionCoords.lat, 'lat')}, ${decimalToDMS(positionCoords.lng, 'lng')})`;
+                          if (selectedFeature.numCar) copyText += `\nNº do CAR: ${selectedFeature.numCar}`;
+                          if (selectedFeature.municipio) copyText += `\nMunicípio: ${selectedFeature.municipio}`;
+                          if (selectedFeature.areaHa) copyText += `\nÁrea Declarada: ${selectedFeature.areaHa}`;
+                          if (selectedFeature.situacao) copyText += `\nSituação Cadastral: ${selectedFeature.situacao}`;
+                          if (selectedFeature.proprietario) copyText += `\nTitular / Proprietário: ${selectedFeature.proprietario}`;
+                          if (featureLengthKm > 0) copyText += `\nPerímetro dos Limites: ${featureLengthKm.toFixed(3)} km (${(featureLengthKm * 1000).toLocaleString('pt-BR')} m)`;
+                          if (featureAreaHectares > 0 && !selectedFeature.areaHa) copyText += `\nÁrea Calculada: ${featureAreaHectares.toFixed(2)} ha`;
+                          if (selectedFeature.description) copyText += `\nAtributos Complementares:\n${selectedFeature.description.replace(/<[^>]*>/g, ' ').trim()}`;
+                          navigator.clipboard.writeText(copyText);
+                          showTemporaryStatus("Todos os dados do CAR foram copiados com sucesso!");
+                        }}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs sm:text-sm font-mono text-white font-extrabold uppercase tracking-wider transition-all shadow-md active:scale-95"
+                      >
+                        <Copy className="w-4 h-4" />
+                        <span>Copiar Todos os Dados</span>
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setCenter(positionCoords);
+                          setZoom(Math.max(zoom, 14.5));
+                          setIsCarDetailsModalOpen(false);
+                          showTemporaryStatus("Mapa centralizado no imóvel.");
+                        }}
+                        className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-military-800 hover:bg-military-750 border border-military-700 text-xs sm:text-sm font-mono text-military-200 hover:text-white font-extrabold uppercase tracking-wider transition-all active:scale-95"
+                      >
+                        <Crosshair className="w-4 h-4" />
+                        <span>Ver no Mapa</span>
+                      </button>
+
+                      <button
+                        onClick={() => setIsCarDetailsModalOpen(false)}
+                        className="py-3 px-4 rounded-xl bg-military-850 hover:bg-military-800 border border-military-750 text-xs sm:text-sm font-mono text-military-300 hover:text-white font-extrabold uppercase tracking-wider transition-all active:scale-95"
+                      >
+                        Fechar
+                      </button>
                     </div>
-                  )}
+                  </div>
                 </div>
-
-                {/* Footer Action */}
-                <div className="flex gap-1.5 mt-1 border-t border-military-700/70 pt-2">
-                  <button
-                    onClick={() => {
-                      let copyText = `Propriedade: ${selectedFeature.name || "Imóvel CAR"}\nCamada: ${selectedFeature.layerName}\nTipo: ${selectedFeature.type}\nCoordenadas Centro: ${positionCoords.lat.toFixed(6)}, ${positionCoords.lng.toFixed(6)}`;
-                      if (selectedFeature.numCar) {
-                        copyText += `\nNº do CAR: ${selectedFeature.numCar}`;
-                      }
-                      if (selectedFeature.municipio) {
-                        copyText += `\nMunicípio: ${selectedFeature.municipio}`;
-                      }
-                      if (selectedFeature.areaHa) {
-                        copyText += `\nÁrea Declarada: ${selectedFeature.areaHa}`;
-                      }
-                      if (selectedFeature.situacao) {
-                        copyText += `\nSituação: ${selectedFeature.situacao}`;
-                      }
-                      if (selectedFeature.proprietario) {
-                        copyText += `\nTitular: ${selectedFeature.proprietario}`;
-                      }
-                      if (selectedFeature.type === 'LineString') {
-                        copyText += `\nExtensão: ${featureLengthKm.toFixed(3)} km (${(featureLengthKm * 1000).toLocaleString('pt-BR')} m)`;
-                      } else if (selectedFeature.type === 'Polygon' || selectedFeature.type === 'MultiPolygon') {
-                        copyText += `\nÁrea Calculada: ${featureAreaHectares.toFixed(2)} ha / Perímetro: ${featureLengthKm.toFixed(3)} km`;
-                      }
-                      if (selectedFeature.description) {
-                        copyText += `\nAtributos: ${selectedFeature.description.replace(/<[^>]*>/g, ' ').trim()}`;
-                      }
-                      navigator.clipboard.writeText(copyText);
-                      showTemporaryStatus("Todos os dados do imóvel copiados!");
-                    }}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-[10px] font-mono text-white font-extrabold uppercase tracking-widest transition-all shadow"
-                  >
-                    <Copy className="w-3 h-3" />
-                    <span>Copiar Todos os Dados</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+              )}
+            </React.Fragment>
           );
         })()}
 
