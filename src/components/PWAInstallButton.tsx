@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Download, Smartphone, X, Check, Share } from 'lucide-react';
+import { Download, Smartphone, X, Check, Share, MoreVertical, ShieldCheck } from 'lucide-react';
 import { usePWAInstall } from '../utils/usePWAInstall';
 
 export const PWAInstallButton: React.FC = () => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showIOSGuide, setShowIOSGuide] = useState(false);
+  const [showAndroidGuide, setShowAndroidGuide] = useState(false);
   const [installing, setInstalling] = useState(false);
 
   // If already running in standalone PWA or native APK, hide the install prompt
@@ -13,15 +14,19 @@ export const PWAInstallButton: React.FC = () => {
   }
 
   const handleInstallClick = async () => {
-    setInstalling(true);
-    try {
-      await install();
-    } finally {
-      setInstalling(false);
+    if (isInstallable) {
+      setInstalling(true);
+      try {
+        await install();
+      } finally {
+        setInstalling(false);
+      }
+    } else {
+      setShowAndroidGuide(true);
     }
   };
 
-  // Chromium / Android / Desktop flow
+  // Chromium / Android with native prompt
   if (isInstallable) {
     return (
       <div 
@@ -138,5 +143,84 @@ export const PWAInstallButton: React.FC = () => {
     );
   }
 
-  return null;
+  // Android / Browser fallback when beforeinstallprompt has not fired
+  return (
+    <>
+      <div 
+        id="pwa-install-banner-fallback"
+        className="w-full bg-military-800 border border-military-700 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md mb-3"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-military-700 text-military-200 flex items-center justify-center shrink-0">
+            <Smartphone className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-xs font-black uppercase text-military-100 tracking-wide">
+              Instalar Aplicativo (Off-line)
+            </h4>
+            <p className="text-[11px] text-military-400 font-medium truncate">
+              Funciona 100% autônomo sem internet
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setShowAndroidGuide(true)}
+          id="btn-install-fallback"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-military-700 hover:bg-military-600 text-military-100 font-bold text-xs uppercase tracking-wider transition active:scale-95 cursor-pointer"
+        >
+          <span>Instalar</span>
+        </button>
+      </div>
+
+      {showAndroidGuide && (
+        <div 
+          id="android-install-modal"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in"
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-military-850 border border-military-700 p-5 shadow-2xl text-military-100">
+            <div className="flex items-center justify-between pb-3 border-b border-military-750">
+              <h3 className="text-sm font-black uppercase tracking-wider text-military-100">
+                Instalar no Navegador
+              </h3>
+              <button 
+                onClick={() => setShowAndroidGuide(false)}
+                className="p-1 rounded-lg hover:bg-military-750 text-military-400"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="py-4 space-y-3 text-xs text-military-300">
+              <div className="flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-military-700 text-military-100 font-bold flex items-center justify-center shrink-0 text-[11px]">1</span>
+                <p>
+                  Toque no menu do seu navegador (os <strong>três pontos</strong> <MoreVertical className="w-3.5 h-3.5 inline mx-0.5" /> no canto superior ou inferior).
+                </p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-military-700 text-military-100 font-bold flex items-center justify-center shrink-0 text-[11px]">2</span>
+                <p>
+                  Toque em <strong>Instalar aplicativo</strong> ou <strong>Adicionar à tela inicial</strong>.
+                </p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-military-700 text-military-100 font-bold flex items-center justify-center shrink-0 text-[11px]">3</span>
+                <p>
+                  O aplicativo será instalado como app nativo e poderá ser aberto 100% off-line mesmo em modo avião.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowAndroidGuide(false)}
+              className="w-full py-2.5 rounded-xl bg-military-300 hover:bg-military-200 text-military-950 font-black text-xs uppercase tracking-wider shadow-md transition"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
 };

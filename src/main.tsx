@@ -32,9 +32,30 @@ window.addEventListener('unhandledrejection', (event) => {
 
 import React, {StrictMode, ErrorInfo, ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
+import {registerSW} from 'virtual:pwa-register';
 import App from './App.tsx';
 import './index.css';
 import 'leaflet/dist/leaflet.css';
+
+// Register Service Worker immediately for 100% off-grid reliability
+registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    console.log('[BPA PWA] Nova versão detectada');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pwa-update-available'));
+    }
+  },
+  onOfflineReady() {
+    console.log('[BPA PWA] Aplicativo 100% pronto para uso off-line');
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('pwa-offline-ready'));
+    }
+  },
+  onRegisterError(error) {
+    console.error('[BPA PWA] Falha ao registrar Service Worker:', error);
+  },
+});
 
 
 interface ErrorBoundaryProps {
@@ -83,15 +104,6 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
     return this.props.children;
   }
-}
-
-// Register Service Worker for robust off-grid offline capabilities
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(reg => console.log('[BPA Office Offline] Service Worker registrado com sucesso:', reg.scope))
-      .catch(err => console.error('[BPA Office Offline] Falha ao registrar Service Worker:', err));
-  });
 }
 
 createRoot(document.getElementById('root')!).render(

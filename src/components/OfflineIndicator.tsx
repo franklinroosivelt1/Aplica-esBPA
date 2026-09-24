@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { WifiOff, Wifi, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { WifiOff, Wifi, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react';
 
 export function useOnlineStatus() {
   const [isOnline, setIsOnline] = useState(
@@ -26,6 +26,28 @@ export const OfflineIndicator: React.FC = () => {
   const isOnline = useOnlineStatus();
   const [showReconnected, setShowReconnected] = useState(false);
   const [wasOffline, setWasOffline] = useState(false);
+  const [offlineReady, setOfflineReady] = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+
+  useEffect(() => {
+    const handleOfflineReady = () => {
+      setOfflineReady(true);
+      const timer = setTimeout(() => setOfflineReady(false), 5000);
+      return () => clearTimeout(timer);
+    };
+
+    const handleUpdate = () => {
+      setUpdateAvailable(true);
+    };
+
+    window.addEventListener('pwa-offline-ready', handleOfflineReady);
+    window.addEventListener('pwa-update-available', handleUpdate);
+
+    return () => {
+      window.removeEventListener('pwa-offline-ready', handleOfflineReady);
+      window.removeEventListener('pwa-update-available', handleUpdate);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isOnline) {
@@ -39,6 +61,38 @@ export const OfflineIndicator: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [isOnline, wasOffline]);
+
+  // Update available banner
+  if (updateAvailable) {
+    return (
+      <div 
+        id="update-available-banner"
+        className="fixed top-2 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl bg-blue-700/95 backdrop-blur-md px-4 py-2.5 text-xs font-bold text-white shadow-2xl border border-blue-400/40 animate-in fade-in slide-in-from-top-4"
+      >
+        <RefreshCw className="w-4 h-4 text-blue-200 animate-spin" />
+        <span>Nova versão disponível do aplicativo!</span>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-2.5 py-1 bg-white text-blue-900 rounded-lg text-[11px] font-black uppercase tracking-wider hover:bg-blue-50 transition cursor-pointer"
+        >
+          Atualizar
+        </button>
+      </div>
+    );
+  }
+
+  // Toast confirmation that files have been precached for offline use
+  if (offlineReady) {
+    return (
+      <div 
+        id="offline-ready-banner"
+        className="fixed top-2 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl bg-emerald-700/95 backdrop-blur-md px-4 py-2.5 text-xs font-bold text-white shadow-2xl border border-emerald-400/40 animate-in fade-in slide-in-from-top-4"
+      >
+        <CheckCircle2 className="w-4 h-4 text-emerald-200" />
+        <span>Aplicativo 100% pronto para uso off-line no campo</span>
+      </div>
+    );
+  }
 
   if (isOnline && !showReconnected) return null;
 
