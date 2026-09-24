@@ -1,33 +1,10 @@
-// Global error display helper
-function displayFatalError(error: Error | string) {
-  const root = document.getElementById('root');
-  if (root) {
-    root.innerHTML = `
-      <div style="padding: 20px; background: #FEF2F2; border: 2px solid #EF4444; color: #991B1B; font-family: monospace; border-radius: 8px; margin: 20px;">
-        <h2 style="margin-top: 0; color: #B91C1C;">⚠️ Erro de Inicialização do App</h2>
-        <pre style="white-space: pre-wrap; word-break: break-all; background: #FEE2E2; padding: 10px; border-radius: 4px;">${error instanceof Error ? error.stack || error.message : error}</pre>
-        <p style="font-size: 12px; color: #7F1D1D; margin-bottom: 0;">Por favor, relate este erro para correção.</p>
-      </div>
-    `;
-  }
-}
-
+// Global error logging (non-destructive: prevents UI wipe-out on non-fatal DOM events or network drops)
 window.addEventListener('error', (event) => {
-  const msg = event.message || '';
-  if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('script error') || msg.includes('Load failed') || msg.includes('net::ERR_')) {
-    // Ignore network script load or image load errors when offline
-    return;
-  }
-  displayFatalError(event.error || event.message);
+  console.warn('[BPA App] Evento de erro interceptado:', event.error || event.message || event);
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  const reasonStr = event.reason ? (event.reason.message || String(event.reason)) : '';
-  if (reasonStr.includes('Failed to fetch') || reasonStr.includes('NetworkError') || reasonStr.includes('offline') || reasonStr.includes('net::ERR_') || reasonStr.includes('Load failed')) {
-    // Ignore unhandled promise rejections caused by offline network fetches
-    return;
-  }
-  displayFatalError(event.reason);
+  console.warn('[BPA App] Rejeição de promessa interceptada:', event.reason);
 });
 
 import React, {StrictMode, ErrorInfo, ReactNode} from 'react';
