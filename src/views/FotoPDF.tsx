@@ -518,10 +518,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
           <div className="w-14 h-14 bg-military-800 rounded-full flex items-center justify-center mb-3 border border-military-700 shadow-xl group-hover:scale-110 transition-transform">
             <Camera className="w-5 h-5 text-military-400 group-hover:text-military-300" />
           </div>
-          <h3 className="text-xs font-black mb-1 uppercase tracking-tight">CÂMERA PDF</h3>
-          <p className="text-[9px] text-military-500 max-w-[150px] mx-auto uppercase tracking-widest font-mono">
-            Escanear
-          </p>
+          <h3 className="text-xs font-black uppercase tracking-tight">CÂMERA PDF</h3>
         </div>
 
         <div 
@@ -539,10 +536,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
           <div className="w-14 h-14 bg-military-800 rounded-full flex items-center justify-center mb-3 border border-military-700 shadow-xl group-hover:scale-110 transition-transform">
             <Upload className="w-5 h-5 text-military-400 group-hover:text-military-300" />
           </div>
-          <h3 className="text-xs font-black mb-1 uppercase tracking-tight">IMPORTAR GALERIA</h3>
-          <p className="text-[9px] text-military-500 max-w-[150px] mx-auto uppercase tracking-widest font-mono">
-            smartphone
-          </p>
+          <h3 className="text-xs font-black uppercase tracking-tight">IMPORTAR GALERIA</h3>
         </div>
       </div>
 

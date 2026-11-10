@@ -160,3 +160,52 @@ export async function clearAllLayers(): Promise<void> {
 export function setMemoryLayersCache(layers: SicarLayer[]) {
   memoryLayersCache = layers;
 }
+
+// --- PERSISTENT CUSTOM OWNERS MAPPING (For SFB/SICAR shapefiles where owner is protected under LGPD) ---
+const CUSTOM_OWNERS_KEY = 'bpa_custom_car_owners';
+
+export function getCustomOwners(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(CUSTOM_OWNERS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveCustomOwner(carCode: string, ownerName: string): void {
+  try {
+    if (!carCode || !ownerName) return;
+    const current = getCustomOwners();
+    current[carCode.trim()] = ownerName.trim();
+    localStorage.setItem(CUSTOM_OWNERS_KEY, JSON.stringify(current));
+  } catch (err) {
+    console.warn("Erro ao salvar titular customizado:", err);
+  }
+}
+
+export function importCustomOwnersCsv(csvText: string): number {
+  try {
+    const lines = csvText.split(/\r?\n/);
+    const current = getCustomOwners();
+    let count = 0;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      // Support semicolon, comma, or tab delimiter
+      const parts = line.split(/[;,\t]/);
+      if (parts.length >= 2) {
+        const car = parts[0].trim().replace(/['"]/g, '');
+        const owner = parts[1].trim().replace(/['"]/g, '');
+        if (car && owner && !owner.toLowerCase().includes('proprietario') && !car.toLowerCase().includes('car')) {
+          current[car] = owner;
+          count++;
+        }
+      }
+    }
+    localStorage.setItem(CUSTOM_OWNERS_KEY, JSON.stringify(current));
+    return count;
+  } catch (err) {
+    console.warn("Erro ao importar CSV de proprietários:", err);
+    return 0;
+  }
+}

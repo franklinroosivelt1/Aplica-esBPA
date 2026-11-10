@@ -6,6 +6,7 @@ import {
   MapPin, 
   Route, 
   ChevronLeft, 
+  ChevronRight,
   Plus, 
   Minus, 
   Menu, 
@@ -32,12 +33,16 @@ import {
   Loader2,
   FileText,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  ExternalLink,
+  Edit3,
+  AlertTriangle,
+  Search
 } from 'lucide-react';
 import { decimalToDMS } from '../utils/coords';
 import brandLogo from '../assets/images/batalhao_ambiental_logo_1779854041969.png';
 import { parseUploadedFile, SicarProperty, getPreloadedAcreBase } from '../utils/sicarEngine';
-import { getStoredLayers } from '../utils/sicarStorage';
+import { getStoredLayers, getCustomOwners, saveCustomOwner, importCustomOwnersCsv } from '../utils/sicarStorage';
 
 // --- DATABASE PERSISTENCE SYSTEM (IndexedDB) ---
 const DB_NAME = 'PresidentMapsDB_v2';
@@ -74,6 +79,10 @@ export interface KmlData {
     areaHa?: string;
     proprietario?: string;
     situacao?: string;
+    moduloFiscal?: string;
+    tipoImovel?: string;
+    dataCadastro?: string;
+    dataAtualizacao?: string;
   }>;
 }
 
@@ -141,17 +150,19 @@ function convertSicarPropertiesToFeatures(properties: SicarProperty[]): KmlData[
     if (rings.length === 0) return;
 
     const primaryRing = rings[0];
-    const featName = (prop.numCar && !prop.numCar.includes('não disponível'))
+    const resolvedCar = (prop.numCar && !prop.numCar.includes('não disponível'))
       ? prop.numCar
       : (prop.codImovel && !prop.codImovel.includes('não disponível'))
         ? prop.codImovel
-        : `Imóvel Rural #${idx + 1}`;
+        : undefined;
+
+    const featName = resolvedCar || `Imóvel Rural #${idx + 1}`;
 
     const descLines: string[] = [];
-    if (prop.numCar && !prop.numCar.includes('não disponível')) {
-      descLines.push(`<div><b>Nº CAR:</b> ${prop.numCar}</div>`);
+    if (resolvedCar) {
+      descLines.push(`<div><b>Nº CAR:</b> ${resolvedCar}</div>`);
     }
-    if (prop.codImovel && !prop.codImovel.includes('não disponível')) {
+    if (prop.codImovel && !prop.codImovel.includes('não disponível') && prop.codImovel !== resolvedCar) {
       descLines.push(`<div><b>Código do Imóvel:</b> ${prop.codImovel}</div>`);
     }
     if (prop.municipio && !prop.municipio.includes('não disponível')) {
@@ -160,11 +171,23 @@ function convertSicarPropertiesToFeatures(properties: SicarProperty[]): KmlData[
     if (prop.areaHa && !prop.areaHa.includes('não disponível')) {
       descLines.push(`<div><b>Área Declarada:</b> ${prop.areaHa}</div>`);
     }
+    if (prop.moduloFiscal) {
+      descLines.push(`<div><b>Módulos Fiscais:</b> ${prop.moduloFiscal}</div>`);
+    }
+    if (prop.tipoImovel) {
+      descLines.push(`<div><b>Tipo de Imóvel:</b> ${prop.tipoImovel}</div>`);
+    }
     if (prop.situacao && !prop.situacao.includes('não disponível')) {
       descLines.push(`<div><b>Situação Cadastral:</b> ${prop.situacao}</div>`);
     }
     if (prop.proprietario && !prop.proprietario.includes('não disponível')) {
       descLines.push(`<div><b>Proprietário / Titular:</b> ${prop.proprietario}</div>`);
+    }
+    if (prop.dataCadastro && !prop.dataCadastro.includes('não disponível')) {
+      descLines.push(`<div><b>Data de Inscrição:</b> ${prop.dataCadastro}</div>`);
+    }
+    if (prop.dataAtualizacao && !prop.dataAtualizacao.includes('não disponível')) {
+      descLines.push(`<div><b>Data de Atualização:</b> ${prop.dataAtualizacao}</div>`);
     }
     if (prop.reservaLegalHa && !prop.reservaLegalHa.includes('não disponível')) {
       descLines.push(`<div><b>Reserva Legal (RL):</b> ${prop.reservaLegalHa}</div>`);
@@ -180,11 +203,15 @@ function convertSicarPropertiesToFeatures(properties: SicarProperty[]): KmlData[
       coordinates: primaryRing,
       rings: rings,
       bbox: prop.bbox,
-      numCar: prop.numCar && !prop.numCar.includes('não disponível') ? prop.numCar : undefined,
+      numCar: resolvedCar,
       municipio: prop.municipio && !prop.municipio.includes('não disponível') ? prop.municipio : undefined,
       areaHa: prop.areaHa && !prop.areaHa.includes('não disponível') ? prop.areaHa : undefined,
       proprietario: prop.proprietario && !prop.proprietario.includes('não disponível') ? prop.proprietario : undefined,
       situacao: prop.situacao && !prop.situacao.includes('não disponível') ? prop.situacao : undefined,
+      moduloFiscal: prop.moduloFiscal,
+      tipoImovel: prop.tipoImovel,
+      dataCadastro: prop.dataCadastro && !prop.dataCadastro.includes('não disponível') ? prop.dataCadastro : undefined,
+      dataAtualizacao: prop.dataAtualizacao && !prop.dataAtualizacao.includes('não disponível') ? prop.dataAtualizacao : undefined,
       properties: prop.properties
     });
   });
@@ -658,7 +685,19 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     areaHa?: string;
     proprietario?: string;
     situacao?: string;
+    moduloFiscal?: string;
+    tipoImovel?: string;
+    dataCadastro?: string;
+    dataAtualizacao?: string;
+    properties?: Record<string, any>;
   } | null>(null);
+
+  // Overlapping features state (for areas with multiple overlapping CAR properties)
+  const [overlappingFeatures, setOverlappingFeatures] = useState<Array<NonNullable<typeof selectedFeature>>>([]);
+  const [overlappingIndex, setOverlappingIndex] = useState<number>(0);
+  const [isOverlappingMenuOpen, setIsOverlappingMenuOpen] = useState(false);
+  const [isEditingOwner, setIsEditingOwner] = useState(false);
+  const [ownerInputText, setOwnerInputText] = useState('');
 
   // Modal display state for large CAR info window
   const [isCarDetailsModalOpen, setIsCarDetailsModalOpen] = useState(false);
@@ -811,6 +850,37 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     const saved = localStorage.getItem('president_base_map');
     return (saved as BaseMapType) || 'satellite';
   });
+
+  // Helper: Resolve owner name from feature itself, custom owners storage, or cross-referencing other active layers
+  const resolveFeatureOwner = (feat: NonNullable<typeof selectedFeature> | null): string | undefined => {
+    if (!feat) return undefined;
+    if (feat.proprietario && !feat.proprietario.includes('não disponível')) {
+      return feat.proprietario;
+    }
+    const carKey = feat.numCar || feat.name;
+    if (!carKey) return undefined;
+
+    const customOwners = getCustomOwners();
+    if (customOwners[carKey]) return customOwners[carKey];
+
+    const cleanKey = carKey.replace(/[^A-Za-z0-9]/g, '');
+    for (const [k, v] of Object.entries(customOwners)) {
+      if (k.replace(/[^A-Za-z0-9]/g, '') === cleanKey) return v;
+    }
+
+    // Cross-reference any other loaded layer that might have this CAR code with owner
+    for (const layer of kmlLayers) {
+      for (const f of layer.features) {
+        const otherCar = f.numCar || f.name;
+        if (otherCar && (otherCar === carKey || otherCar.replace(/[^A-Za-z0-9]/g, '') === cleanKey)) {
+          if (f.proprietario && !f.proprietario.includes('não disponível')) {
+            return f.proprietario;
+          }
+        }
+      }
+    }
+    return undefined;
+  };
 
   // GPS real-world parameters
   const [gpsCoords, setGpsCoords] = useState<{ lat: number, lng: number, accuracy: number } | null>(null);
@@ -1130,7 +1200,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       triggerRedraw();
     });
     return () => cancelAnimationFrame(frameId);
-  }, [center, zoom, rotation, activeMapIds, baseMap, kmlLayers, selectedFeature, gpsCoords, simulatedGps, simGpsCoords, dimensions, importedMaps, isRecordingGpsTrack, recordedTrackPoints]);
+  }, [center, zoom, rotation, activeMapIds, baseMap, kmlLayers, selectedFeature, overlappingFeatures, overlappingIndex, gpsCoords, simulatedGps, simGpsCoords, dimensions, importedMaps, isRecordingGpsTrack, recordedTrackPoints]);
 
   // Handle drawing operation over HTML5 Canvas
   useEffect(() => {
@@ -1421,6 +1491,36 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         }
       });
     });
+
+    // 3.4. DRAW OUTLINES FOR OTHER OVERLAPPING PROPERTIES IN CLUSTER
+    if (overlappingFeatures.length > 1) {
+      for (let oi = 0; oi < overlappingFeatures.length; oi++) {
+        const otherFeat = overlappingFeatures[oi];
+        if (otherFeat === selectedFeature) continue;
+        if (!otherFeat.coordinates || otherFeat.coordinates.length < 2) continue;
+        const otherRings = (otherFeat.rings && otherFeat.rings.length > 0) ? otherFeat.rings : [otherFeat.coordinates];
+        
+        ctx.save();
+        ctx.beginPath();
+        for (const ring of otherRings) {
+          if (ring.length < 2) continue;
+          const wPx0 = latLngToWorldPixel(ring[0].lat, ring[0].lng, zoom);
+          ctx.moveTo(wPx0.x - centerPixel.x, wPx0.y - centerPixel.y);
+          for (let i = 1; i < ring.length; i++) {
+            const wPxi = latLngToWorldPixel(ring[i].lat, ring[i].lng, zoom);
+            ctx.lineTo(wPxi.x - centerPixel.x, wPxi.y - centerPixel.y);
+          }
+          ctx.closePath();
+        }
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.12)';
+        ctx.fill();
+        ctx.setLineDash([8, 5]);
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
 
     // 3.5. DRAW HIGHLIGHT FOR CURRENTLY SELECTED VECTOR / CAR PROPERTY
     if (selectedFeature && selectedFeature.coordinates && selectedFeature.coordinates.length > 0) {
@@ -1954,7 +2054,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
     // 5. DRAW COMPASS ACCENT (Static decal)
     ctx.lineWidth = 2;
-  }, [paintCount, dimensions, center, zoom, rotation, activeMapIds, baseMap, kmlLayers, selectedFeature, gpsCoords, simulatedGps, simGpsCoords, savedPoints, savedDistances, savedAreas, measurePoints, areaPoints, measuringMode, isRecordingGpsTrack, recordedTrackPoints]);
+  }, [paintCount, dimensions, center, zoom, rotation, activeMapIds, baseMap, kmlLayers, selectedFeature, overlappingFeatures, overlappingIndex, gpsCoords, simulatedGps, simGpsCoords, savedPoints, savedDistances, savedAreas, measurePoints, areaPoints, measuringMode, isRecordingGpsTrack, recordedTrackPoints]);
 
   // Helpers for locating screen coordinate of lat/lng
   const getScreenPos = (lat: number, lng: number) => {
@@ -2016,8 +2116,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     return null;
   };
 
-  const findFeatureAt = (sx: number, sy: number) => {
+  const findAllFeaturesAt = (sx: number, sy: number) => {
     const centerPixel = latLngToWorldPixel(center.lat, center.lng, zoom);
+    const matchedList: Array<NonNullable<typeof selectedFeature>> = [];
     
     for (const layer of kmlLayers) {
       if (!layer.visible) continue;
@@ -2099,7 +2200,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         }
         
         if (matched) {
-          return {
+          matchedList.push({
             name: feat.name,
             description: feat.description,
             type: feat.type,
@@ -2114,12 +2215,23 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             areaHa: feat.areaHa,
             proprietario: feat.proprietario,
             situacao: feat.situacao,
-          };
+            moduloFiscal: feat.moduloFiscal,
+            tipoImovel: feat.tipoImovel,
+            dataCadastro: feat.dataCadastro,
+            dataAtualizacao: feat.dataAtualizacao,
+            properties: feat.properties,
+          });
         }
       }
     }
-    return null;
-  };  // Handle Drag / Pan Mouse down
+    return matchedList;
+  };
+
+  const findFeatureAt = (sx: number, sy: number) => {
+    const list = findAllFeaturesAt(sx, sy);
+    return list.length > 0 ? list[0] : null;
+  };
+  // Handle Drag / Pan Mouse down
   const handleMouseDown = (e: React.MouseEvent) => {
     if (Date.now() - lastTouchTime.current < 1000) return;
     isDragging.current = true;
@@ -2205,13 +2317,30 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   setSelectedSavedPoint(null);
                   setSelectedDistance(null);
                   setSelectedArea(null);
-                  const matched = findFeatureAt(sx, sy);
-                  if (matched) {
-                    setSelectedFeature(matched);
+                  const matchedList = findAllFeaturesAt(sx, sy);
+                  if (matchedList.length > 0) {
+                    const currentKey = selectedFeature ? (selectedFeature.numCar || selectedFeature.name) : null;
+                    const existingIdx = currentKey ? matchedList.findIndex(f => (f.numCar || f.name) === currentKey) : -1;
+
+                    let targetIdx = 0;
+                    if (existingIdx >= 0 && matchedList.length > 1) {
+                      targetIdx = (existingIdx + 1) % matchedList.length;
+                      showTemporaryStatus(`Alternando sobreposição: Imóvel ${targetIdx + 1} de ${matchedList.length}`);
+                    } else if (matchedList.length > 1) {
+                      showTemporaryStatus(`⚠️ Sobreposição detectada: ${matchedList.length} imóveis neste ponto. Use ◀ ▶ para alternar.`);
+                    }
+
+                    setOverlappingFeatures(matchedList);
+                    setOverlappingIndex(targetIdx);
+                    setSelectedFeature(matchedList[targetIdx]);
                     setIsCarDetailsModalOpen(false);
+                    setIsOverlappingMenuOpen(false);
                   } else {
                     setSelectedFeature(null);
+                    setOverlappingFeatures([]);
+                    setOverlappingIndex(0);
                     setIsCarDetailsModalOpen(false);
+                    setIsOverlappingMenuOpen(false);
                   }
                 }
               }
@@ -2345,13 +2474,30 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   setSelectedSavedPoint(null);
                   setSelectedDistance(null);
                   setSelectedArea(null);
-                  const matched = findFeatureAt(sx, sy);
-                  if (matched) {
-                    setSelectedFeature(matched);
+                  const matchedList = findAllFeaturesAt(sx, sy);
+                  if (matchedList.length > 0) {
+                    const currentKey = selectedFeature ? (selectedFeature.numCar || selectedFeature.name) : null;
+                    const existingIdx = currentKey ? matchedList.findIndex(f => (f.numCar || f.name) === currentKey) : -1;
+
+                    let targetIdx = 0;
+                    if (existingIdx >= 0 && matchedList.length > 1) {
+                      targetIdx = (existingIdx + 1) % matchedList.length;
+                      showTemporaryStatus(`Alternando sobreposição: Imóvel ${targetIdx + 1} de ${matchedList.length}`);
+                    } else if (matchedList.length > 1) {
+                      showTemporaryStatus(`⚠️ Sobreposição detectada: ${matchedList.length} imóveis neste ponto. Use ◀ ▶ para alternar.`);
+                    }
+
+                    setOverlappingFeatures(matchedList);
+                    setOverlappingIndex(targetIdx);
+                    setSelectedFeature(matchedList[targetIdx]);
                     setIsCarDetailsModalOpen(false);
+                    setIsOverlappingMenuOpen(false);
                   } else {
                     setSelectedFeature(null);
+                    setOverlappingFeatures([]);
+                    setOverlappingIndex(0);
                     setIsCarDetailsModalOpen(false);
+                    setIsOverlappingMenuOpen(false);
                   }
                 }
               }
@@ -3339,8 +3485,15 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           if (fileList.length === 1 && features.length > 0) {
             focusOnLayer(newLayer);
           }
+        } else if (ext === 'csv' || ext === 'txt') {
+          // Allow importing a CSV/TXT list with CAR code and Owner name (e.g., "CAR;PROPRIETARIO")
+          setVectorUploadStatus(`Importando tabela de proprietários (${file.name})...`);
+          const text = await file.text();
+          const importedCount = importCustomOwnersCsv(text);
+          successCount++;
+          showTemporaryStatus(`${importedCount} proprietário(s) vinculados ao CAR a partir de ${file.name}!`);
         } else {
-          throw new Error(`Formato .${ext} não suportado. Por favor, envie arquivos .gpkg, .zip ou .kml.`);
+          throw new Error(`Formato .${ext} não suportado. Por favor, envie arquivos .gpkg, .zip, .kml ou tabela .csv/.txt.`);
         }
       }
 
@@ -3803,6 +3956,8 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             }
           }
 
+          const resolvedOwner = resolveFeatureOwner(selectedFeature);
+
           return (
             <React.Fragment>
               {/* 1. BALÃO COMPACTO NA PARTE SUPERIOR DA TELA: "Informações Sobre o CAR" */}
@@ -3824,19 +3979,70 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       <FileText className="w-4 h-4" />
                     </div>
                     <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
                         <h4 className="font-mono text-[11px] sm:text-xs font-black uppercase text-amber-300 tracking-wider truncate">
                           Informações Sobre o CAR
                         </h4>
+
+                        {/* Overlapping Counter Pill */}
+                        {overlappingFeatures.length > 1 && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-amber-500/30 border border-amber-500/60 text-[9px] font-mono font-bold text-amber-200">
+                            ⚡ {overlappingIndex + 1}/{overlappingFeatures.length} Sobrepostos
+                          </span>
+                        )}
                       </div>
                       <span className="font-mono text-[9px] sm:text-[10px] text-military-300 truncate font-semibold">
-                        {selectedFeature.numCar || selectedFeature.name || "Toque para abrir detalhes"}
+                        {resolvedOwner ? `${selectedFeature.numCar || selectedFeature.name} • ${resolvedOwner}` : (selectedFeature.numCar || selectedFeature.name || "Toque para abrir detalhes")}
                       </span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                    {/* Overlapping Navigation Switcher Buttons (in compact balloon) */}
+                    {overlappingFeatures.length > 1 && (
+                      <div className="flex items-center gap-0.5 bg-military-800/90 border border-amber-500/40 rounded-xl px-1 py-0.5 mr-0.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const nextIdx = (overlappingIndex - 1 + overlappingFeatures.length) % overlappingFeatures.length;
+                            setOverlappingIndex(nextIdx);
+                            setSelectedFeature(overlappingFeatures[nextIdx]);
+                            showTemporaryStatus(`Imóvel ${nextIdx + 1} de ${overlappingFeatures.length} sobrepostos`);
+                          }}
+                          className="p-1 rounded hover:bg-military-700 text-amber-300 transition-colors"
+                          title="Imóvel Anterior na Sobreposição"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsOverlappingMenuOpen(!isOverlappingMenuOpen);
+                          }}
+                          className="font-mono text-[9px] font-black text-amber-300 px-1 hover:underline"
+                          title="Listar imóveis sobrepostos neste ponto"
+                        >
+                          {overlappingIndex + 1}/{overlappingFeatures.length}
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const nextIdx = (overlappingIndex + 1) % overlappingFeatures.length;
+                            setOverlappingIndex(nextIdx);
+                            setSelectedFeature(overlappingFeatures[nextIdx]);
+                            showTemporaryStatus(`Imóvel ${nextIdx + 1} de ${overlappingFeatures.length} sobrepostos`);
+                          }}
+                          className="p-1 rounded hover:bg-military-700 text-amber-300 transition-colors"
+                          title="Próximo Imóvel na Sobreposição"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+
                     {/* Focar no Imóvel */}
                     <button
                       onClick={() => {
@@ -3864,7 +4070,10 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     <button
                       onClick={() => {
                         setSelectedFeature(null);
+                        setOverlappingFeatures([]);
+                        setOverlappingIndex(0);
                         setIsCarDetailsModalOpen(false);
+                        setIsOverlappingMenuOpen(false);
                       }}
                       className="p-1.5 rounded-lg bg-military-800 hover:bg-military-750 text-military-400 hover:text-military-100 border border-military-700/80 transition-all"
                       title="Desmarcar Imóvel"
@@ -3873,6 +4082,58 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     </button>
                   </div>
                 </div>
+
+                {/* Overlapping Dropdown Menu (Quick Selection when tapping counter) */}
+                {isOverlappingMenuOpen && overlappingFeatures.length > 1 && (
+                  <div 
+                    className="mt-2 bg-military-900 border border-amber-500/60 rounded-xl shadow-2xl p-2.5 flex flex-col gap-1.5 animate-fade-in"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between pb-1 border-b border-military-750 text-[10px] font-mono text-amber-300 font-bold uppercase">
+                      <span className="flex items-center gap-1">
+                        <Layers className="w-3 h-3" />
+                        Imóveis Sobrepostos ({overlappingFeatures.length})
+                      </span>
+                      <button 
+                        onClick={() => setIsOverlappingMenuOpen(false)}
+                        className="text-military-400 hover:text-white p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-thin">
+                      {overlappingFeatures.map((feat, idx) => {
+                        const owner = resolveFeatureOwner(feat);
+                        const isCurrent = idx === overlappingIndex;
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setOverlappingIndex(idx);
+                              setSelectedFeature(feat);
+                              setIsOverlappingMenuOpen(false);
+                              showTemporaryStatus(`Selecionado: #${idx + 1}`);
+                            }}
+                            className={`w-full text-left p-2 rounded-lg font-mono text-[10px] transition-colors border ${
+                              isCurrent
+                                ? 'bg-amber-500/20 border-amber-400 text-amber-200'
+                                : 'bg-military-950/70 border-military-800 text-military-300 hover:bg-military-800 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between font-bold">
+                              <span>#{idx + 1} {feat.numCar ? feat.numCar.substring(0, 16) + '...' : feat.name}</span>
+                              {isCurrent ? <span className="text-amber-400">✓ Ativo</span> : <span className="text-military-400">{feat.areaHa || '—'}</span>}
+                            </div>
+                            <div className="text-[9px] text-military-400 truncate mt-0.5">
+                              {owner ? `Titular: ${owner}` : feat.situacao || 'Base CAR'}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 2. JANELA MAIOR COM INFORMAÇÕES COMPLETAS (SOMENTE AO SER SELECIONADO / ROLÁVEL COM FONTE LEGÍVEL) */}
@@ -3936,6 +4197,74 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
                     {/* Scrollable Content Body with Clear & Comfortable Typography */}
                     <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 font-sans scrollbar-thin">
+                      {/* Overlapping Navigation Banner in Modal */}
+                      {overlappingFeatures.length > 1 && (
+                        <div className="bg-amber-950/80 border border-amber-500/60 rounded-xl p-3 sm:p-4 flex flex-col gap-2.5">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+                              <span className="text-xs sm:text-sm font-black uppercase text-amber-300 tracking-wider">
+                                Sobreposição Detectada ({overlappingFeatures.length} Imóveis no Ponto)
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 font-mono text-xs font-bold text-amber-200">
+                              <button
+                                onClick={() => {
+                                  const nextIdx = (overlappingIndex - 1 + overlappingFeatures.length) % overlappingFeatures.length;
+                                  setOverlappingIndex(nextIdx);
+                                  setSelectedFeature(overlappingFeatures[nextIdx]);
+                                }}
+                                className="p-1.5 rounded-lg bg-military-800 hover:bg-military-700 border border-amber-500/40 text-amber-300 hover:text-white transition-colors"
+                                title="Imóvel Anterior"
+                              >
+                                <ChevronLeft className="w-4 h-4" />
+                              </button>
+                              <span className="px-2">{overlappingIndex + 1} de {overlappingFeatures.length}</span>
+                              <button
+                                onClick={() => {
+                                  const nextIdx = (overlappingIndex + 1) % overlappingFeatures.length;
+                                  setOverlappingIndex(nextIdx);
+                                  setSelectedFeature(overlappingFeatures[nextIdx]);
+                                }}
+                                className="p-1.5 rounded-lg bg-military-800 hover:bg-military-700 border border-amber-500/40 text-amber-300 hover:text-white transition-colors"
+                                title="Próximo Imóvel"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 border-t border-amber-500/20">
+                            {overlappingFeatures.map((feat, idx) => {
+                              const featOwner = resolveFeatureOwner(feat);
+                              const isCurrent = idx === overlappingIndex;
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => {
+                                    setOverlappingIndex(idx);
+                                    setSelectedFeature(feat);
+                                  }}
+                                  className={`p-2 rounded-lg text-left transition-all border ${
+                                    isCurrent
+                                      ? 'bg-amber-500/25 border-amber-400 text-amber-200 ring-1 ring-amber-400 shadow'
+                                      : 'bg-military-900/90 border-military-750 text-military-300 hover:text-white hover:border-military-600'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between text-[11px] font-mono font-black">
+                                    <span>#{idx + 1} {feat.numCar ? feat.numCar.substring(0, 16) + '...' : feat.name}</span>
+                                    {isCurrent && <span className="text-[10px] text-amber-400 font-bold">● Ativo</span>}
+                                  </div>
+                                  <div className="text-[10px] text-military-400 truncate mt-0.5">
+                                    {featOwner ? `Titular: ${featOwner}` : feat.situacao || 'CAR'}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {/* SICAR Code Card */}
                       {selectedFeature.numCar && (
                         <div className="flex flex-col gap-1.5 bg-military-950 p-3.5 sm:p-4 rounded-xl border border-military-700">
@@ -3991,6 +4320,44 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                         )}
                       </div>
 
+                      {/* Fiscal Modules & Property Type Grid */}
+                      {(selectedFeature.moduloFiscal || selectedFeature.tipoImovel) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {selectedFeature.moduloFiscal && (
+                            <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                              <span className="text-xs font-bold uppercase text-military-400">Módulos Fiscais</span>
+                              <span className="text-sm sm:text-base font-bold text-military-100 font-mono">{selectedFeature.moduloFiscal}</span>
+                            </div>
+                          )}
+
+                          {selectedFeature.tipoImovel && (
+                            <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                              <span className="text-xs font-bold uppercase text-military-400">Tipo de Imóvel</span>
+                              <span className="text-sm sm:text-base font-bold text-military-100">{selectedFeature.tipoImovel}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Dates Grid */}
+                      {(selectedFeature.dataCadastro || selectedFeature.dataAtualizacao) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {selectedFeature.dataCadastro && (
+                            <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                              <span className="text-xs font-bold uppercase text-military-400">Data de Inscrição</span>
+                              <span className="text-xs sm:text-sm font-bold text-military-200 font-mono">{selectedFeature.dataCadastro}</span>
+                            </div>
+                          )}
+
+                          {selectedFeature.dataAtualizacao && (
+                            <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                              <span className="text-xs font-bold uppercase text-military-400">Última Atualização</span>
+                              <span className="text-xs sm:text-sm font-bold text-military-200 font-mono">{selectedFeature.dataAtualizacao}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Areas & Perimeter */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
@@ -4013,11 +4380,142 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                         </div>
                       </div>
 
-                      {/* Owner / Titular */}
-                      {selectedFeature.proprietario && (
-                        <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
-                          <span className="text-xs font-bold uppercase text-military-400">Titular / Proprietário</span>
-                          <span className="text-sm sm:text-base font-bold text-military-100 leading-snug">{selectedFeature.proprietario}</span>
+                      {/* OWNER / TITULAR SECTION (Comprehensive & Adaptive) */}
+                      {resolvedOwner ? (
+                        <div className="flex flex-col gap-1.5 bg-military-950/70 p-3.5 rounded-xl border border-emerald-500/40">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase text-emerald-400 flex items-center gap-1.5">
+                              <Check className="w-3.5 h-3.5" />
+                              Titular / Proprietário Identificado
+                            </span>
+                            <button
+                              onClick={() => {
+                                setIsEditingOwner(true);
+                                setOwnerInputText(resolvedOwner);
+                              }}
+                              className="text-[11px] font-mono text-military-400 hover:text-white flex items-center gap-1 transition-colors"
+                              title="Editar Titular"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>Editar</span>
+                            </button>
+                          </div>
+                          <span className="text-sm sm:text-base font-bold text-white leading-snug">{resolvedOwner}</span>
+
+                          {isEditingOwner && (
+                            <div className="mt-2 p-2.5 rounded-lg bg-military-900 border border-military-700 flex flex-col gap-2">
+                              <span className="text-[11px] font-bold text-military-300">Alterar Nome do Titular / CPF / Anotação:</span>
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={ownerInputText}
+                                  onChange={(e) => setOwnerInputText(e.target.value)}
+                                  placeholder="Nome do Titular"
+                                  className="flex-1 bg-military-950 border border-military-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-military-500 focus:outline-none focus:border-amber-500 font-mono"
+                                />
+                                <button
+                                  onClick={() => {
+                                    if (ownerInputText.trim()) {
+                                      const carCode = selectedFeature.numCar || selectedFeature.name;
+                                      saveCustomOwner(carCode, ownerInputText.trim());
+                                      setSelectedFeature(prev => prev ? { ...prev, proprietario: ownerInputText.trim() } : null);
+                                      setIsEditingOwner(false);
+                                      showTemporaryStatus("Titular atualizado com sucesso!");
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors"
+                                >
+                                  Salvar
+                                </button>
+                                <button
+                                  onClick={() => setIsEditingOwner(false)}
+                                  className="px-2 py-1.5 bg-military-800 hover:bg-military-750 text-military-300 text-xs rounded-lg"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2.5 bg-military-950/70 p-3.5 rounded-xl border border-amber-500/40">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase text-amber-400 flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              Titular / Proprietário
+                            </span>
+                            <span className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                              Sigilo LGPD na base aberta SFB
+                            </span>
+                          </div>
+                          
+                          <p className="text-xs text-military-300 leading-relaxed">
+                            O shapefile público do SICAR/SFB não exporta o nome do proprietário devido ao sigilo da LGPD. Você pode consultar a certidão oficial no portal federal ou anotar o titular manualmente:
+                          </p>
+                          
+                          <div className="flex flex-wrap gap-2 pt-0.5">
+                            <button
+                              onClick={() => {
+                                const carCode = selectedFeature.numCar || selectedFeature.name;
+                                navigator.clipboard.writeText(carCode);
+                                window.open('https://car.gov.br/#/consultar', '_blank', 'noopener,noreferrer');
+                                showTemporaryStatus("Nº do CAR copiado! Cole na consulta pública do SICAR (car.gov.br).");
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-mono text-xs font-bold uppercase transition-all shadow-sm active:scale-95"
+                              title="Copiar código e abrir consulta oficial no SICAR"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Consultar no SICAR (car.gov.br)</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setIsEditingOwner(true);
+                                setOwnerInputText('');
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-military-800 hover:bg-military-750 text-military-200 hover:text-white border border-military-600 font-mono text-xs font-bold uppercase transition-all"
+                              title="Informar nome do proprietário ou CPF"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              <span>Informar Titular Manualmente</span>
+                            </button>
+                          </div>
+
+                          {isEditingOwner && (
+                            <div className="mt-2 p-2.5 rounded-lg bg-military-900 border border-military-700 flex flex-col gap-2">
+                              <span className="text-[11px] font-bold text-military-300">Nome do Titular / CPF / Anotação:</span>
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  value={ownerInputText}
+                                  onChange={(e) => setOwnerInputText(e.target.value)}
+                                  placeholder="Ex: João da Silva / CPF 123..."
+                                  className="flex-1 bg-military-950 border border-military-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-military-500 focus:outline-none focus:border-amber-500 font-mono"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => {
+                                    if (ownerInputText.trim()) {
+                                      const carCode = selectedFeature.numCar || selectedFeature.name;
+                                      saveCustomOwner(carCode, ownerInputText.trim());
+                                      setSelectedFeature(prev => prev ? { ...prev, proprietario: ownerInputText.trim() } : null);
+                                      setIsEditingOwner(false);
+                                      showTemporaryStatus("Titular salvo e vinculado a este imóvel!");
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors"
+                                >
+                                  Salvar
+                                </button>
+                                <button
+                                  onClick={() => setIsEditingOwner(false)}
+                                  className="px-2 py-1.5 bg-military-800 hover:bg-military-750 text-military-300 text-xs rounded-lg"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -4071,8 +4569,12 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           if (selectedFeature.numCar) copyText += `\nNº do CAR: ${selectedFeature.numCar}`;
                           if (selectedFeature.municipio) copyText += `\nMunicípio: ${selectedFeature.municipio}`;
                           if (selectedFeature.areaHa) copyText += `\nÁrea Declarada: ${selectedFeature.areaHa}`;
+                          if (selectedFeature.moduloFiscal) copyText += `\nMódulos Fiscais: ${selectedFeature.moduloFiscal}`;
+                          if (selectedFeature.tipoImovel) copyText += `\nTipo de Imóvel: ${selectedFeature.tipoImovel}`;
                           if (selectedFeature.situacao) copyText += `\nSituação Cadastral: ${selectedFeature.situacao}`;
-                          if (selectedFeature.proprietario) copyText += `\nTitular / Proprietário: ${selectedFeature.proprietario}`;
+                          if (resolvedOwner) copyText += `\nTitular / Proprietário: ${resolvedOwner}`;
+                          if (selectedFeature.dataCadastro) copyText += `\nData de Inscrição: ${selectedFeature.dataCadastro}`;
+                          if (selectedFeature.dataAtualizacao) copyText += `\nData de Atualização: ${selectedFeature.dataAtualizacao}`;
                           if (featureLengthKm > 0) copyText += `\nPerímetro dos Limites: ${featureLengthKm.toFixed(3)} km (${(featureLengthKm * 1000).toLocaleString('pt-BR')} m)`;
                           if (featureAreaHectares > 0 && !selectedFeature.areaHa) copyText += `\nÁrea Calculada: ${featureAreaHectares.toFixed(2)} ha`;
                           if (selectedFeature.description) copyText += `\nAtributos Complementares:\n${selectedFeature.description.replace(/<[^>]*>/g, ' ').trim()}`;
@@ -4859,21 +5361,16 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 {isGeoMapsOpen && (
                   <div className="p-3 space-y-3">
                     {/* Upload Trigger Input */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="flex items-center justify-center gap-2 border border-dashed border-military-650 hover:border-emerald-500 hover:bg-military-800/30 transition-all p-3 rounded-lg cursor-pointer text-military-205">
-                        <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span className="font-mono text-[11px] font-bold uppercase tracking-wider">Inserir Mapa (PDF / JSON)</span>
-                        <input 
-                          type="file" 
-                          accept=".pdf,application/pdf,.json" 
-                          onChange={handlePdfUpload}
-                          className="hidden" 
-                        />
-                      </label>
-                      <span className="font-mono text-[8.5px] text-military-400 text-center uppercase tracking-wider">
-                        Insira arquivos GeoPDF oficiais ou mapas compartilhados (.json)
-                      </span>
-                    </div>
+                    <label className="flex items-center justify-center gap-2 border border-dashed border-military-650 hover:border-emerald-500 hover:bg-military-800/30 transition-all p-3 rounded-lg cursor-pointer text-military-205">
+                      <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span className="font-mono text-[11px] font-bold uppercase tracking-wider">Inserir Mapa (PDF / JSON)</span>
+                      <input 
+                        type="file" 
+                        accept=".pdf,application/pdf,.json" 
+                        onChange={handlePdfUpload}
+                        className="hidden" 
+                      />
+                    </label>
 
                     {/* List of imported GeoPDF maps with Overlay Ordering */}
                     {importedMaps.length === 0 ? (
@@ -5061,61 +5558,21 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       </div>
                     )}
 
-                    {/* Upload Multi-format vector input */}
-                    <div className="space-y-1.5">
-                      <label className="flex flex-col items-center justify-center gap-1.5 border border-dashed border-military-650 hover:border-blue-500 hover:bg-military-800/50 transition-all p-3.5 rounded-xl cursor-pointer bg-military-900/40 text-military-100 group">
-                        <div className="flex items-center gap-2">
-                          <Upload className="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
-                          <span className="font-mono text-[11px] font-black uppercase tracking-wider text-military-100 group-hover:text-blue-300">
-                            Inserir Camada (.GPKG, .ZIP ou .KML)
-                          </span>
-                        </div>
-                        <span className="text-[8.5px] font-mono text-military-400 text-center leading-tight">
-                          Selecione 1 ou múltiplos arquivos (.gpkg, shapefiles .zip do CAR ou .kml)
-                        </span>
-                        <input 
-                          type="file" 
-                          accept=".gpkg,.zip,.kml,.kmz,.geojson,.json"
-                          multiple
-                          disabled={isProcessingVectorFile}
-                          onChange={handleVectorFileUpload}
-                          className="hidden" 
-                        />
-                      </label>
-
-                      {/* Secondary helper actions: Sync from CAR module & Demo Base */}
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={handleSyncFromSicar}
-                          disabled={isProcessingVectorFile}
-                          className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg bg-military-800/80 hover:bg-military-750 border border-military-700 text-military-200 font-mono text-[8.5px] font-bold uppercase transition-all disabled:opacity-50"
-                          title="Carregar camadas já anexadas na Busca de Dados do CAR"
-                        >
-                          <RefreshCw className="w-3 h-3 text-blue-400 shrink-0" />
-                          <span className="truncate">Sincronizar Módulo CAR</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleLoadDemoAcre}
-                          disabled={isProcessingVectorFile}
-                          className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg bg-military-800/80 hover:bg-military-750 border border-military-700 text-military-200 font-mono text-[8.5px] font-bold uppercase transition-all disabled:opacity-50"
-                          title="Carregar base demonstrativa do CAR no Acre"
-                        >
-                          <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
-                          <span className="truncate">Base Demonstrativa CAR</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Notice on transparent centers */}
-                    <div className="p-2 bg-military-900/50 border border-military-750/50 rounded-lg flex items-start gap-2">
-                      <ShieldCheck className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
-                      <p className="font-mono text-[8px] text-military-300 leading-tight">
-                        <strong className="text-military-100 uppercase">Centro dos polígonos transparente:</strong> Apenas os limites dos imóveis são destacados para manter a visão total do relevo e imagens de satélite.
-                      </p>
-                    </div>
+                    {/* Upload Multi-format vector input - apenas o botão */}
+                    <label className="flex items-center justify-center gap-2 border border-dashed border-military-650 hover:border-blue-500 hover:bg-military-800/50 transition-all p-3 rounded-xl cursor-pointer bg-military-900/40 text-military-100 group">
+                      <Upload className="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
+                      <span className="font-mono text-[11px] font-black uppercase tracking-wider text-military-100 group-hover:text-blue-300">
+                        Inserir Camada (.GPKG, .ZIP, .KML ou .CSV)
+                      </span>
+                      <input 
+                        type="file" 
+                        accept=".gpkg,.zip,.kml,.kmz,.geojson,.json,.csv,.txt"
+                        multiple
+                        disabled={isProcessingVectorFile}
+                        onChange={handleVectorFileUpload}
+                        className="hidden" 
+                      />
+                    </label>
 
                     {/* Vector Listings */}
                     <div className="space-y-3">

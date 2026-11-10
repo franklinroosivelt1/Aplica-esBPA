@@ -379,9 +379,6 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
           <h2 className="text-lg font-black uppercase text-military-100 tracking-tight">
             Consulta Geoespacial do CAR
           </h2>
-          <p className="text-xs text-military-400 font-medium mt-0.5">
-            Interseção Espacial de Imóveis Rurais (Point in Polygon)
-          </p>
         </div>
 
         {/* 1. SEÇÃO DE FONTES DE DADOS E UPLOAD MULTI-CAMADA */}
@@ -517,10 +514,6 @@ export default function BpaOperacional({ onBack }: BpaOperacionalProps) {
               <span>Base Acre (SEMA)</span>
             </button>
           </div>
-
-          <p className="text-[10px] text-military-400 leading-tight">
-            Os arquivos anexados ficam salvos permanentemente no seu dispositivo (permanecem ativos ao sair e retornar ao módulo). Você pode anexar 2 ou 3 arquivos complementares (ex.: Área do Imóvel, Reserva Legal, APP) para busca conjunta simultânea por coordenadas.
-          </p>
         </div>
 
         {/* 2. SEÇÃO DE COORDENADA EM GMS E CONVERSÃO */}

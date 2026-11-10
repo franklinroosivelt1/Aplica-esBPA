@@ -12,68 +12,62 @@ import {
 import { PWAInstallButton } from '../components/PWAInstallButton';
 type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar' | 'diariodebordo';
 
-interface HomeProps {
-  onNavigate: (view: View) => void;
+interface MenuItem {
+  id: View;
+  label: string;
+  icon: any;
+  isPrimary?: boolean;
 }
 
-export default function Home({ onNavigate }: HomeProps) {
-  const menuItems: { id: View; label: string; icon: any; subtitle: string; description: string; isPrimary?: boolean }[] = [
+interface HomeProps {
+  onNavigate: (view: View) => void;
+  offlineMode?: boolean;
+}
+
+export default function Home({ onNavigate, offlineMode }: HomeProps) {
+  const menuItems: MenuItem[] = [
     { 
       id: 'camstamp', 
       label: 'Foto Georreferenciada', 
       icon: Camera,
-      subtitle: 'CamStamp com Carimbo GPS e Altitude',
-      description: 'Captura fotográfica fiscal com marca d\'água de coordenadas, altitude, data e hora.',
       isPrimary: true
     },
     { 
       id: 'mapas', 
       label: 'Mapas Georreferenciados', 
       icon: Map,
-      subtitle: 'Navegação Tática, KML e Trilha GPS',
-      description: 'Monitoramento de áreas de interesse, polígonos KML e mapas base offline com gravação de trilha.'
     },
     { 
       id: 'cubagem', 
       label: 'Cubagem de Madeiras', 
       icon: Calculator,
-      subtitle: 'Cálculo Florestal em Tora e Bloco',
-      description: 'Cálculo volumétrico analítico Smalian para toras e peças serradas no campo.'
     },
     { 
       id: 'bpaoperacional', 
       label: 'Buscar Dados do CAR', 
       icon: Shield,
-      subtitle: 'Consulta e Interseção Espacial SICAR',
-      description: 'Upload de Shapefiles/GPKG e consulta Point in Polygon com identificação de sobreposições.',
     },
     { 
       id: 'mandados', 
       label: 'Buscar Mandado de Prisão', 
       icon: Shield,
-      subtitle: 'Consulta de Segurança Pública e BNMP',
-      description: 'Pesquisa rápida, precisa e offline de mandados de prisão ativos no Acre.'
     },
     { 
       id: 'fotopdf', 
       label: 'Fotos em PDF', 
       icon: FileImage,
-      subtitle: 'Gerador de Relatórios e Laudos Fotográficos',
-      description: 'Conversão rápida de imagens de campo em documentos PDF com enquadramento ajustável.'
     },
     { 
       id: 'diariodebordo', 
       label: 'Diário de Bordo', 
       icon: BookOpen,
-      subtitle: 'Bloco de Anotações e Registros de Serviço',
-      description: 'Registro de ocorrências, relatos operacionais e anotações com data e hora.'
     }
   ];
 
   return (
     <div className="flex flex-col min-h-[90vh] justify-between pb-8 pt-1" id="home-container">
       <div className="w-full space-y-3.5">
-        {/* Header com identidade BPA militar - Sem ícone quadrado para elevar botões */}
+        {/* Header com identidade BPA militar */}
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -91,11 +85,8 @@ export default function Home({ onNavigate }: HomeProps) {
           </div>
         </motion.div>
 
-        {/* PWA In-App Install Prompt for field installation */}
-        <PWAInstallButton />
-
-        {/* Modules Navigation - List Style Buttons */}
-        <div className="w-full space-y-2.5 px-0.5" id="menu-list-container">
+        {/* Modules Navigation - List Style Buttons com apenas o nome principal */}
+        <div className="w-full space-y-2 px-0.5" id="menu-list-container">
           {menuItems.map((item, index) => {
             const IconComp = item.icon;
             const isPrimary = item.isPrimary;
@@ -109,7 +100,7 @@ export default function Home({ onNavigate }: HomeProps) {
                 transition={{ delay: index * 0.03, duration: 0.15 }}
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.98 }}
-                className={`w-full text-left rounded-2xl p-4 flex items-center justify-between gap-3.5 transition-all duration-150 cursor-pointer shadow-lg group border ${
+                className={`w-full text-left rounded-2xl p-3.5 flex items-center justify-between gap-3.5 transition-all duration-150 cursor-pointer shadow-lg group border ${
                   isPrimary
                     ? 'bg-military-600 hover:bg-military-500 text-white border-military-500 ring-2 ring-military-500/20 shadow-military-900/40'
                     : 'bg-military-850 hover:bg-military-800 text-military-100 border-military-700/80 hover:border-military-600'
@@ -117,7 +108,7 @@ export default function Home({ onNavigate }: HomeProps) {
                 id={`btn-menu-${item.id}`}
               >
                 {/* Left Icon */}
-                <div className={`p-3 rounded-xl shrink-0 transition-colors flex items-center justify-center ${
+                <div className={`p-2.5 rounded-xl shrink-0 transition-colors flex items-center justify-center ${
                   isPrimary
                     ? 'bg-military-700/70 text-white border border-military-400/40'
                     : 'bg-military-900 text-military-300 border border-military-750 group-hover:text-military-100 group-hover:border-military-600'
@@ -125,7 +116,7 @@ export default function Home({ onNavigate }: HomeProps) {
                   <IconComp className="w-5 h-5" strokeWidth={2.2} />
                 </div>
 
-                {/* Center Content */}
+                {/* Center Content - Apenas o nome principal do botão */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className={`font-black text-sm sm:text-base uppercase tracking-wide leading-tight truncate ${
@@ -139,11 +130,6 @@ export default function Home({ onNavigate }: HomeProps) {
                       </span>
                     )}
                   </div>
-                  <p className={`text-xs font-semibold mt-0.5 truncate ${
-                    isPrimary ? 'text-military-200' : 'text-military-300'
-                  }`}>
-                    {item.subtitle}
-                  </p>
                 </div>
 
                 {/* Right Arrow / Action Indicator */}
@@ -157,6 +143,11 @@ export default function Home({ onNavigate }: HomeProps) {
               </motion.button>
             );
           })}
+        </div>
+
+        {/* PWA In-App Install Prompt posicionado no final da página do aplicativo */}
+        <div className="pt-2" id="bottom-pwa-install-container">
+          <PWAInstallButton />
         </div>
       </div>
 

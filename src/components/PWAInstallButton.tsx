@@ -31,7 +31,7 @@ export const PWAInstallButton: React.FC = () => {
     return (
       <div 
         id="pwa-install-banner"
-        className="w-full bg-military-800 border border-military-500/60 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md mb-3"
+        className="w-full bg-military-800 border border-military-500/60 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md mt-2 mb-2"
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-military-500 text-white flex items-center justify-center shrink-0 shadow-sm">
@@ -39,10 +39,10 @@ export const PWAInstallButton: React.FC = () => {
           </div>
           <div className="min-w-0">
             <h4 className="text-xs font-black uppercase text-military-100 tracking-wide">
-              Instalar Aplicativo no Celular
+              Instalar Aplicativo Off-line
             </h4>
             <p className="text-[11px] text-military-400 font-medium truncate">
-              Funciona 100% off-line sem sinal de rede
+              Funciona 100% autônomo sem internet
             </p>
           </div>
         </div>
@@ -66,7 +66,7 @@ export const PWAInstallButton: React.FC = () => {
       <>
         <div 
           id="pwa-install-banner-ios"
-          className="w-full bg-military-800 border border-military-700 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md mb-3"
+          className="w-full bg-military-800 border border-military-700 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md mt-2 mb-2"
         >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-military-700 text-military-200 flex items-center justify-center shrink-0">
@@ -74,7 +74,7 @@ export const PWAInstallButton: React.FC = () => {
             </div>
             <div className="min-w-0">
               <h4 className="text-xs font-black uppercase text-military-100 tracking-wide">
-                Usar Aplicativo Off-line (iOS)
+                Instalar Aplicativo Off-line (iOS)
               </h4>
               <p className="text-[11px] text-military-400 font-medium truncate">
                 Adicione à Tela de Início do iPhone
@@ -148,7 +148,7 @@ export const PWAInstallButton: React.FC = () => {
     <>
       <div 
         id="pwa-install-banner-fallback"
-        className="w-full bg-military-800 border border-military-700 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md mb-3"
+        className="w-full bg-military-800 border border-military-700 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-md mt-2 mb-2"
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-military-700 text-military-200 flex items-center justify-center shrink-0">
@@ -156,7 +156,7 @@ export const PWAInstallButton: React.FC = () => {
           </div>
           <div className="min-w-0">
             <h4 className="text-xs font-black uppercase text-military-100 tracking-wide">
-              Instalar Aplicativo (Off-line)
+              Instalar Aplicativo Off-line
             </h4>
             <p className="text-[11px] text-military-400 font-medium truncate">
               Funciona 100% autônomo sem internet

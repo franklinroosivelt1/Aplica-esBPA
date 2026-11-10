@@ -28,6 +28,10 @@ export interface SicarProperty {
   situacao: string;
   proprietario: string;
   dataCadastro: string;
+  dataAtualizacao?: string;
+  moduloFiscal?: string;
+  tipoImovel?: string;
+  condicao?: string;
   reservaLegalHa: string;
   appHa: string;
   layerId?: string;
@@ -131,15 +135,17 @@ export function computeBoundingBox(geom: any): [number, number, number, number] 
 }
 
 // Normalized fuzzy attribute finder for SICAR
-export function findAttributeValue(props: Record<string, any>, candidates: string[]): string {
+export function findAttributeValue(props: Record<string, any>, candidates: string[], excludeKeys: string[] = []): string {
   const notAvailable = "Informação não disponível nesta base.";
   if (!props || typeof props !== 'object') return notAvailable;
 
+  const normalizedExcludes = excludeKeys.map(k => k.toLowerCase().replace(/[^a-z0-9]/g, ''));
   const keys = Object.keys(props);
   const normalizedMap: Record<string, any> = {};
 
   for (const k of keys) {
     const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (normalizedExcludes.includes(cleanKey)) continue;
     normalizedMap[cleanKey] = props[k];
   }
 
@@ -154,11 +160,12 @@ export function findAttributeValue(props: Record<string, any>, candidates: strin
     }
   }
 
-  // 2. Substring matching
+  // 2. Substring matching (only if candidates are >= 4 chars to avoid false positives)
   for (const cand of candidates) {
     const cleanCand = cand.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanCand.length < 4) continue;
     for (const normKey of Object.keys(normalizedMap)) {
-      if (normKey.includes(cleanCand) || cleanCand.includes(normKey)) {
+      if (normKey.includes(cleanCand) || (cleanCand.length >= 6 && cleanCand.includes(normKey))) {
         const val = normalizedMap[normKey];
         if (val !== undefined && val !== null && String(val).trim() !== '') {
           return String(val).trim();
@@ -187,34 +194,83 @@ export function mapFeatureToSicarProperty(feature: any, index: number): SicarPro
   const props = feature.properties || {};
   const bbox = computeBoundingBox(feature.geometry);
 
-  const numCar = findAttributeValue(props, [
-    'numero_car', 'num_car', 'recibo', 'num_recibo', 'numero_rec', 'car', 'numcar', 'cod_recibo'
+  // 1. Número do CAR / Código do Imóvel
+  let numCar = findAttributeValue(props, [
+    'numero_car', 'num_car', 'recibo', 'num_recibo', 'numero_rec', 'car', 'numcar', 'cod_recibo', 'cod_imovel', 'codigo_imovel', 'cod_car'
   ]);
 
-  const codImovel = findAttributeValue(props, [
-    'cod_imovel', 'imovel', 'cod_car', 'codigo_imovel', 'cod_sicar', 'id_imovel', 'codigo'
+  let codImovel = findAttributeValue(props, [
+    'cod_imovel', 'imovel', 'cod_car', 'codigo_imovel', 'cod_sicar', 'id_imovel', 'codigo', 'numero_car', 'num_car'
   ]);
 
+  // Synchronize: In federal SICAR, cod_imovel IS the primary CAR number (e.g. AC-1200013-8AD71252...)
+  if (numCar.includes('não disponível') && !codImovel.includes('não disponível')) {
+    numCar = codImovel;
+  }
+  if (codImovel.includes('não disponível') && !numCar.includes('não disponível')) {
+    codImovel = numCar;
+  }
+
+  // 2. Município
   const municipio = findAttributeValue(props, [
     'municipio', 'mun', 'nom_mun', 'municip', 'cidade', 'nome_munic', 'municipio_nome'
   ]);
 
+  // 3. Área em Hectares
   const rawArea = findAttributeValue(props, [
     'area', 'area_ha', 'num_area', 'area_total', 'area_prop', 'areaha', 'area_calc', 'hectares'
   ]);
 
-  const situacao = findAttributeValue(props, [
+  // 4. Situação Cadastral & Condição de Análise
+  let situacao = findAttributeValue(props, [
     'situacao', 'status', 'ind_status', 'des_condic', 'sit_cadast', 'condicao', 'status_car'
   ]);
+  // Decode official federal SICAR status codes: AT, PE, CA, SU
+  if (situacao === 'AT') situacao = 'Ativo / Inscrito';
+  else if (situacao === 'PE') situacao = 'Pendente';
+  else if (situacao === 'CA') situacao = 'Cancelado';
+  else if (situacao === 'SU') situacao = 'Suspenso';
 
+  const desCondic = findAttributeValue(props, ['des_condic', 'condicao_analise', 'condicao']);
+  if (desCondic && !desCondic.includes('não disponível') && desCondic !== situacao) {
+    if (!situacao.includes('não disponível')) {
+      situacao = `${situacao} (${desCondic})`;
+    } else {
+      situacao = desCondic;
+    }
+  }
+
+  // 5. Titular / Proprietário
+  // Exclude 'nom_tema' and 'cod_tema' so they are never falsely matched as owner
   const proprietario = findAttributeValue(props, [
-    'proprietario', 'possuidor', 'detentor', 'nome', 'titular', 'nom_pessoa', 'propriet', 'responsavel', 'nome_proprietario'
-  ]);
+    'proprietario', 'possuidor', 'detentor', 'titular', 'nom_pessoa', 'propriet', 'responsavel', 'nome_proprietario', 'nom_prop', 'prop', 'nome_prop', 'declarante', 'interessad', 'interessado', 'solicitante', 'produtor', 'cpf_cnpj', 'cpf', 'cnpj', 'razao_social', 'razao_soc', 'beneficiar', 'beneficiario', 'nome'
+  ], ['nom_tema', 'cod_tema', 'nomtema', 'codtema', 'tema']);
 
+  // 6. Módulo Fiscal
+  const rawModFiscal = findAttributeValue(props, ['mod_fiscal', 'modulo_fiscal', 'modulos_fiscais', 'num_mod_fi']);
+  const moduloFiscal = (!rawModFiscal || rawModFiscal.includes('não disponível')) 
+    ? undefined 
+    : `${parseFloat(rawModFiscal.replace(',', '.')).toFixed(2)} MF`;
+
+  // 7. Tipo de Imóvel
+  let tipoImovel = findAttributeValue(props, ['ind_tipo', 'tipo_imovel', 'tipo', 'des_tipo', 'tipo_propriedade']);
+  if (tipoImovel === 'IRU') tipoImovel = 'Imóvel Rural Privado';
+  else if (tipoImovel === 'AST') tipoImovel = 'Assentamento da Reforma Agrária';
+  else if (tipoImovel === 'PCT') tipoImovel = 'Povos e Comunidades Tradicionais';
+  else if (tipoImovel === 'TI') tipoImovel = 'Terra Indígena';
+  else if (tipoImovel === 'UC') tipoImovel = 'Unidade de Conservação';
+  else if (tipoImovel === 'PLS') tipoImovel = 'Posse Declarada';
+
+  // 8. Datas
   const dataCadastro = findAttributeValue(props, [
-    'data_cadastro', 'dat_cadast', 'data_cad', 'dt_cadastr', 'dt_cadastro', 'cadastrado', 'data_registro'
+    'data_cadastro', 'dat_cadast', 'data_cad', 'dt_cadastr', 'dt_cadastro', 'cadastrado', 'data_registro', 'dat_criaca', 'data_criacao'
   ]);
 
+  const dataAtualizacao = findAttributeValue(props, [
+    'dat_atuali', 'data_atualizacao', 'dt_atualiza', 'atualizacao', 'data_atuali'
+  ]);
+
+  // 9. Reserva Legal & APP
   const rawRL = findAttributeValue(props, [
     'reserva_legal', 'arl_ha', 'area_rl', 'rl_ha', 'num_arl', 'reserva_ha', 'area_reserva'
   ]);
@@ -235,6 +291,10 @@ export function mapFeatureToSicarProperty(feature: any, index: number): SicarPro
     situacao,
     proprietario,
     dataCadastro,
+    dataAtualizacao: dataAtualizacao.includes('não disponível') ? undefined : dataAtualizacao,
+    moduloFiscal,
+    tipoImovel: tipoImovel.includes('não disponível') ? undefined : tipoImovel,
+    condicao: desCondic.includes('não disponível') ? undefined : desCondic,
     reservaLegalHa: formatAreaHa(rawRL),
     appHa: formatAreaHa(rawAPP),
   };

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Camera, 
@@ -22,6 +22,22 @@ import BuscarMandados from './views/BuscarMandados';
 import DiarioDeBordo from './views/DiarioDeBordo';
 import { OfflineIndicator } from './components/OfflineIndicator';
 
+// Verificação de conectividade prévia antes de inicializar ou renderizar a interface
+const isInitialOfflineMode = (): boolean => {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return true;
+  }
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('bpa_force_offline_cache') === 'true') {
+      return true;
+    }
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('bpa_offline_mode') === 'true') {
+      return true;
+    }
+  } catch (e) {}
+  return false;
+};
+
 function LoadingView({ message = "Carregando módulo..." }: { message?: string }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-8 bg-military-900 border border-military-850 rounded-3xl m-4">
@@ -32,16 +48,49 @@ function LoadingView({ message = "Carregando módulo..." }: { message?: string }
   );
 }
 
-
 export type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar' | 'diariodebordo';
 
 export default function App() {
+  // Estado 'offline-mode' que desabilita componentes dependentes de rede antes mesmo de renderizar a interface
+  const [offlineMode, setOfflineMode] = useState<boolean>(isInitialOfflineMode);
   const [currentView, setCurrentView] = useState<View>('home');
+
+  useEffect(() => {
+    const handleOffline = () => {
+      console.log('[BPA App] navigator.onLine = false: Estado offline-mode ativado');
+      setOfflineMode(true);
+      document.documentElement.setAttribute('data-offline-mode', 'true');
+    };
+
+    const handleOnline = () => {
+      console.log('[BPA App] navigator.onLine = true: Conexão detectada');
+      setOfflineMode(false);
+      document.documentElement.removeAttribute('data-offline-mode');
+      try {
+        localStorage.removeItem('bpa_force_offline_cache');
+        sessionStorage.removeItem('bpa_offline_mode');
+      } catch (e) {}
+    };
+
+    if (offlineMode) {
+      document.documentElement.setAttribute('data-offline-mode', 'true');
+    } else {
+      document.documentElement.removeAttribute('data-offline-mode');
+    }
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [offlineMode]);
 
   const renderView = () => {
     switch (currentView) {
       case 'home':
-        return <Home onNavigate={setCurrentView} />;
+        return <Home onNavigate={setCurrentView} offlineMode={offlineMode} />;
       case 'camstamp':
         return <CamStamp onBack={() => setCurrentView('home')} />;
       case 'cubagem':
@@ -54,26 +103,15 @@ export default function App() {
         return (
           <div className="flex flex-col items-center justify-center min-h-[70vh] text-center p-6 bg-military-900 border border-military-850 rounded-3xl m-4">
             <div className="p-4 bg-military-800 rounded-3xl border border-military-700/60 inline-flex mb-4">
-              <Shield className="w-12 h-12 text-military-300 animate-pulse" />
+              <Shield className="w-12 h-12 text-military-300" />
             </div>
-            <h2 className="text-2xl font-black uppercase tracking-tight text-military-100">Verificar CAR</h2>
-            <p className="text-[10px] text-military-450 uppercase tracking-widest font-black mt-1 mb-6">Consulta de Coordenada Geográfica</p>
-            
-            <div className="bg-black/50 border border-military-850 p-5 rounded-2xl text-left w-full max-w-sm text-xs font-mono text-military-200 leading-relaxed mb-8 flex flex-col gap-3">
-              <div>
-                <span className="text-yellow-500 font-black uppercase block mb-1">🔍 Nota Operacional:</span>
-                Verificação de imóvel rural no Cadastro Ambiental Rural (CAR) a partir de coordenadas geográficas de satélite.
-              </div>
-              <div className="border-t border-military-800/60 pt-2 text-[10px] text-military-450 italic">
-                * Conectividade com sistemas externos integrada com sucesso. O processamento dos polígonos será tratado em etapa subsequente.
-              </div>
-            </div>
+            <h2 className="text-2xl font-black uppercase tracking-tight text-military-100 mb-6">Verificar CAR</h2>
 
             <button 
               onClick={() => setCurrentView('home')}
               className="px-6 py-3 bg-military-300 hover:bg-military-200 text-military-950 font-black rounded-xl uppercase text-xs tracking-widest shadow-lg transition-all active:scale-95"
             >
-              Voltar de Imóveis
+              Voltar
             </button>
           </div>
         );
@@ -84,7 +122,7 @@ export default function App() {
       case 'bpaoperacional':
         return <BpaOperacional onBack={() => setCurrentView('home')} />;
       default:
-        return <Home onNavigate={setCurrentView} />;
+        return <Home onNavigate={setCurrentView} offlineMode={offlineMode} />;
     }
   };
 
