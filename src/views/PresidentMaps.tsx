@@ -37,7 +37,8 @@ import {
   ExternalLink,
   Edit3,
   AlertTriangle,
-  Search
+  Search,
+  SlidersHorizontal
 } from 'lucide-react';
 import { decimalToDMS } from '../utils/coords';
 import brandLogo from '../assets/images/batalhao_ambiental_logo_1779854041969.png';
@@ -846,6 +847,15 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     }
   });
   const [kmlLayers, setKmlLayers] = useState<KmlData[]>([]);
+  const [openLayerOptions, setOpenLayerOptions] = useState<Record<string, boolean>>({});
+
+  const toggleLayerOptions = (layerId: string) => {
+    setOpenLayerOptions(prev => ({
+      ...prev,
+      [layerId]: !prev[layerId]
+    }));
+  };
+
   const [baseMap, setBaseMap] = useState<BaseMapType>(() => {
     const saved = localStorage.getItem('president_base_map');
     return (saved as BaseMapType) || 'satellite';
@@ -5397,10 +5407,10 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           return (
                             <div 
                               key={m.id}
-                              className={`rounded-2xl border transition-all duration-200 overflow-hidden shadow-sm ${
+                              className={`rounded-2xl border-2 transition-all duration-200 overflow-hidden shadow-md ${
                                 isActive 
-                                  ? 'bg-military-850/95 border-emerald-600/70 shadow-emerald-950/20 shadow-md' 
-                                  : 'bg-military-900/70 border-military-800/80 opacity-70 hover:opacity-95'
+                                  ? 'bg-military-850/95 border-emerald-500/80 shadow-emerald-950/30 ring-1 ring-emerald-400/25' 
+                                  : 'bg-military-900/85 border-military-600/90 hover:border-military-500 opacity-80 hover:opacity-100 ring-1 ring-white/10'
                               }`}
                             >
                               {/* Header com nível de camada e botões Subir/Descer */}
@@ -5461,17 +5471,18 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                         });
                                       }
                                     }}
-                                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border font-mono text-[10px] font-black uppercase transition-all active:scale-95 cursor-pointer ${
+                                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border font-mono text-[10px] font-bold uppercase transition-all active:scale-95 cursor-pointer ${
                                       isActive 
-                                        ? 'bg-emerald-600/25 border-emerald-500/60 text-emerald-300 shadow-sm' 
-                                        : 'bg-military-800 border-military-700/80 text-military-400 hover:text-military-200'
+                                        ? 'bg-military-750 border-emerald-500/80 text-military-100 shadow-xs' 
+                                        : 'bg-military-800 hover:bg-military-750 border-military-700/80 text-military-300 hover:text-military-100'
                                     }`}
                                     id={`btn-view-${m.id}`}
                                   >
                                     {isActive ? (
                                       <>
+                                        <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 shadow-xs shadow-emerald-400" />
                                         <Eye className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                        <span>Ativo</span>
+                                        <span className="text-military-100 font-extrabold">Ativo</span>
                                       </>
                                     ) : (
                                       <>
@@ -5615,18 +5626,19 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           const isVisible = k.visible;
                           const currentColor = k.color || '#eab308';
                           const currentThickness = k.thickness || 'grossa';
+                          const isOptionsOpen = !!openLayerOptions[k.id];
 
                           return (
                             <div 
                               key={k.id}
-                              className={`rounded-2xl border transition-all duration-200 overflow-hidden shadow-sm ${
+                              className={`rounded-2xl border-2 transition-all duration-200 overflow-hidden shadow-md ${
                                 isVisible 
-                                  ? 'bg-military-850/95 border-military-700 hover:border-blue-500/60 shadow-military-950/40' 
-                                  : 'bg-military-900/70 border-military-800/80 opacity-70 hover:opacity-95'
+                                  ? 'bg-military-850/95 border-military-600 hover:border-blue-500/70 shadow-military-950/40 ring-1 ring-white/10' 
+                                  : 'bg-military-900/85 border-military-700/90 opacity-80 hover:opacity-100 ring-1 ring-white/5'
                               }`}
                             >
-                              {/* 1. Header: Indicador de cor, Nome e Contagem de feições */}
-                              <div className="p-3.5 pb-2.5 bg-military-900/60 border-b border-military-750/50">
+                              {/* 1. Header: Indicador de cor, Nome, Contagem de feições e Botão OPÇÕES */}
+                              <div className="p-3.5 bg-military-900/70">
                                 <div className="flex items-start justify-between gap-2.5">
                                   <div className="flex items-start gap-2.5 min-w-0 flex-1">
                                     <span 
@@ -5654,166 +5666,181 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                                       </div>
                                     </div>
                                   </div>
-                                </div>
 
-                                {/* 2. Barra de Ações: Focar, Visibilidade, Excluir */}
-                                <div className="grid grid-cols-3 gap-1.5 mt-3 pt-2 border-t border-military-800/80">
-                                  {/* Botão Focar */}
+                                  {/* Botão OPÇÕES para alternar/ocultar as alterações */}
                                   <button
                                     type="button"
-                                    onClick={() => focusOnLayer(k)}
-                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-military-800 hover:bg-military-750 border border-military-700/80 text-military-200 hover:text-blue-300 font-mono text-[10px] font-bold uppercase transition-all active:scale-95 cursor-pointer"
-                                    title="Centralizar e visualizar limites no mapa"
-                                  >
-                                    <Maximize2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                                    <span>Focar</span>
-                                  </button>
-
-                                  {/* Botão Visibilidade */}
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleKmlVisible(k.id)}
-                                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border font-mono text-[10px] font-black uppercase transition-all active:scale-95 cursor-pointer ${
-                                      isVisible
-                                        ? 'bg-blue-600/25 border-blue-500/60 text-blue-300 shadow-sm'
-                                        : 'bg-military-800 border-military-700/80 text-military-400 hover:text-military-200'
+                                    onClick={() => toggleLayerOptions(k.id)}
+                                    className={`flex items-center gap-1.5 py-1.5 px-2.5 rounded-xl border font-mono text-[10.5px] font-bold uppercase transition-all active:scale-95 cursor-pointer shrink-0 ${
+                                      isOptionsOpen
+                                        ? 'bg-military-750 border-military-500 text-military-100 shadow-xs'
+                                        : 'bg-military-800 hover:bg-military-750 border-military-700/90 text-military-300 hover:text-military-100'
                                     }`}
-                                    title={isVisible ? "Ocultar camada do mapa" : "Exibir camada no mapa"}
+                                    title={isOptionsOpen ? "Ocultar opções de alteração" : "Exibir opções de alteração"}
                                   >
-                                    {isVisible ? (
-                                      <>
-                                        <Eye className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                                        <span>Ativa</span>
-                                      </>
+                                    <SlidersHorizontal className="w-3.5 h-3.5 text-military-300" />
+                                    <span>Opções</span>
+                                    {isOptionsOpen ? (
+                                      <ChevronUp className="w-3.5 h-3.5 text-military-400" />
                                     ) : (
-                                      <>
-                                        <EyeOff className="w-3.5 h-3.5 text-military-400 shrink-0" />
-                                        <span>Oculta</span>
-                                      </>
+                                      <ChevronDown className="w-3.5 h-3.5 text-military-400" />
                                     )}
                                   </button>
-
-                                  {/* Botão Excluir */}
-                                  <button
-                                    type="button"
-                                    onClick={() => removeKml(k.id, k.name)}
-                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-military-800 hover:bg-red-950/40 border border-military-700/80 hover:border-red-600/50 text-military-300 hover:text-red-300 font-mono text-[10px] font-bold uppercase transition-all active:scale-95 cursor-pointer"
-                                    title="Excluir camada permanentemente"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                                    <span>Excluir</span>
-                                  </button>
                                 </div>
                               </div>
 
-                              {/* 3. Painel de Atributos: Cores e Espessura */}
-                              <div className="p-3.5 space-y-3 bg-military-850/40 border-t border-military-800/60">
-                                {/* Seletor de Cores */}
-                                <div className="space-y-1.5">
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-mono text-[9.5px] text-military-300 uppercase font-black tracking-wider">
-                                      Cor das Linhas:
-                                    </span>
-                                    <span className="font-mono text-[9px] text-military-400 font-bold uppercase">
-                                      {
-                                        currentColor.toLowerCase() === '#eab308' ? 'Âmbar' :
-                                        currentColor.toLowerCase() === '#3b82f6' ? 'Azul' :
-                                        currentColor.toLowerCase() === '#ffffff' ? 'Branco' :
-                                        currentColor.toLowerCase() === '#16a34a' ? 'Verde' :
-                                        currentColor.toLowerCase() === '#dc2626' ? 'Vermelho' :
-                                        currentColor.toLowerCase() === '#f97316' ? 'Laranja' : 'Personalizada'
-                                      }
-                                    </span>
-                                  </div>
-
-                                  <div className="flex items-center justify-between gap-1.5 pt-0.5">
-                                    {[
-                                      { name: 'Âmbar Tático', hex: '#eab308' },
-                                      { name: 'Azul Militar', hex: '#3b82f6' },
-                                      { name: 'Branco Alta Visibilidade', hex: '#ffffff' },
-                                      { name: 'Verde Oliva', hex: '#16a34a' },
-                                      { name: 'Vermelho Operacional', hex: '#dc2626' },
-                                      { name: 'Laranja Ocre', hex: '#f97316' },
-                                    ].map(colorOption => {
-                                      const isSelected = currentColor.toLowerCase() === colorOption.hex.toLowerCase();
-                                      return (
-                                        <button
-                                          key={colorOption.hex}
-                                          type="button"
-                                          onClick={() => changeKmlColor(k.id, colorOption.hex)}
-                                          style={{ backgroundColor: colorOption.hex }}
-                                          className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm relative ${
-                                            isSelected
-                                              ? 'ring-2 ring-white ring-offset-2 ring-offset-military-900 scale-110'
-                                              : 'opacity-80 hover:opacity-100 hover:scale-105 border border-white/20'
-                                          }`}
-                                          title={colorOption.name}
-                                        >
-                                          {isSelected && (
-                                            <Check 
-                                              className={`w-3.5 h-3.5 stroke-[3] ${
-                                                colorOption.hex === '#ffffff' ? 'text-black' : 'text-white'
-                                              }`} 
-                                            />
-                                          )}
-                                        </button>
-                                      );
-                                    })}
-
-                                    {/* Seletor Customizado */}
-                                    <label 
-                                      className={`relative cursor-pointer w-7 h-7 rounded-xl flex items-center justify-center overflow-hidden bg-gradient-to-tr from-amber-500 via-blue-500 to-red-500 transition-all shadow-sm ${
-                                        !['#eab308', '#3b82f6', '#ffffff', '#16a34a', '#dc2626', '#f97316'].includes(currentColor.toLowerCase())
-                                          ? 'ring-2 ring-white ring-offset-2 ring-offset-military-900 scale-110'
-                                          : 'opacity-85 hover:opacity-100 hover:scale-105 border border-white/30'
+                              {/* Painel de Alterações (Ocultado ou Exibido pelo Botão Opções) */}
+                              {isOptionsOpen && (
+                                <div className="border-t border-military-800/80 bg-military-850/40">
+                                  {/* 2. Barra de Ações: Ocultar / Ativa e Excluir (BOTÃO FOCAR EXCLUÍDO) */}
+                                  <div className="p-3 grid grid-cols-2 gap-2 bg-military-900/40">
+                                    {/* Botão Visibilidade (Ativa / Oculta) com tonalidade coerente e texto nítido */}
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleKmlVisible(k.id)}
+                                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border font-mono text-[10px] font-bold uppercase transition-all active:scale-95 cursor-pointer ${
+                                        isVisible
+                                          ? 'bg-military-750 border-blue-500/80 text-military-100 shadow-xs'
+                                          : 'bg-military-800 hover:bg-military-750 border-military-700/80 text-military-300 hover:text-military-100'
                                       }`}
-                                      title="Cor Personalizada"
+                                      title={isVisible ? "Ocultar camada do mapa" : "Exibir camada no mapa"}
                                     >
-                                      <input 
-                                        type="color"
-                                        value={currentColor}
-                                        onChange={(e) => changeKmlColor(k.id, e.target.value)}
-                                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                      />
-                                      <span className="text-[10px] font-black text-white drop-shadow-sm select-none">+</span>
-                                    </label>
-                                  </div>
-                                </div>
+                                      {isVisible ? (
+                                        <>
+                                          <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0 shadow-xs shadow-blue-400" />
+                                          <Eye className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                          <span className="text-military-100 font-extrabold">Ativa</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <EyeOff className="w-3.5 h-3.5 text-military-400 shrink-0" />
+                                          <span>Oculta</span>
+                                        </>
+                                      )}
+                                    </button>
 
-                                {/* Seletor de Espessura */}
-                                <div className="space-y-1.5 pt-1 border-t border-military-750/30">
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-mono text-[9.5px] text-military-300 uppercase font-black tracking-wider">
-                                      Espessura da Linha:
-                                    </span>
+                                    {/* Botão Excluir */}
+                                    <button
+                                      type="button"
+                                      onClick={() => removeKml(k.id, k.name)}
+                                      className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-military-800 hover:bg-red-950/40 border border-military-700/80 hover:border-red-600/50 text-military-200 hover:text-red-300 font-mono text-[10px] font-bold uppercase transition-all active:scale-95 cursor-pointer"
+                                      title="Excluir camada permanentemente"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                                      <span>Excluir</span>
+                                    </button>
                                   </div>
 
-                                  <div className="grid grid-cols-3 gap-1 bg-military-900/80 p-1 rounded-xl border border-military-700/60">
-                                    {[
-                                      { name: 'Fina', value: 'fina', desc: '1 px' },
-                                      { name: 'Média', value: 'media', desc: '2.5 px' },
-                                      { name: 'Grossa', value: 'grossa', desc: '4 px' },
-                                    ].map(thicknessOption => {
-                                      const isActive = currentThickness === thicknessOption.value;
-                                      return (
-                                        <button
-                                          key={thicknessOption.value}
-                                          type="button"
-                                          onClick={() => changeKmlThickness(k.id, thicknessOption.value as 'grossa' | 'media' | 'fina')}
-                                          className={`py-1.5 px-2 rounded-lg font-mono text-[10px] font-black uppercase transition-all flex flex-col items-center justify-center cursor-pointer ${
-                                            isActive
-                                              ? 'bg-military-600 text-white shadow-xs border border-military-400/40'
-                                              : 'text-military-400 hover:text-military-100 hover:bg-military-800/60'
+                                  {/* 3. Painel de Atributos: Cores e Espessura */}
+                                  <div className="p-3.5 space-y-3 border-t border-military-800/60">
+                                    {/* Seletor de Cores */}
+                                    <div className="space-y-1.5">
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-mono text-[9.5px] text-military-300 uppercase font-black tracking-wider">
+                                          Cor das Linhas:
+                                        </span>
+                                        <span className="font-mono text-[9px] text-military-400 font-bold uppercase">
+                                          {
+                                            currentColor.toLowerCase() === '#eab308' ? 'Âmbar' :
+                                            currentColor.toLowerCase() === '#3b82f6' ? 'Azul' :
+                                            currentColor.toLowerCase() === '#ffffff' ? 'Branco' :
+                                            currentColor.toLowerCase() === '#16a34a' ? 'Verde' :
+                                            currentColor.toLowerCase() === '#dc2626' ? 'Vermelho' :
+                                            currentColor.toLowerCase() === '#f97316' ? 'Laranja' : 'Personalizada'
+                                          }
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                                        {[
+                                          { name: 'Âmbar Tático', hex: '#eab308' },
+                                          { name: 'Azul Militar', hex: '#3b82f6' },
+                                          { name: 'Branco Alta Visibilidade', hex: '#ffffff' },
+                                          { name: 'Verde Oliva', hex: '#16a34a' },
+                                          { name: 'Vermelho Operacional', hex: '#dc2626' },
+                                          { name: 'Laranja Ocre', hex: '#f97316' },
+                                        ].map(colorOption => {
+                                          const isSelected = currentColor.toLowerCase() === colorOption.hex.toLowerCase();
+                                          return (
+                                            <button
+                                              key={colorOption.hex}
+                                              type="button"
+                                              onClick={() => changeKmlColor(k.id, colorOption.hex)}
+                                              style={{ backgroundColor: colorOption.hex }}
+                                              className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm relative ${
+                                                isSelected
+                                                  ? 'ring-2 ring-white ring-offset-2 ring-offset-military-900 scale-110'
+                                                  : 'opacity-80 hover:opacity-100 hover:scale-105 border border-white/20'
+                                              }`}
+                                              title={colorOption.name}
+                                            >
+                                              {isSelected && (
+                                                <Check 
+                                                  className={`w-3.5 h-3.5 stroke-[3] ${
+                                                    colorOption.hex === '#ffffff' ? 'text-black' : 'text-white'
+                                                  }`} 
+                                                />
+                                              )}
+                                            </button>
+                                          );
+                                        })}
+
+                                        {/* Seletor Customizado */}
+                                        <label 
+                                          className={`relative cursor-pointer w-7 h-7 rounded-xl flex items-center justify-center overflow-hidden bg-gradient-to-tr from-amber-500 via-blue-500 to-red-500 transition-all shadow-sm ${
+                                            !['#eab308', '#3b82f6', '#ffffff', '#16a34a', '#dc2626', '#f97316'].includes(currentColor.toLowerCase())
+                                              ? 'ring-2 ring-white ring-offset-2 ring-offset-military-900 scale-110'
+                                              : 'opacity-85 hover:opacity-100 hover:scale-105 border border-white/30'
                                           }`}
+                                          title="Cor Personalizada"
                                         >
-                                          <span>{thicknessOption.name}</span>
-                                          <span className="text-[7.5px] font-normal opacity-70">{thicknessOption.desc}</span>
-                                        </button>
-                                      );
-                                    })}
+                                          <input 
+                                            type="color"
+                                            value={currentColor}
+                                            onChange={(e) => changeKmlColor(k.id, e.target.value)}
+                                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                          />
+                                          <span className="text-[10px] font-black text-white drop-shadow-sm select-none">+</span>
+                                        </label>
+                                      </div>
+                                    </div>
+
+                                    {/* Seletor de Espessura */}
+                                    <div className="space-y-1.5 pt-1 border-t border-military-750/30">
+                                      <div className="flex items-center justify-between">
+                                        <span className="font-mono text-[9.5px] text-military-300 uppercase font-black tracking-wider">
+                                          Espessura da Linha:
+                                        </span>
+                                      </div>
+
+                                      <div className="grid grid-cols-3 gap-1 bg-military-900/80 p-1 rounded-xl border border-military-700/60">
+                                        {[
+                                          { name: 'Fina', value: 'fina', desc: '1 px' },
+                                          { name: 'Média', value: 'media', desc: '2.5 px' },
+                                          { name: 'Grossa', value: 'grossa', desc: '4 px' },
+                                        ].map(thicknessOption => {
+                                          const isActive = currentThickness === thicknessOption.value;
+                                          return (
+                                            <button
+                                              key={thicknessOption.value}
+                                              type="button"
+                                              onClick={() => changeKmlThickness(k.id, thicknessOption.value as 'grossa' | 'media' | 'fina')}
+                                              className={`py-1.5 px-2 rounded-lg font-mono text-[10px] font-black uppercase transition-all flex flex-col items-center justify-center cursor-pointer ${
+                                                isActive
+                                                  ? 'bg-military-600 text-white shadow-xs border border-military-400/40'
+                                                  : 'text-military-400 hover:text-military-100 hover:bg-military-800/60'
+                                              }`}
+                                            >
+                                              <span>{thicknessOption.name}</span>
+                                              <span className="text-[7.5px] font-normal opacity-70">{thicknessOption.desc}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
+                              )}
                             </div>
                           );
                         })
