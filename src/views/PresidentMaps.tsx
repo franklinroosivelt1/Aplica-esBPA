@@ -5378,13 +5378,13 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                         <p className="font-mono text-[9px] text-military-400 tracking-wider">NENHUM MAPA GEO ANEXADO</p>
                       </div>
                     ) : (
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between px-2 py-1.5 bg-military-900 rounded-lg border border-military-750">
-                          <span className="font-mono text-[8px] text-military-350 uppercase font-black tracking-wider">
-                            ORGANIZAR SOBREPOSIÇÃO ({importedMaps.length} MAPAS)
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between px-3 py-2 bg-military-900/90 rounded-xl border border-military-750">
+                          <span className="font-mono text-[9px] text-military-300 uppercase font-black tracking-wider">
+                            Organizar Sobreposição ({importedMaps.length} {importedMaps.length === 1 ? 'Mapa' : 'Mapas'})
                           </span>
-                          <span className="font-mono text-[7.5px] text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-1.5 py-0.5 rounded font-bold uppercase">
-                            TOPO ➔ BASE
+                          <span className="font-mono text-[8.5px] text-emerald-400 bg-emerald-950/70 border border-emerald-700/60 px-2 py-0.5 rounded-md font-black uppercase">
+                            Topo ➔ Base
                           </span>
                         </div>
 
@@ -5392,129 +5392,158 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           const realIdx = importedMaps.length - 1 - reverseIdx;
                           const isTop = realIdx === importedMaps.length - 1;
                           const isBase = realIdx === 0;
+                          const isActive = activeMapIds.includes(m.id);
 
                           return (
                             <div 
                               key={m.id}
-                              className={`flex flex-col border p-2.5 rounded-xl transition-all ${activeMapIds.includes(m.id) ? 'border-emerald-600 bg-military-800/90 shadow-md shadow-emerald-500/5' : 'border-military-750 bg-military-850/60 hover:border-military-600'}`}
+                              className={`rounded-2xl border transition-all duration-200 overflow-hidden shadow-sm ${
+                                isActive 
+                                  ? 'bg-military-850/95 border-emerald-600/70 shadow-emerald-950/20 shadow-md' 
+                                  : 'bg-military-900/70 border-military-800/80 opacity-70 hover:opacity-95'
+                              }`}
                             >
-                              {/* Layer badge and reorder buttons bar */}
-                              <div className="flex items-center justify-between mb-1.5 px-2 py-1 bg-military-900 rounded-lg border border-military-750 font-mono text-[8px]">
-                                <div className="flex items-center gap-1.5">
-                                  <span className={`w-2 h-2 rounded-full ${isTop ? 'bg-emerald-400 animate-pulse' : isBase ? 'bg-blue-400' : 'bg-military-400'}`} />
-                                  <span className="font-black text-military-200 uppercase tracking-wide">
-                                    {isTop ? 'CAMADA TOPO (SOBREPOSTO)' : isBase ? 'CAMADA BASE (FUNDO)' : `CAMADA INTERMEDIÁRIA ${realIdx + 1}`}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    onClick={() => moveMapLayer(realIdx, 'up')}
-                                    disabled={isTop}
-                                    className="px-2 py-0.5 bg-military-800 hover:bg-military-700 disabled:opacity-25 disabled:hover:bg-military-800 border border-military-700 rounded text-emerald-300 font-sans text-[8px] font-bold uppercase flex items-center gap-0.5 cursor-pointer transition-all"
-                                    title="Sobrepor (Ficar por cima dos outros mapas)"
-                                  >
-                                    <ArrowUp className="w-2.5 h-2.5 text-emerald-400" />
-                                    <span>Subir</span>
-                                  </button>
-                                  <button
-                                    onClick={() => moveMapLayer(realIdx, 'down')}
-                                    disabled={isBase}
-                                    className="px-2 py-0.5 bg-military-800 hover:bg-military-700 disabled:opacity-25 disabled:hover:bg-military-800 border border-military-700 rounded text-military-300 font-sans text-[8px] font-bold uppercase flex items-center gap-0.5 cursor-pointer transition-all"
-                                    title="Ficar por baixo (Enviar para trás)"
-                                  >
-                                    <ArrowDown className="w-2.5 h-2.5 text-blue-400" />
-                                    <span>Descer</span>
-                                  </button>
-                                </div>
-                              </div>
+                              {/* Header com nível de camada e botões Subir/Descer */}
+                              <div className="p-3.5 pb-2.5 bg-military-900/60 border-b border-military-750/50">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isTop ? 'bg-emerald-400 shadow-sm shadow-emerald-400/60 animate-pulse' : isBase ? 'bg-blue-400' : 'bg-military-400'}`} />
+                                    <span className="font-mono text-[9.5px] font-black text-military-200 uppercase tracking-wide truncate">
+                                      {isTop ? 'Camada Topo (Sobreposta)' : isBase ? 'Camada Base (Fundo)' : `Camada Intermediária ${realIdx + 1}`}
+                                    </span>
+                                  </div>
 
-                              {/* Nome do mapa: Letreiro Digital contínuo */}
-                              <div className="bg-[#f1f5f9] border border-slate-200/60 rounded-md px-2 py-1 overflow-hidden whitespace-nowrap relative mb-1.5">
-                                <div className="inline-block animate-[marquee_45s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[10px] font-black uppercase tracking-normal text-slate-800 pr-8">
-                                  {m.name} &nbsp;&bull;&nbsp; {m.name} &nbsp;&bull;&nbsp; {m.name}
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => moveMapLayer(realIdx, 'up')}
+                                      disabled={isTop}
+                                      className="py-1 px-2 bg-military-800 hover:bg-military-750 disabled:opacity-30 disabled:hover:bg-military-800 border border-military-700 rounded-lg text-emerald-300 font-mono text-[9px] font-bold uppercase flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                                      title="Sobrepor (Ficar por cima)"
+                                    >
+                                      <ArrowUp className="w-3 h-3 text-emerald-400 shrink-0" />
+                                      <span>Subir</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => moveMapLayer(realIdx, 'down')}
+                                      disabled={isBase}
+                                      className="py-1 px-2 bg-military-800 hover:bg-military-750 disabled:opacity-30 disabled:hover:bg-military-800 border border-military-700 rounded-lg text-military-300 hover:text-military-100 disabled:hover:text-military-300 font-mono text-[9px] font-bold uppercase flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                                      title="Enviar para trás"
+                                    >
+                                      <ArrowDown className="w-3 h-3 text-blue-400 shrink-0" />
+                                      <span>Descer</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Nome do mapa em destaque e legível */}
+                                <h4 
+                                  className="font-sans text-xs sm:text-[13px] font-black uppercase text-military-100 tracking-wide leading-snug break-words"
+                                  title={m.name}
+                                >
+                                  {m.name}
+                                </h4>
+
+                                {/* Barra de Ações: Exibir/Ocultar, Compartilhar, Excluir */}
+                                <div className="grid grid-cols-3 gap-1.5 mt-3 pt-2 border-t border-military-800/80">
+                                  {/* Botão 1: Exibir / Ocultar */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (activeMapIds.includes(m.id)) {
+                                        setActiveMapIds(prev => prev.filter(id => id !== m.id));
+                                      } else {
+                                        setActiveMapIds(prev => [...prev, m.id]);
+                                        setCenter({
+                                          lat: m.topLeft.lat + (m.bottomRight.lat - m.topLeft.lat)/2,
+                                          lng: m.topLeft.lng + (m.bottomRight.lng - m.topLeft.lng)/2
+                                        });
+                                      }
+                                    }}
+                                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border font-mono text-[10px] font-black uppercase transition-all active:scale-95 cursor-pointer ${
+                                      isActive 
+                                        ? 'bg-emerald-600/25 border-emerald-500/60 text-emerald-300 shadow-sm' 
+                                        : 'bg-military-800 border-military-700/80 text-military-400 hover:text-military-200'
+                                    }`}
+                                    id={`btn-view-${m.id}`}
+                                  >
+                                    {isActive ? (
+                                      <>
+                                        <Eye className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                        <span>Ativo</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <EyeOff className="w-3.5 h-3.5 text-military-400 shrink-0" />
+                                        <span>Oculto</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  {/* Botão 2: Compartilhar */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleShareMap(m)}
+                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-military-800 hover:bg-military-750 border border-military-700/80 text-military-200 hover:text-emerald-300 font-mono text-[10px] font-bold uppercase transition-all active:scale-95 cursor-pointer"
+                                    title="Compartilhar Mapa"
+                                    id={`btn-share-${m.id}`}
+                                  >
+                                    <Share2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                    <span>Enviar</span>
+                                  </button>
+
+                                  {/* Botão 3: Excluir */}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeMap(m.id, m.name)}
+                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-military-800 hover:bg-red-950/40 border border-military-700/80 hover:border-red-600/50 text-military-300 hover:text-red-300 font-mono text-[10px] font-bold uppercase transition-all active:scale-95 cursor-pointer"
+                                    title="Excluir Permanentemente"
+                                    id={`btn-delete-${m.id}`}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                                    <span>Excluir</span>
+                                  </button>
                                 </div>
                               </div>
 
                               {/* Controle de Opacidade/Transparência para Sobreposição */}
-                              {activeMapIds.includes(m.id) && (
-                                <div className="mb-2 p-1.5 bg-military-900/70 border border-military-750/70 rounded-lg flex items-center justify-between text-[8px] font-mono">
-                                  <span className="text-military-400 uppercase font-bold">Transparência:</span>
-                                  <div className="flex gap-1">
+                              {isActive && (
+                                <div className="p-3.5 bg-military-850/40 border-t border-military-800/60">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <span className="font-mono text-[9.5px] text-military-300 uppercase font-black tracking-wider">
+                                      Opacidade / Transparência:
+                                    </span>
+                                    <span className="font-mono text-[9px] text-emerald-400 font-bold">
+                                      {Math.round((m.opacity ?? 1.0) * 100)}%
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-4 gap-1 bg-military-900/80 p-1 rounded-xl border border-military-700/60">
                                     {[
                                       { label: '100%', val: 1.0 },
                                       { label: '75%', val: 0.75 },
                                       { label: '50%', val: 0.5 },
                                       { label: '25%', val: 0.25 }
-                                    ].map(op => (
-                                      <button
-                                        key={op.label}
-                                        onClick={() => updateMapOpacity(m.id, op.val)}
-                                        className={`px-1.5 py-0.5 rounded text-[7.5px] font-black uppercase transition-all cursor-pointer ${
-                                          (m.opacity ?? 1.0) === op.val
-                                            ? 'bg-emerald-600 text-white border border-emerald-400'
-                                            : 'bg-military-800 border border-military-700 text-military-350 hover:text-military-200'
-                                        }`}
-                                      >
-                                        {op.label}
-                                      </button>
-                                    ))}
+                                    ].map(op => {
+                                      const isSelected = (m.opacity ?? 1.0) === op.val;
+                                      return (
+                                        <button
+                                          key={op.label}
+                                          type="button"
+                                          onClick={() => updateMapOpacity(m.id, op.val)}
+                                          className={`py-1.5 px-2 rounded-lg font-mono text-[10px] font-black uppercase transition-all cursor-pointer text-center ${
+                                            isSelected
+                                              ? 'bg-emerald-600 text-white shadow-xs border border-emerald-400/40'
+                                              : 'text-military-400 hover:text-military-100 hover:bg-military-800/60'
+                                          }`}
+                                        >
+                                          {op.label}
+                                        </button>
+                                      );
+                                    })}
                                   </div>
                                 </div>
                               )}
-                              
-                              {/* Três botões de ações mais compactos */}
-                              <div className="grid grid-cols-3 gap-1.5 border-t border-military-750/30 pt-1.5 mt-0.5">
-                                {/* Botão 1: Exibir / Ocultar */}
-                                <button
-                                  onClick={() => {
-                                    if (activeMapIds.includes(m.id)) {
-                                      setActiveMapIds(prev => prev.filter(id => id !== m.id));
-                                    } else {
-                                      setActiveMapIds(prev => [...prev, m.id]);
-                                      setCenter({
-                                        lat: m.topLeft.lat + (m.bottomRight.lat - m.topLeft.lat)/2,
-                                        lng: m.topLeft.lng + (m.bottomRight.lng - m.topLeft.lng)/2
-                                      });
-                                    }
-                                  }}
-                                  className={`flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border transition-all cursor-pointer ${activeMapIds.includes(m.id) ? 'bg-emerald-950/40 border-emerald-600 text-emerald-300 shadow-sm' : 'bg-military-800/40 border-military-700/60 text-military-300 hover:bg-military-800'}`}
-                                  id={`btn-view-${m.id}`}
-                                >
-                                  {activeMapIds.includes(m.id) ? (
-                                    <>
-                                      <Eye className="w-3 h-3 text-emerald-400 shrink-0" />
-                                      <span className="font-mono text-[8px] font-bold uppercase tracking-wider">Ocultar</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <EyeOff className="w-3 h-3 text-military-400 shrink-0" />
-                                      <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Exibir</span>
-                                    </>
-                                  )}
-                                </button>
-
-                                {/* Botão 2: Compartilhar */}
-                                <button
-                                  onClick={() => handleShareMap(m)}
-                                  className="flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border bg-military-800/40 border-military-700/60 text-military-300 hover:bg-military-800 hover:border-emerald-500/40 hover:text-emerald-300 transition-all cursor-pointer"
-                                  title="Compartilhar Mapa"
-                                  id={`btn-share-${m.id}`}
-                                >
-                                  <Share2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                                  <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Enviar</span>
-                                </button>
-
-                                {/* Botão 3: Excluir */}
-                                <button
-                                  onClick={() => removeMap(m.id, m.name)}
-                                  className="flex flex-col items-center justify-center gap-1 py-1 px-1 rounded-lg border bg-military-800/40 border-military-700/60 text-military-300 hover:bg-red-950/30 hover:border-red-500/40 hover:text-red-300 transition-all cursor-pointer"
-                                  title="Excluir Permanentemente"
-                                  id={`btn-delete-${m.id}`}
-                                >
-                                  <Trash2 className="w-3 h-3 text-red-400 shrink-0" />
-                                  <span className="font-mono text-[8px] font-bold uppercase tracking-wider font-semibold">Excluir</span>
-                                </button>
-                              </div>
                             </div>
                           );
                         })}
@@ -5582,127 +5611,212 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           <p className="font-mono text-[8px] text-military-500 mt-1">Anexe arquivos .gpkg ou .zip acima para visualizar as propriedades no mapa.</p>
                         </div>
                       ) : (
-                        kmlLayers.map(k => (
-                          <div 
-                            key={k.id}
-                            className="flex flex-col border border-military-750 bg-military-850/60 hover:border-military-600 p-3 rounded-xl transition-all"
-                          >
-                            {/* Nome com letreiro eletrônico */}
-                            <div className="bg-military-900/90 border border-military-700/80 rounded-lg px-2.5 py-1.5 overflow-hidden whitespace-nowrap relative mb-2">
-                              <div className="inline-block animate-[marquee_45s_linear_infinite] hover:[animation-play-state:paused] font-mono text-[11px] font-bold uppercase tracking-normal text-military-100 pr-12">
-                                {k.name} &nbsp;&bull;&nbsp; {k.name} &nbsp;&bull;&nbsp; {k.name}
-                              </div>
-                            </div>
+                        kmlLayers.map(k => {
+                          const isVisible = k.visible;
+                          const currentColor = k.color || '#eab308';
+                          const currentThickness = k.thickness || 'grossa';
 
-                            <div className="flex items-center justify-between border-t border-military-750/30 pt-2">
-                              <div className="flex flex-col gap-0.5">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-mono text-[8px] px-1 py-0.2 rounded bg-military-900 border border-military-700 text-blue-400 uppercase font-black">
-                                    {k.format ? k.format.toUpperCase() : 'VETORIAL'}
-                                  </span>
-                                  <span className="font-mono text-[7.5px] text-military-400 font-bold uppercase">
-                                    {k.features.length} feições
-                                  </span>
+                          return (
+                            <div 
+                              key={k.id}
+                              className={`rounded-2xl border transition-all duration-200 overflow-hidden shadow-sm ${
+                                isVisible 
+                                  ? 'bg-military-850/95 border-military-700 hover:border-blue-500/60 shadow-military-950/40' 
+                                  : 'bg-military-900/70 border-military-800/80 opacity-70 hover:opacity-95'
+                              }`}
+                            >
+                              {/* 1. Header: Indicador de cor, Nome e Contagem de feições */}
+                              <div className="p-3.5 pb-2.5 bg-military-900/60 border-b border-military-750/50">
+                                <div className="flex items-start justify-between gap-2.5">
+                                  <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                    <span 
+                                      className="w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 shadow-sm border border-white/20 transition-transform"
+                                      style={{ backgroundColor: currentColor }}
+                                      title={`Cor ativa: ${currentColor}`}
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                      <h4 
+                                        className="font-sans text-xs sm:text-[13px] font-black uppercase text-military-100 tracking-wide leading-snug break-words"
+                                        title={k.name}
+                                      >
+                                        {k.name}
+                                      </h4>
+                                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                        <span className="font-mono text-[9px] px-2 py-0.5 rounded-md bg-military-800 border border-military-700 text-blue-300 uppercase font-black tracking-wider">
+                                          {k.format ? k.format.toUpperCase() : 'VETORIAL'}
+                                        </span>
+                                        <span className="font-mono text-[10px] text-military-200 font-bold">
+                                          {k.features.length.toLocaleString('pt-BR')} feições
+                                        </span>
+                                        <span className="text-[9.5px] font-mono text-military-400">
+                                          • Sem preenchimento
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
-                                <span className="font-mono text-[7.5px] text-military-300 font-semibold">
-                                  Limites Sem Preenchimento
-                                </span>
-                              </div>
 
-                              <div className="flex items-center gap-1 bg-military-900/60 p-1 border border-military-700/80 rounded-lg scale-95 origin-right shrink-0">
-                                {/* Focus layer on map */}
-                                <button
-                                  onClick={() => focusOnLayer(k)}
-                                  className="p-1.5 rounded text-military-300 hover:text-blue-300 hover:bg-blue-950/30 transition-all"
-                                  title="Centralizar e visualizar no mapa"
-                                >
-                                  <Maximize2 className="w-3.5 h-3.5 shrink-0" />
-                                </button>
-                                
-                                {/* Toggle visibility */}
-                                <button
-                                  onClick={() => toggleKmlVisible(k.id)}
-                                  className={`p-1.5 rounded transition-all ${k.visible ? 'bg-blue-600/20 text-blue-400' : 'text-military-400 hover:text-military-100 hover:bg-military-700'}`}
-                                  title="Mostrar/Ocultar"
-                                >
-                                  {k.visible ? (
-                                    <Eye className="w-3.5 h-3.5 shrink-0" />
-                                  ) : (
-                                    <EyeOff className="w-3.5 h-3.5 shrink-0" />
-                                  )}
-                                </button>
-
-                                {/* Delete layer */}
-                                <button
-                                  onClick={() => removeKml(k.id, k.name)}
-                                  className="p-1.5 rounded text-military-400 hover:text-red-400 hover:bg-red-950/20 transition-all"
-                                  title="Excluir Camada"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Dynamic Color Selector Section */}
-                            <div className="flex items-center justify-between mt-2 pt-2 border-t border-military-750/20">
-                              <span className="font-mono text-[8px] text-military-400 uppercase tracking-wider font-bold">Cor das Linhas:</span>
-                              <div className="flex items-center gap-1.5">
-                                {[
-                                  { name: 'Âmbar Tático', hex: '#eab308' },
-                                  { name: 'Azul Militar', hex: '#3b82f6' },
-                                  { name: 'Branco Alta Visibilidade', hex: '#ffffff' },
-                                  { name: 'Verde Oliva', hex: '#16a34a' },
-                                  { name: 'Vermelho Operacional', hex: '#dc2626' },
-                                  { name: 'Laranja Ocre', hex: '#f97316' },
-                                ].map(colorOption => (
+                                {/* 2. Barra de Ações: Focar, Visibilidade, Excluir */}
+                                <div className="grid grid-cols-3 gap-1.5 mt-3 pt-2 border-t border-military-800/80">
+                                  {/* Botão Focar */}
                                   <button
-                                    key={colorOption.hex}
-                                    onClick={() => changeKmlColor(k.id, colorOption.hex)}
-                                    style={{ backgroundColor: colorOption.hex }}
-                                    className={`w-4 h-4 rounded-full border transition-all hover:scale-125 ${ (k.color || '#eab308') === colorOption.hex ? 'border-white scale-110 shadow-sm shadow-white/60' : 'border-transparent opacity-80 hover:opacity-100' }`}
-                                    title={colorOption.name}
-                                  />
-                                ))}
-                                {/* Custom picker */}
-                                <label className="relative cursor-pointer w-4 h-4 rounded-full border border-military-500/50 flex items-center justify-center overflow-hidden bg-gradient-to-tr from-amber-500 via-blue-500 to-red-500 hover:scale-125 transition-transform" title="Cor Personalizada">
-                                  <input 
-                                    type="color"
-                                    value={k.color || '#eab308'}
-                                    onChange={(e) => changeKmlColor(k.id, e.target.value)}
-                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                  />
-                                </label>
-                              </div>
-                            </div>
+                                    type="button"
+                                    onClick={() => focusOnLayer(k)}
+                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-military-800 hover:bg-military-750 border border-military-700/80 text-military-200 hover:text-blue-300 font-mono text-[10px] font-bold uppercase transition-all active:scale-95 cursor-pointer"
+                                    title="Centralizar e visualizar limites no mapa"
+                                  >
+                                    <Maximize2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                    <span>Focar</span>
+                                  </button>
 
-                            {/* Dynamic Thickness Selector Section */}
-                            <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-military-750/10">
-                              <span className="font-mono text-[8px] text-military-400 uppercase tracking-wider font-bold">Espessura:</span>
-                              <div className="flex bg-military-900/60 p-0.5 rounded-lg border border-military-700/40">
-                                {[
-                                  { name: 'Fina', value: 'fina' },
-                                  { name: 'Média', value: 'media' },
-                                  { name: 'Grossa', value: 'grossa' },
-                                ].map(thicknessOption => {
-                                  const isActive = (k.thickness || 'grossa') === thicknessOption.value;
-                                  return (
-                                    <button
-                                      key={thicknessOption.value}
-                                      onClick={() => changeKmlThickness(k.id, thicknessOption.value as 'grossa' | 'media' | 'fina')}
-                                      className={`px-2 py-0.5 rounded-md font-mono text-[8px] font-bold uppercase transition-all ${
-                                        isActive
-                                          ? 'bg-military-700 text-white shadow-sm font-black'
-                                          : 'text-military-400 hover:text-military-200'
+                                  {/* Botão Visibilidade */}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleKmlVisible(k.id)}
+                                    className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl border font-mono text-[10px] font-black uppercase transition-all active:scale-95 cursor-pointer ${
+                                      isVisible
+                                        ? 'bg-blue-600/25 border-blue-500/60 text-blue-300 shadow-sm'
+                                        : 'bg-military-800 border-military-700/80 text-military-400 hover:text-military-200'
+                                    }`}
+                                    title={isVisible ? "Ocultar camada do mapa" : "Exibir camada no mapa"}
+                                  >
+                                    {isVisible ? (
+                                      <>
+                                        <Eye className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                        <span>Ativa</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <EyeOff className="w-3.5 h-3.5 text-military-400 shrink-0" />
+                                        <span>Oculta</span>
+                                      </>
+                                    )}
+                                  </button>
+
+                                  {/* Botão Excluir */}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeKml(k.id, k.name)}
+                                    className="flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl bg-military-800 hover:bg-red-950/40 border border-military-700/80 hover:border-red-600/50 text-military-300 hover:text-red-300 font-mono text-[10px] font-bold uppercase transition-all active:scale-95 cursor-pointer"
+                                    title="Excluir camada permanentemente"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                                    <span>Excluir</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* 3. Painel de Atributos: Cores e Espessura */}
+                              <div className="p-3.5 space-y-3 bg-military-850/40 border-t border-military-800/60">
+                                {/* Seletor de Cores */}
+                                <div className="space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-mono text-[9.5px] text-military-300 uppercase font-black tracking-wider">
+                                      Cor das Linhas:
+                                    </span>
+                                    <span className="font-mono text-[9px] text-military-400 font-bold uppercase">
+                                      {
+                                        currentColor.toLowerCase() === '#eab308' ? 'Âmbar' :
+                                        currentColor.toLowerCase() === '#3b82f6' ? 'Azul' :
+                                        currentColor.toLowerCase() === '#ffffff' ? 'Branco' :
+                                        currentColor.toLowerCase() === '#16a34a' ? 'Verde' :
+                                        currentColor.toLowerCase() === '#dc2626' ? 'Vermelho' :
+                                        currentColor.toLowerCase() === '#f97316' ? 'Laranja' : 'Personalizada'
+                                      }
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                                    {[
+                                      { name: 'Âmbar Tático', hex: '#eab308' },
+                                      { name: 'Azul Militar', hex: '#3b82f6' },
+                                      { name: 'Branco Alta Visibilidade', hex: '#ffffff' },
+                                      { name: 'Verde Oliva', hex: '#16a34a' },
+                                      { name: 'Vermelho Operacional', hex: '#dc2626' },
+                                      { name: 'Laranja Ocre', hex: '#f97316' },
+                                    ].map(colorOption => {
+                                      const isSelected = currentColor.toLowerCase() === colorOption.hex.toLowerCase();
+                                      return (
+                                        <button
+                                          key={colorOption.hex}
+                                          type="button"
+                                          onClick={() => changeKmlColor(k.id, colorOption.hex)}
+                                          style={{ backgroundColor: colorOption.hex }}
+                                          className={`w-7 h-7 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-sm relative ${
+                                            isSelected
+                                              ? 'ring-2 ring-white ring-offset-2 ring-offset-military-900 scale-110'
+                                              : 'opacity-80 hover:opacity-100 hover:scale-105 border border-white/20'
+                                          }`}
+                                          title={colorOption.name}
+                                        >
+                                          {isSelected && (
+                                            <Check 
+                                              className={`w-3.5 h-3.5 stroke-[3] ${
+                                                colorOption.hex === '#ffffff' ? 'text-black' : 'text-white'
+                                              }`} 
+                                            />
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+
+                                    {/* Seletor Customizado */}
+                                    <label 
+                                      className={`relative cursor-pointer w-7 h-7 rounded-xl flex items-center justify-center overflow-hidden bg-gradient-to-tr from-amber-500 via-blue-500 to-red-500 transition-all shadow-sm ${
+                                        !['#eab308', '#3b82f6', '#ffffff', '#16a34a', '#dc2626', '#f97316'].includes(currentColor.toLowerCase())
+                                          ? 'ring-2 ring-white ring-offset-2 ring-offset-military-900 scale-110'
+                                          : 'opacity-85 hover:opacity-100 hover:scale-105 border border-white/30'
                                       }`}
+                                      title="Cor Personalizada"
                                     >
-                                      {thicknessOption.name}
-                                    </button>
-                                  );
-                                })}
+                                      <input 
+                                        type="color"
+                                        value={currentColor}
+                                        onChange={(e) => changeKmlColor(k.id, e.target.value)}
+                                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                      />
+                                      <span className="text-[10px] font-black text-white drop-shadow-sm select-none">+</span>
+                                    </label>
+                                  </div>
+                                </div>
+
+                                {/* Seletor de Espessura */}
+                                <div className="space-y-1.5 pt-1 border-t border-military-750/30">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-mono text-[9.5px] text-military-300 uppercase font-black tracking-wider">
+                                      Espessura da Linha:
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-3 gap-1 bg-military-900/80 p-1 rounded-xl border border-military-700/60">
+                                    {[
+                                      { name: 'Fina', value: 'fina', desc: '1 px' },
+                                      { name: 'Média', value: 'media', desc: '2.5 px' },
+                                      { name: 'Grossa', value: 'grossa', desc: '4 px' },
+                                    ].map(thicknessOption => {
+                                      const isActive = currentThickness === thicknessOption.value;
+                                      return (
+                                        <button
+                                          key={thicknessOption.value}
+                                          type="button"
+                                          onClick={() => changeKmlThickness(k.id, thicknessOption.value as 'grossa' | 'media' | 'fina')}
+                                          className={`py-1.5 px-2 rounded-lg font-mono text-[10px] font-black uppercase transition-all flex flex-col items-center justify-center cursor-pointer ${
+                                            isActive
+                                              ? 'bg-military-600 text-white shadow-xs border border-military-400/40'
+                                              : 'text-military-400 hover:text-military-100 hover:bg-military-800/60'
+                                          }`}
+                                        >
+                                          <span>{thicknessOption.name}</span>
+                                          <span className="text-[7.5px] font-normal opacity-70">{thicknessOption.desc}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
