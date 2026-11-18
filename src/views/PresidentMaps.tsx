@@ -703,6 +703,11 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
   // Modal display state for large CAR info window
   const [isCarDetailsModalOpen, setIsCarDetailsModalOpen] = useState(false);
 
+  useEffect(() => {
+    setOwnerInputText('');
+    setIsEditingOwner(false);
+  }, [selectedFeature?.numCar, selectedFeature?.name]);
+
   const [isProcessingVectorFile, setIsProcessingVectorFile] = useState(false);
   const [vectorUploadStatus, setVectorUploadStatus] = useState<string | null>(null);
 
@@ -3970,9 +3975,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
           return (
             <React.Fragment>
-              {/* 1. BALÃO COMPACTO NA PARTE SUPERIOR DA TELA: "Informações Sobre o CAR" */}
+              {/* 1. BALÃO COMPACTO NA PARTE SUPERIOR DA TELA: "Informações do CAR" */}
               <div 
-                className="absolute top-4 left-[132px] sm:left-1/2 sm:-translate-x-1/2 right-3 sm:right-auto z-40 max-w-sm sm:max-w-md pointer-events-auto select-none animate-fade-in"
+                className="absolute top-4 left-[132px] right-3 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto sm:w-full sm:max-w-md z-40 pointer-events-auto select-none animate-fade-in"
                 id="car-top-info-balloon"
                 onMouseDown={e => e.stopPropagation()}
                 onMouseUp={e => e.stopPropagation()}
@@ -3980,104 +3985,36 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 onTouchEnd={e => e.stopPropagation()}
                 onClick={e => e.stopPropagation()}
               >
-                <div 
-                  onClick={() => setIsCarDetailsModalOpen(true)}
-                  className="bg-military-900/95 hover:bg-military-850/95 border border-military-600/90 hover:border-amber-500/80 rounded-2xl p-2 sm:px-3.5 sm:py-2.5 shadow-2xl backdrop-blur-md flex items-center justify-between gap-2 text-military-100 cursor-pointer transition-all active:scale-98 group"
-                >
-                  <div className="flex items-center gap-2 min-w-0 flex-grow">
-                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 text-amber-400 group-hover:scale-105 transition-transform">
-                      <FileText className="w-4 h-4" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                        <h4 className="font-mono text-[11px] sm:text-xs font-black uppercase text-amber-300 tracking-wider truncate">
-                          Informações Sobre o CAR
+                <div className="bg-military-800/95 border-2 border-military-500 rounded-2xl p-2.5 sm:p-3 shadow-2xl backdrop-blur-md flex flex-col gap-2 text-military-100">
+                  {/* Linha 1: Título, Proprietário/CAR e Botão Fechar */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div 
+                      onClick={() => setIsCarDetailsModalOpen(true)}
+                      className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-military-900 border border-military-700 flex items-center justify-center shrink-0 text-military-300">
+                        <FileText className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <h4 className="font-mono text-[10.5px] sm:text-xs font-black uppercase text-military-300 tracking-wide truncate">
+                          Informações do CAR
                         </h4>
-
-                        {/* Overlapping Counter Pill */}
-                        {overlappingFeatures.length > 1 && (
-                          <span className="px-1.5 py-0.5 rounded-md bg-amber-500/30 border border-amber-500/60 text-[9px] font-mono font-bold text-amber-200">
-                            ⚡ {overlappingIndex + 1}/{overlappingFeatures.length} Sobrepostos
+                        <span className="font-sans text-[11px] sm:text-xs text-military-100 truncate font-extrabold mt-0.5">
+                          {resolvedOwner
+                            ? resolvedOwner
+                            : (selectedFeature.numCar || selectedFeature.name || "Toque para abrir detalhes")}
+                        </span>
+                        {resolvedOwner && (selectedFeature.numCar || selectedFeature.name) && (
+                          <span className="font-mono text-[9px] text-military-400 truncate">
+                            {selectedFeature.numCar || selectedFeature.name}
                           </span>
                         )}
                       </div>
-                      <span className="font-mono text-[9px] sm:text-[10px] text-military-300 truncate font-semibold">
-                        {resolvedOwner ? `${selectedFeature.numCar || selectedFeature.name} • ${resolvedOwner}` : (selectedFeature.numCar || selectedFeature.name || "Toque para abrir detalhes")}
-                      </span>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                    {/* Overlapping Navigation Switcher Buttons (in compact balloon) */}
-                    {overlappingFeatures.length > 1 && (
-                      <div className="flex items-center gap-0.5 bg-military-800/90 border border-amber-500/40 rounded-xl px-1 py-0.5 mr-0.5">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const nextIdx = (overlappingIndex - 1 + overlappingFeatures.length) % overlappingFeatures.length;
-                            setOverlappingIndex(nextIdx);
-                            setSelectedFeature(overlappingFeatures[nextIdx]);
-                            showTemporaryStatus(`Imóvel ${nextIdx + 1} de ${overlappingFeatures.length} sobrepostos`);
-                          }}
-                          className="p-1 rounded hover:bg-military-700 text-amber-300 transition-colors"
-                          title="Imóvel Anterior na Sobreposição"
-                        >
-                          <ChevronLeft className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsOverlappingMenuOpen(!isOverlappingMenuOpen);
-                          }}
-                          className="font-mono text-[9px] font-black text-amber-300 px-1 hover:underline"
-                          title="Listar imóveis sobrepostos neste ponto"
-                        >
-                          {overlappingIndex + 1}/{overlappingFeatures.length}
-                        </button>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const nextIdx = (overlappingIndex + 1) % overlappingFeatures.length;
-                            setOverlappingIndex(nextIdx);
-                            setSelectedFeature(overlappingFeatures[nextIdx]);
-                            showTemporaryStatus(`Imóvel ${nextIdx + 1} de ${overlappingFeatures.length} sobrepostos`);
-                          }}
-                          className="p-1 rounded hover:bg-military-700 text-amber-300 transition-colors"
-                          title="Próximo Imóvel na Sobreposição"
-                        >
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Focar no Imóvel */}
+                    {/* Botão Fechar */}
                     <button
-                      onClick={() => {
-                        setCenter(positionCoords);
-                        setZoom(Math.max(zoom, 14.5));
-                        showTemporaryStatus("Centralizado no imóvel.");
-                      }}
-                      className="p-1.5 rounded-lg bg-military-800 hover:bg-military-750 text-military-300 hover:text-white border border-military-700/80 transition-all"
-                      title="Centralizar no Mapa"
-                    >
-                      <Crosshair className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Botão de Abertura da Janela Maior */}
-                    <button
-                      onClick={() => setIsCarDetailsModalOpen(true)}
-                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-mono text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-sm active:scale-95"
-                      title="Abrir janela com informações completas"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span className="hidden xs:inline">Abrir</span>
-                    </button>
-
-                    {/* Desmarcar Imóvel */}
-                    <button
+                      type="button"
                       onClick={() => {
                         setSelectedFeature(null);
                         setOverlappingFeatures([]);
@@ -4085,57 +4022,136 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                         setIsCarDetailsModalOpen(false);
                         setIsOverlappingMenuOpen(false);
                       }}
-                      className="p-1.5 rounded-lg bg-military-800 hover:bg-military-750 text-military-400 hover:text-military-100 border border-military-700/80 transition-all"
-                      title="Desmarcar Imóvel"
+                      className="p-1.5 rounded-lg bg-military-900 hover:bg-military-850 text-military-200 hover:text-military-100 border border-military-700 transition-all shrink-0 cursor-pointer"
+                      title="Fechar Seleção"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
+
+                  {/* Linha 2 (Se houver sobreposição): Seletor único na paleta do app */}
+                  {overlappingFeatures.length > 1 && (
+                    <div className="flex items-center justify-between gap-1.5 bg-military-900 border border-military-700 rounded-xl px-1.5 py-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextIdx = (overlappingIndex - 1 + overlappingFeatures.length) % overlappingFeatures.length;
+                          setOverlappingIndex(nextIdx);
+                          setSelectedFeature(overlappingFeatures[nextIdx]);
+                          showTemporaryStatus(`CAR ${nextIdx + 1} de ${overlappingFeatures.length}`);
+                        }}
+                        className="p-1 rounded-lg bg-military-800 hover:bg-military-850 border border-military-700 text-military-200 transition-colors cursor-pointer shrink-0"
+                        title="CAR Anterior"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setIsOverlappingMenuOpen(!isOverlappingMenuOpen)}
+                        className="flex items-center justify-center gap-1.5 font-mono text-[10px] font-black text-military-100 uppercase tracking-wide truncate px-2 py-0.5 rounded-lg hover:bg-military-800 transition-colors cursor-pointer"
+                        title="Listar todos os CARs neste ponto"
+                      >
+                        <Layers className="w-3 h-3 text-military-300 shrink-0" />
+                        <span>CAR {overlappingIndex + 1} de {overlappingFeatures.length}</span>
+                        <ChevronDown className="w-3 h-3 text-military-400 shrink-0" />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextIdx = (overlappingIndex + 1) % overlappingFeatures.length;
+                          setOverlappingIndex(nextIdx);
+                          setSelectedFeature(overlappingFeatures[nextIdx]);
+                          showTemporaryStatus(`CAR ${nextIdx + 1} de ${overlappingFeatures.length}`);
+                        }}
+                        className="p-1 rounded-lg bg-military-800 hover:bg-military-850 border border-military-700 text-military-200 transition-colors cursor-pointer shrink-0"
+                        title="Próximo CAR"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Linha 3: Botões de ação diretos */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsCarDetailsModalOpen(true)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl bg-military-300 hover:bg-military-200 text-white font-mono text-[10px] font-black uppercase tracking-wider transition-all shadow-xs active:scale-95 cursor-pointer"
+                      title="Abrir janela com informações completas"
+                    >
+                      <Eye className="w-3.5 h-3.5 shrink-0" />
+                      <span>Ver Informações</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCenter(positionCoords);
+                        setZoom(Math.max(zoom, 14.5));
+                        showTemporaryStatus("Centralizado no imóvel.");
+                      }}
+                      className="flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-xl bg-military-900 hover:bg-military-850 text-military-100 border border-military-700 font-mono text-[10px] font-bold uppercase transition-all cursor-pointer"
+                      title="Centralizar no Mapa"
+                    >
+                      <Crosshair className="w-3.5 h-3.5 text-military-300 shrink-0" />
+                      <span>Focar</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Overlapping Dropdown Menu (Quick Selection when tapping counter) */}
+                {/* Lista suspensa de CARs sobrepostos - Cor única com destaque apenas na borda do selecionado */}
                 {isOverlappingMenuOpen && overlappingFeatures.length > 1 && (
                   <div 
-                    className="mt-2 bg-military-900 border border-amber-500/60 rounded-xl shadow-2xl p-2.5 flex flex-col gap-1.5 animate-fade-in"
+                    className="mt-2 bg-military-800 border-2 border-military-600 rounded-xl shadow-2xl p-2.5 flex flex-col gap-2 animate-fade-in text-military-100"
                     onClick={e => e.stopPropagation()}
                   >
-                    <div className="flex items-center justify-between pb-1 border-b border-military-750 text-[10px] font-mono text-amber-300 font-bold uppercase">
-                      <span className="flex items-center gap-1">
-                        <Layers className="w-3 h-3" />
-                        Imóveis Sobrepostos ({overlappingFeatures.length})
+                    <div className="flex items-center justify-between pb-1.5 border-b border-military-750 text-[10px] font-mono text-military-100 font-black uppercase">
+                      <span className="flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-military-300" />
+                        CARs Sobrepostos ({overlappingFeatures.length})
                       </span>
                       <button 
+                        type="button"
                         onClick={() => setIsOverlappingMenuOpen(false)}
-                        className="text-military-400 hover:text-white p-0.5"
+                        className="text-military-400 hover:text-military-100 p-0.5 cursor-pointer"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
 
-                    <div className="max-h-48 overflow-y-auto space-y-1 scrollbar-thin">
+                    <div className="max-h-48 overflow-y-auto space-y-1.5 scrollbar-thin">
                       {overlappingFeatures.map((feat, idx) => {
                         const owner = resolveFeatureOwner(feat);
                         const isCurrent = idx === overlappingIndex;
                         return (
                           <button
                             key={idx}
+                            type="button"
                             onClick={() => {
                               setOverlappingIndex(idx);
                               setSelectedFeature(feat);
                               setIsOverlappingMenuOpen(false);
                               showTemporaryStatus(`Selecionado: #${idx + 1}`);
                             }}
-                            className={`w-full text-left p-2 rounded-lg font-mono text-[10px] transition-colors border ${
+                            className={`w-full text-left p-2.5 rounded-xl font-mono text-[10px] transition-all cursor-pointer bg-military-900 ${
                               isCurrent
-                                ? 'bg-amber-500/20 border-amber-400 text-amber-200'
-                                : 'bg-military-950/70 border-military-800 text-military-300 hover:bg-military-800 hover:text-white'
+                                ? 'border-2 border-military-300 ring-2 ring-military-500/35 text-military-100 shadow-xs'
+                                : 'border border-military-700 text-military-200 hover:border-military-500'
                             }`}
                           >
-                            <div className="flex items-center justify-between font-bold">
-                              <span>#{idx + 1} {feat.numCar ? feat.numCar.substring(0, 16) + '...' : feat.name}</span>
-                              {isCurrent ? <span className="text-amber-400">✓ Ativo</span> : <span className="text-military-400">{feat.areaHa || '—'}</span>}
+                            <div className="flex items-center justify-between font-bold gap-2">
+                              <span className="truncate">#{idx + 1} {feat.numCar ? feat.numCar.substring(0, 18) + '...' : feat.name}</span>
+                              {isCurrent ? (
+                                <span className="px-1.5 py-0.5 rounded bg-military-300 text-white text-[9px] font-black shrink-0">
+                                  Selecionado
+                                </span>
+                              ) : (
+                                <span className="text-military-400 shrink-0">{feat.areaHa || '—'}</span>
+                              )}
                             </div>
-                            <div className="text-[9px] text-military-400 truncate mt-0.5">
+                            <div className="text-[10.5px] text-military-200 font-semibold truncate mt-0.5">
                               {owner ? `Titular: ${owner}` : feat.situacao || 'Base CAR'}
                             </div>
                           </button>
@@ -4149,7 +4165,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               {/* 2. JANELA MAIOR COM INFORMAÇÕES COMPLETAS (SOMENTE AO SER SELECIONADO / ROLÁVEL COM FONTE LEGÍVEL) */}
               {isCarDetailsModalOpen && (
                 <div 
-                  className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 pointer-events-auto select-text animate-fade-in"
+                  className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 pointer-events-auto select-text animate-fade-in"
                   id="car-details-modal-overlay"
                   onClick={() => setIsCarDetailsModalOpen(false)}
                   onMouseDown={e => e.stopPropagation()}
@@ -4158,23 +4174,20 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   onTouchEnd={e => e.stopPropagation()}
                 >
                   <div 
-                    className="bg-military-900 border border-military-600/90 rounded-2xl shadow-2xl w-full max-w-xl max-h-[88vh] flex flex-col text-military-100 overflow-hidden relative"
+                    className="bg-military-900 border-2 border-military-600 rounded-2xl shadow-2xl w-full max-w-xl max-h-[88vh] flex flex-col text-military-100 overflow-hidden relative"
                     onClick={e => e.stopPropagation()}
                   >
                     {/* Header */}
-                    <div className="flex items-center justify-between p-4 sm:p-5 border-b border-military-750 bg-military-950/70">
+                    <div className="flex items-center justify-between p-4 sm:p-5 border-b border-military-700 bg-military-800">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 text-amber-400">
+                        <div className="w-10 h-10 rounded-xl bg-military-900 border border-military-700 flex items-center justify-center shrink-0 text-military-300">
                           <FileText className="w-5 h-5" />
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                            <h3 className="font-mono text-sm sm:text-base font-black uppercase text-military-100 tracking-wider truncate">
-                              Informações Sobre o CAR
-                            </h3>
-                          </div>
-                          <span className="font-mono text-xs text-blue-400 font-bold uppercase truncate mt-0.5">
+                          <h3 className="font-mono text-sm sm:text-base font-black uppercase text-military-100 tracking-wider truncate">
+                            Informações Sobre o CAR
+                          </h3>
+                          <span className="font-mono text-xs text-blue-700 font-bold uppercase truncate mt-0.5">
                             Camada: {selectedFeature.layerName || "Base Vetorial"}
                           </span>
                         </div>
@@ -4182,13 +4195,14 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button
+                          type="button"
                           onClick={() => {
                             setCenter(positionCoords);
                             setZoom(Math.max(zoom, 14.5));
                             setIsCarDetailsModalOpen(false);
                             showTemporaryStatus("Mapa centralizado no imóvel.");
                           }}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/60 text-blue-300 hover:text-white font-mono text-xs font-bold uppercase transition-all"
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 border border-blue-700 text-white font-mono text-xs font-bold uppercase transition-all shadow-xs cursor-pointer"
                           title="Centralizar no Mapa e fechar modal"
                         >
                           <Crosshair className="w-3.5 h-3.5" />
@@ -4196,8 +4210,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => setIsCarDetailsModalOpen(false)}
-                          className="p-1.5 rounded-xl bg-military-800 hover:bg-military-750 text-military-400 hover:text-military-100 border border-military-700/80 transition-all"
+                          className="p-1.5 rounded-xl bg-military-900 hover:bg-military-850 text-military-200 hover:text-military-100 border border-military-700 transition-all cursor-pointer"
                           title="Fechar Janela"
                         >
                           <X className="w-5 h-5" />
@@ -4206,37 +4221,90 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     </div>
 
                     {/* Scrollable Content Body with Clear & Comfortable Typography */}
-                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 font-sans scrollbar-thin">
-                      {/* Overlapping Navigation Banner in Modal */}
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3.5 font-sans scrollbar-thin">
+                      {/* OWNER / TITULAR SECTION AT THE TOP WHEN IDENTIFIED + EDITABLE FIELD BELOW */}
+                      {resolvedOwner && (
+                        <div className="flex flex-col gap-2.5 bg-military-800 p-4 rounded-xl border-2 border-military-300 shadow-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-black uppercase text-military-300 flex items-center gap-1.5 tracking-wide">
+                              <Check className="w-4 h-4 text-military-300 shrink-0" />
+                              Titular / Proprietário Identificado
+                            </span>
+                          </div>
+
+                          <div className="bg-military-900 px-3.5 py-2.5 rounded-lg border border-military-700">
+                            <span className="text-base sm:text-lg font-black text-military-100 leading-snug break-words block">
+                              {resolvedOwner}
+                            </span>
+                          </div>
+
+                          {/* Campo editável sempre visível abaixo para informar outro proprietário */}
+                          <div className="pt-2 border-t border-military-750 flex flex-col gap-1.5">
+                            <label className="text-[11px] font-bold uppercase text-military-400 tracking-wide">
+                              Informar outro proprietário (opcional):
+                            </label>
+                            <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                              <input
+                                type="text"
+                                value={ownerInputText}
+                                onChange={(e) => setOwnerInputText(e.target.value)}
+                                placeholder="Digite o nome de outro proprietário..."
+                                className="flex-1 min-w-0 bg-military-900 border border-military-700 rounded-lg px-3 py-2 text-xs text-military-100 placeholder-military-600 focus:outline-none focus:border-military-300 font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextOwner = ownerInputText.trim();
+                                  if (nextOwner) {
+                                    const carCode = selectedFeature.numCar || selectedFeature.name;
+                                    saveCustomOwner(carCode, nextOwner);
+                                    setSelectedFeature(prev => prev ? { ...prev, proprietario: nextOwner } : null);
+                                    setOverlappingFeatures(prev => prev.map(f => ((f.numCar || f.name) === carCode ? { ...f, proprietario: nextOwner } : f)));
+                                    setOwnerInputText('');
+                                    showTemporaryStatus("Titular atualizado com sucesso!");
+                                  }
+                                }}
+                                className="px-4 py-2 bg-military-300 hover:bg-military-200 text-white text-xs font-mono font-bold uppercase rounded-lg transition-colors cursor-pointer shrink-0"
+                              >
+                                Salvar
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Overlapping Navigation Banner in Modal - Cor única da paleta do app, destaque apenas em volta do selecionado */}
                       {overlappingFeatures.length > 1 && (
-                        <div className="bg-amber-950/80 border border-amber-500/60 rounded-xl p-3 sm:p-4 flex flex-col gap-2.5">
-                          <div className="flex items-center justify-between">
+                        <div className="bg-military-900 border border-military-700 rounded-xl p-3 sm:p-4 flex flex-col gap-2.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
                             <div className="flex items-center gap-2">
-                              <Layers className="w-4 h-4 text-amber-400 shrink-0" />
-                              <span className="text-xs sm:text-sm font-black uppercase text-amber-300 tracking-wider">
-                                Sobreposição Detectada ({overlappingFeatures.length} Imóveis no Ponto)
+                              <Layers className="w-4 h-4 text-military-300 shrink-0" />
+                              <span className="text-xs sm:text-sm font-black uppercase text-military-100 tracking-wide">
+                                Sobreposição ({overlappingFeatures.length} Imóveis no Ponto)
                               </span>
                             </div>
-                            <div className="flex items-center gap-1 font-mono text-xs font-bold text-amber-200">
+                            <div className="flex items-center gap-1 font-mono text-xs font-black text-military-100">
                               <button
+                                type="button"
                                 onClick={() => {
                                   const nextIdx = (overlappingIndex - 1 + overlappingFeatures.length) % overlappingFeatures.length;
                                   setOverlappingIndex(nextIdx);
                                   setSelectedFeature(overlappingFeatures[nextIdx]);
                                 }}
-                                className="p-1.5 rounded-lg bg-military-800 hover:bg-military-700 border border-amber-500/40 text-amber-300 hover:text-white transition-colors"
+                                className="p-1.5 rounded-lg bg-military-800 hover:bg-military-850 border border-military-700 text-military-200 transition-colors cursor-pointer"
                                 title="Imóvel Anterior"
                               >
                                 <ChevronLeft className="w-4 h-4" />
                               </button>
                               <span className="px-2">{overlappingIndex + 1} de {overlappingFeatures.length}</span>
                               <button
+                                type="button"
                                 onClick={() => {
                                   const nextIdx = (overlappingIndex + 1) % overlappingFeatures.length;
                                   setOverlappingIndex(nextIdx);
                                   setSelectedFeature(overlappingFeatures[nextIdx]);
                                 }}
-                                className="p-1.5 rounded-lg bg-military-800 hover:bg-military-700 border border-amber-500/40 text-amber-300 hover:text-white transition-colors"
+                                className="p-1.5 rounded-lg bg-military-800 hover:bg-military-850 border border-military-700 text-military-200 transition-colors cursor-pointer"
                                 title="Próximo Imóvel"
                               >
                                 <ChevronRight className="w-4 h-4" />
@@ -4244,28 +4312,33 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 border-t border-amber-500/20">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-military-750">
                             {overlappingFeatures.map((feat, idx) => {
                               const featOwner = resolveFeatureOwner(feat);
                               const isCurrent = idx === overlappingIndex;
                               return (
                                 <button
                                   key={idx}
+                                  type="button"
                                   onClick={() => {
                                     setOverlappingIndex(idx);
                                     setSelectedFeature(feat);
                                   }}
-                                  className={`p-2 rounded-lg text-left transition-all border ${
+                                  className={`p-2.5 rounded-xl text-left transition-all cursor-pointer bg-military-800 ${
                                     isCurrent
-                                      ? 'bg-amber-500/25 border-amber-400 text-amber-200 ring-1 ring-amber-400 shadow'
-                                      : 'bg-military-900/90 border-military-750 text-military-300 hover:text-white hover:border-military-600'
+                                      ? 'border-2 border-military-300 ring-2 ring-military-500/35 text-military-100 shadow-sm'
+                                      : 'border border-military-700 text-military-200 hover:border-military-500 opacity-85 hover:opacity-100'
                                   }`}
                                 >
-                                  <div className="flex items-center justify-between text-[11px] font-mono font-black">
-                                    <span>#{idx + 1} {feat.numCar ? feat.numCar.substring(0, 16) + '...' : feat.name}</span>
-                                    {isCurrent && <span className="text-[10px] text-amber-400 font-bold">● Ativo</span>}
+                                  <div className="flex items-center justify-between text-[11px] font-mono font-black gap-1.5">
+                                    <span className="truncate">#{idx + 1} {feat.numCar ? feat.numCar.substring(0, 18) + '...' : feat.name}</span>
+                                    {isCurrent && (
+                                      <span className="px-1.5 py-0.5 rounded bg-military-300 text-white text-[9px] font-black shrink-0">
+                                        Ativo
+                                      </span>
+                                    )}
                                   </div>
-                                  <div className="text-[10px] text-military-400 truncate mt-0.5">
+                                  <div className="text-[11px] text-military-200 font-semibold truncate mt-1">
                                     {featOwner ? `Titular: ${featOwner}` : feat.situacao || 'CAR'}
                                   </div>
                                 </button>
@@ -4277,25 +4350,26 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
                       {/* SICAR Code Card */}
                       {selectedFeature.numCar && (
-                        <div className="flex flex-col gap-1.5 bg-military-950 p-3.5 sm:p-4 rounded-xl border border-military-700">
+                        <div className="flex flex-col gap-1.5 bg-military-800 p-3.5 sm:p-4 rounded-xl border border-military-700 shadow-xs">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-black uppercase text-military-300 tracking-wider flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-amber-400" />
+                              <span className="w-2 h-2 rounded-full bg-military-300" />
                               Número do CAR (SICAR)
                             </span>
                             <button
+                              type="button"
                               onClick={() => {
                                 navigator.clipboard.writeText(selectedFeature.numCar || '');
                                 showTemporaryStatus("Nº do CAR copiado!");
                               }}
-                              className="flex items-center gap-1 text-xs font-mono font-bold text-amber-400 hover:text-amber-200 bg-military-800/80 hover:bg-military-800 px-2.5 py-1 rounded-lg transition-colors border border-military-700"
+                              className="flex items-center gap-1 text-xs font-mono font-bold text-military-100 bg-military-900 hover:bg-military-850 px-2.5 py-1 rounded-lg transition-colors border border-military-700 cursor-pointer"
                               title="Copiar Número do CAR"
                             >
-                              <Copy className="w-3.5 h-3.5" />
+                              <Copy className="w-3.5 h-3.5 text-military-300" />
                               <span>Copiar</span>
                             </button>
                           </div>
-                          <div className="font-mono font-black text-xs sm:text-sm text-amber-300 break-all select-all leading-relaxed bg-military-900/80 p-3 rounded-lg border border-military-800">
+                          <div className="font-mono font-black text-xs sm:text-sm text-military-100 break-all select-all leading-relaxed bg-military-900 p-3 rounded-lg border border-military-750">
                             {selectedFeature.numCar}
                           </div>
                         </div>
@@ -4303,26 +4377,26 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
                       {/* Property Name */}
                       {selectedFeature.name && (
-                        <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                        <div className="flex flex-col gap-1 bg-military-800 p-3.5 rounded-xl border border-military-700 shadow-xs">
                           <span className="text-xs font-bold uppercase text-military-400">Denominação / Imóvel</span>
-                          <span className="text-sm sm:text-base font-bold text-military-100">{selectedFeature.name}</span>
+                          <span className="text-sm sm:text-base font-bold text-military-100 break-words">{selectedFeature.name}</span>
                         </div>
                       )}
 
                       {/* City & Status Grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         {selectedFeature.municipio && (
-                          <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                          <div className="flex flex-col gap-1 bg-military-800 p-3.5 rounded-xl border border-military-700 shadow-xs">
                             <span className="text-xs font-bold uppercase text-military-400">Município</span>
                             <span className="text-sm sm:text-base font-bold text-military-100">{selectedFeature.municipio}</span>
                           </div>
                         )}
 
                         {selectedFeature.situacao && (
-                          <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                          <div className="flex flex-col gap-1 bg-military-800 p-3.5 rounded-xl border border-military-700 shadow-xs">
                             <span className="text-xs font-bold uppercase text-military-400">Situação Cadastral</span>
                             <div>
-                              <span className="inline-block px-3 py-1 rounded-md bg-military-800 border border-military-700 text-sm font-bold text-military-100">
+                              <span className="inline-block px-3 py-1 rounded-md bg-military-900 border border-military-700 text-sm font-bold text-military-100">
                                 {selectedFeature.situacao}
                               </span>
                             </div>
@@ -4334,14 +4408,14 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       {(selectedFeature.moduloFiscal || selectedFeature.tipoImovel) && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {selectedFeature.moduloFiscal && (
-                            <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                            <div className="flex flex-col gap-1 bg-military-800 p-3.5 rounded-xl border border-military-700 shadow-xs">
                               <span className="text-xs font-bold uppercase text-military-400">Módulos Fiscais</span>
                               <span className="text-sm sm:text-base font-bold text-military-100 font-mono">{selectedFeature.moduloFiscal}</span>
                             </div>
                           )}
 
                           {selectedFeature.tipoImovel && (
-                            <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                            <div className="flex flex-col gap-1 bg-military-800 p-3.5 rounded-xl border border-military-700 shadow-xs">
                               <span className="text-xs font-bold uppercase text-military-400">Tipo de Imóvel</span>
                               <span className="text-sm sm:text-base font-bold text-military-100">{selectedFeature.tipoImovel}</span>
                             </div>
@@ -4353,16 +4427,16 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       {(selectedFeature.dataCadastro || selectedFeature.dataAtualizacao) && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {selectedFeature.dataCadastro && (
-                            <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                            <div className="flex flex-col gap-1 bg-military-800 p-3.5 rounded-xl border border-military-700 shadow-xs">
                               <span className="text-xs font-bold uppercase text-military-400">Data de Inscrição</span>
-                              <span className="text-xs sm:text-sm font-bold text-military-200 font-mono">{selectedFeature.dataCadastro}</span>
+                              <span className="text-xs sm:text-sm font-bold text-military-100 font-mono">{selectedFeature.dataCadastro}</span>
                             </div>
                           )}
 
                           {selectedFeature.dataAtualizacao && (
-                            <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                            <div className="flex flex-col gap-1 bg-military-800 p-3.5 rounded-xl border border-military-700 shadow-xs">
                               <span className="text-xs font-bold uppercase text-military-400">Última Atualização</span>
-                              <span className="text-xs sm:text-sm font-bold text-military-200 font-mono">{selectedFeature.dataAtualizacao}</span>
+                              <span className="text-xs sm:text-sm font-bold text-military-100 font-mono">{selectedFeature.dataAtualizacao}</span>
                             </div>
                           )}
                         </div>
@@ -4370,14 +4444,14 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
                       {/* Areas & Perimeter */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                        <div className="flex flex-col gap-1 bg-military-800 p-3.5 rounded-xl border border-military-700 shadow-xs">
                           <span className="text-xs font-bold uppercase text-military-400">Área Declarada (CAR)</span>
-                          <span className="text-base sm:text-lg font-mono font-black text-amber-400">
+                          <span className="text-base sm:text-lg font-mono font-black text-military-300">
                             {selectedFeature.areaHa || (featureAreaHectares > 0 ? `${featureAreaHectares.toFixed(2)} ha` : "Não informada")}
                           </span>
                         </div>
 
-                        <div className="flex flex-col gap-1 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                        <div className="flex flex-col gap-1 bg-military-800 p-3.5 rounded-xl border border-military-700 shadow-xs">
                           <span className="text-xs font-bold uppercase text-military-400">Perímetro dos Limites</span>
                           <span className="text-base sm:text-lg font-mono font-black text-military-100">
                             {featureLengthKm > 0 ? `${featureLengthKm.toFixed(3)} km` : "—"}
@@ -4390,171 +4464,95 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                         </div>
                       </div>
 
-                      {/* OWNER / TITULAR SECTION (Comprehensive & Adaptive) */}
-                      {resolvedOwner ? (
-                        <div className="flex flex-col gap-1.5 bg-military-950/70 p-3.5 rounded-xl border border-emerald-500/40">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold uppercase text-emerald-400 flex items-center gap-1.5">
-                              <Check className="w-3.5 h-3.5" />
-                              Titular / Proprietário Identificado
-                            </span>
-                            <button
-                              onClick={() => {
-                                setIsEditingOwner(true);
-                                setOwnerInputText(resolvedOwner);
-                              }}
-                              className="text-[11px] font-mono text-military-400 hover:text-white flex items-center gap-1 transition-colors"
-                              title="Editar Titular"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                              <span>Editar</span>
-                            </button>
-                          </div>
-                          <span className="text-sm sm:text-base font-bold text-white leading-snug">{resolvedOwner}</span>
-
-                          {isEditingOwner && (
-                            <div className="mt-2 p-2.5 rounded-lg bg-military-900 border border-military-700 flex flex-col gap-2">
-                              <span className="text-[11px] font-bold text-military-300">Alterar Nome do Titular / CPF / Anotação:</span>
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={ownerInputText}
-                                  onChange={(e) => setOwnerInputText(e.target.value)}
-                                  placeholder="Nome do Titular"
-                                  className="flex-1 bg-military-950 border border-military-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-military-500 focus:outline-none focus:border-amber-500 font-mono"
-                                />
-                                <button
-                                  onClick={() => {
-                                    if (ownerInputText.trim()) {
-                                      const carCode = selectedFeature.numCar || selectedFeature.name;
-                                      saveCustomOwner(carCode, ownerInputText.trim());
-                                      setSelectedFeature(prev => prev ? { ...prev, proprietario: ownerInputText.trim() } : null);
-                                      setIsEditingOwner(false);
-                                      showTemporaryStatus("Titular atualizado com sucesso!");
-                                    }
-                                  }}
-                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors"
-                                >
-                                  Salvar
-                                </button>
-                                <button
-                                  onClick={() => setIsEditingOwner(false)}
-                                  className="px-2 py-1.5 bg-military-800 hover:bg-military-750 text-military-300 text-xs rounded-lg"
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-2.5 bg-military-950/70 p-3.5 rounded-xl border border-amber-500/40">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold uppercase text-amber-400 flex items-center gap-1.5">
-                              <AlertTriangle className="w-3.5 h-3.5" />
+                      {/* OWNER / TITULAR SECTION WHEN NOT IDENTIFIED YET */}
+                      {!resolvedOwner && (
+                        <div className="flex flex-col gap-2.5 bg-military-800 p-4 rounded-xl border border-military-700 shadow-xs">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-xs font-black uppercase text-military-100 flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5 text-military-300" />
                               Titular / Proprietário
                             </span>
-                            <span className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
+                            <span className="text-[10px] font-mono font-bold text-military-300 bg-military-900 px-2 py-0.5 rounded border border-military-700">
                               Sigilo LGPD na base aberta SFB
                             </span>
                           </div>
                           
                           <p className="text-xs text-military-300 leading-relaxed">
-                            O shapefile público do SICAR/SFB não exporta o nome do proprietário devido ao sigilo da LGPD. Você pode consultar a certidão oficial no portal federal ou anotar o titular manualmente:
+                            O shapefile público do SICAR/SFB não exporta o nome do proprietário devido ao sigilo da LGPD. Você pode consultar no portal federal ou informar o titular abaixo:
                           </p>
                           
-                          <div className="flex flex-wrap gap-2 pt-0.5">
+                          <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                            <input
+                              type="text"
+                              value={ownerInputText}
+                              onChange={(e) => setOwnerInputText(e.target.value)}
+                              placeholder="Informar nome do proprietário..."
+                              className="flex-1 min-w-0 bg-military-900 border border-military-700 rounded-lg px-3 py-2 text-xs text-military-100 placeholder-military-600 focus:outline-none focus:border-military-300 font-mono"
+                            />
                             <button
+                              type="button"
+                              onClick={() => {
+                                const nextOwner = ownerInputText.trim();
+                                if (nextOwner) {
+                                  const carCode = selectedFeature.numCar || selectedFeature.name;
+                                  saveCustomOwner(carCode, nextOwner);
+                                  setSelectedFeature(prev => prev ? { ...prev, proprietario: nextOwner } : null);
+                                  setOverlappingFeatures(prev => prev.map(f => ((f.numCar || f.name) === carCode ? { ...f, proprietario: nextOwner } : f)));
+                                  setOwnerInputText('');
+                                  showTemporaryStatus("Titular salvo e vinculado a este imóvel!");
+                                }
+                              }}
+                              className="px-4 py-2 bg-military-300 hover:bg-military-200 text-white text-xs font-mono font-bold uppercase rounded-lg transition-colors cursor-pointer shrink-0"
+                            >
+                              Salvar
+                            </button>
+                          </div>
+
+                          <div className="pt-1">
+                            <button
+                              type="button"
                               onClick={() => {
                                 const carCode = selectedFeature.numCar || selectedFeature.name;
                                 navigator.clipboard.writeText(carCode);
                                 window.open('https://car.gov.br/#/consultar', '_blank', 'noopener,noreferrer');
                                 showTemporaryStatus("Nº do CAR copiado! Cole na consulta pública do SICAR (car.gov.br).");
                               }}
-                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-mono text-xs font-bold uppercase transition-all shadow-sm active:scale-95"
+                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-military-900 hover:bg-military-850 text-military-100 border border-military-700 font-mono text-xs font-bold uppercase transition-all active:scale-95 cursor-pointer"
                               title="Copiar código e abrir consulta oficial no SICAR"
                             >
-                              <ExternalLink className="w-3.5 h-3.5" />
+                              <ExternalLink className="w-3.5 h-3.5 text-military-300" />
                               <span>Consultar no SICAR (car.gov.br)</span>
                             </button>
-
-                            <button
-                              onClick={() => {
-                                setIsEditingOwner(true);
-                                setOwnerInputText('');
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-military-800 hover:bg-military-750 text-military-200 hover:text-white border border-military-600 font-mono text-xs font-bold uppercase transition-all"
-                              title="Informar nome do proprietário ou CPF"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                              <span>Informar Titular Manualmente</span>
-                            </button>
                           </div>
-
-                          {isEditingOwner && (
-                            <div className="mt-2 p-2.5 rounded-lg bg-military-900 border border-military-700 flex flex-col gap-2">
-                              <span className="text-[11px] font-bold text-military-300">Nome do Titular / CPF / Anotação:</span>
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  value={ownerInputText}
-                                  onChange={(e) => setOwnerInputText(e.target.value)}
-                                  placeholder="Ex: João da Silva / CPF 123..."
-                                  className="flex-1 bg-military-950 border border-military-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-military-500 focus:outline-none focus:border-amber-500 font-mono"
-                                  autoFocus
-                                />
-                                <button
-                                  onClick={() => {
-                                    if (ownerInputText.trim()) {
-                                      const carCode = selectedFeature.numCar || selectedFeature.name;
-                                      saveCustomOwner(carCode, ownerInputText.trim());
-                                      setSelectedFeature(prev => prev ? { ...prev, proprietario: ownerInputText.trim() } : null);
-                                      setIsEditingOwner(false);
-                                      showTemporaryStatus("Titular salvo e vinculado a este imóvel!");
-                                    }
-                                  }}
-                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors"
-                                >
-                                  Salvar
-                                </button>
-                                <button
-                                  onClick={() => setIsEditingOwner(false)}
-                                  className="px-2 py-1.5 bg-military-800 hover:bg-military-750 text-military-300 text-xs rounded-lg"
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
-                            </div>
-                          )}
                         </div>
                       )}
 
                       {/* Spatial Feature Type */}
-                      <div className="flex justify-between items-center bg-military-950/60 px-3.5 py-2.5 rounded-xl border border-military-800">
+                      <div className="flex justify-between items-center gap-2 bg-military-800 px-3.5 py-2.5 rounded-xl border border-military-700 shadow-xs">
                         <span className="text-xs font-bold uppercase text-military-400">Tipo de Feição Espacial</span>
-                        <span className="text-xs sm:text-sm font-black text-blue-400 uppercase font-mono">
+                        <span className="text-xs sm:text-sm font-black text-blue-700 uppercase font-mono text-right">
                           {selectedFeature.type === 'Point' ? 'PONTO / MARCO' : selectedFeature.type === 'LineString' ? 'LINHA / TRAJETO' : 'POLÍGONO (DELIMITAÇÃO DO IMÓVEL)'}
                         </span>
                       </div>
 
                       {/* Coordinates Section */}
-                      <div className="flex flex-col gap-2 bg-military-950/60 p-3.5 rounded-xl border border-military-800">
+                      <div className="flex flex-col gap-2 bg-military-800 p-3.5 rounded-xl border border-military-700 shadow-xs">
                         <span className="text-xs font-bold uppercase text-military-400">Coordenadas do Centroide</span>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs font-mono">
-                          <div className="bg-military-900 p-2.5 rounded-lg border border-military-800">
+                          <div className="bg-military-900 p-2.5 rounded-lg border border-military-750">
                             <div className="text-military-400 font-bold mb-1 text-[11px]">GRAUS MINUTOS SEGUNDOS (GMS)</div>
-                            <div className="text-military-200">LAT: {decimalToDMS(positionCoords.lat, 'lat')}</div>
-                            <div className="text-military-200">LNG: {decimalToDMS(positionCoords.lng, 'lng')}</div>
+                            <div className="text-military-100 font-semibold">LAT: {decimalToDMS(positionCoords.lat, 'lat')}</div>
+                            <div className="text-military-100 font-semibold">LNG: {decimalToDMS(positionCoords.lng, 'lng')}</div>
                           </div>
-                          <div className="bg-military-900 p-2.5 rounded-lg border border-military-800">
+                          <div className="bg-military-900 p-2.5 rounded-lg border border-military-750">
                             <div className="text-military-400 font-bold mb-1 text-[11px]">COORDENADAS DECIMAIS</div>
-                            <div className="text-military-200">LAT: {positionCoords.lat.toFixed(6)}</div>
-                            <div className="text-military-200">LNG: {positionCoords.lng.toFixed(6)}</div>
+                            <div className="text-military-100 font-semibold">LAT: {positionCoords.lat.toFixed(6)}</div>
+                            <div className="text-military-100 font-semibold">LNG: {positionCoords.lng.toFixed(6)}</div>
                           </div>
                         </div>
                         {selectedFeature.coordinates && selectedFeature.coordinates.length > 0 && (
                           <div className="text-xs font-mono text-military-400 flex items-center justify-between pt-1">
-                            <span>Vértices do Perímetro: <strong className="text-military-200">{selectedFeature.coordinates.length} pontos</strong></span>
+                            <span>Vértices do Perímetro: <strong className="text-military-100">{selectedFeature.coordinates.length} pontos</strong></span>
                           </div>
                         )}
                       </div>
@@ -4564,7 +4562,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                         <div className="flex flex-col gap-1.5">
                           <span className="text-xs font-bold uppercase text-military-300">Tabela de Atributos GIS / KML</span>
                           <div 
-                            className="max-h-[160px] overflow-y-auto border border-military-800 rounded-xl p-3 bg-military-950 text-xs sm:text-[13px] leading-relaxed text-military-200 select-text scrollbar-thin overflow-x-hidden font-mono"
+                            className="max-h-[160px] overflow-y-auto border border-military-700 rounded-xl p-3 bg-military-800 text-xs sm:text-[13px] leading-relaxed text-military-100 select-text scrollbar-thin overflow-x-hidden font-mono"
                             dangerouslySetInnerHTML={{ __html: selectedFeature.description }}
                           />
                         </div>
@@ -4572,8 +4570,9 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                     </div>
 
                     {/* Modal Footer Actions */}
-                    <div className="p-4 sm:p-5 border-t border-military-750 bg-military-950/90 flex flex-col sm:flex-row gap-2.5">
+                    <div className="p-4 sm:p-5 border-t border-military-700 bg-military-800 flex flex-col sm:flex-row gap-2.5">
                       <button
+                        type="button"
                         onClick={() => {
                           let copyText = `--- DADOS DO IMÓVEL (CAR) ---\nPropriedade: ${selectedFeature.name || "Imóvel CAR"}\nCamada: ${selectedFeature.layerName}\nTipo: ${selectedFeature.type}\nCoordenadas Centro: ${positionCoords.lat.toFixed(6)}, ${positionCoords.lng.toFixed(6)} (${decimalToDMS(positionCoords.lat, 'lat')}, ${decimalToDMS(positionCoords.lng, 'lng')})`;
                           if (selectedFeature.numCar) copyText += `\nNº do CAR: ${selectedFeature.numCar}`;
@@ -4591,28 +4590,30 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                           navigator.clipboard.writeText(copyText);
                           showTemporaryStatus("Todos os dados do CAR foram copiados com sucesso!");
                         }}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs sm:text-sm font-mono text-white font-extrabold uppercase tracking-wider transition-all shadow-md active:scale-95"
+                        className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-xs sm:text-sm font-mono text-white font-extrabold uppercase tracking-wider transition-all shadow-md active:scale-95 cursor-pointer"
                       >
                         <Copy className="w-4 h-4" />
                         <span>Copiar Todos os Dados</span>
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => {
                           setCenter(positionCoords);
                           setZoom(Math.max(zoom, 14.5));
                           setIsCarDetailsModalOpen(false);
                           showTemporaryStatus("Mapa centralizado no imóvel.");
                         }}
-                        className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-military-800 hover:bg-military-750 border border-military-700 text-xs sm:text-sm font-mono text-military-200 hover:text-white font-extrabold uppercase tracking-wider transition-all active:scale-95"
+                        className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-military-900 hover:bg-military-850 border border-military-700 text-xs sm:text-sm font-mono text-military-100 font-extrabold uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
                       >
                         <Crosshair className="w-4 h-4" />
                         <span>Ver no Mapa</span>
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => setIsCarDetailsModalOpen(false)}
-                        className="py-3 px-4 rounded-xl bg-military-850 hover:bg-military-800 border border-military-750 text-xs sm:text-sm font-mono text-military-300 hover:text-white font-extrabold uppercase tracking-wider transition-all active:scale-95"
+                        className="py-3 px-4 rounded-xl bg-military-850 hover:bg-military-750 border border-military-700 text-xs sm:text-sm font-mono text-military-100 font-extrabold uppercase tracking-wider transition-all active:scale-95 cursor-pointer"
                       >
                         Fechar
                       </button>
