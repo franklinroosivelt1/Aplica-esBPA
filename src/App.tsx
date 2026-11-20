@@ -1,22 +1,15 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Camera, 
-  Calculator, 
-  Trees, 
-  FileImage, 
-  ChevronLeft,
-  Settings,
-  Shield
+  ChevronLeft
 } from 'lucide-react';
-import { Map } from 'lucide-react';
 import Home from './views/Home';
 import brandLogo from './assets/images/batalhao_ambiental_logo_1779854041969.png';
 
 import CamStamp from './views/CamStamp';
 import CubagemBPA from './views/CubagemBPA';
 import FotoPDF from './views/FotoPDF';
-import BpaOperacional from './views/BpaOperacional';
+import ValidarDOF from './views/ValidarDOF';
 import PresidentMaps from './views/PresidentMaps';
 import BuscarMandados from './views/BuscarMandados';
 import DiarioDeBordo from './views/DiarioDeBordo';
@@ -48,7 +41,7 @@ function LoadingView({ message = "Carregando módulo..." }: { message?: string }
   );
 }
 
-export type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar' | 'diariodebordo';
+export type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'validardof' | 'diariodebordo';
 
 export default function App() {
   // Estado 'offline-mode' que desabilita componentes dependentes de rede antes mesmo de renderizar a interface
@@ -99,28 +92,12 @@ export default function App() {
         return <BuscarMandados onBack={() => setCurrentView('home')} />;
       case 'diariodebordo':
         return <DiarioDeBordo onBack={() => setCurrentView('home')} />;
-      case 'verificarcar':
-        return (
-          <div className="flex flex-col items-center justify-center min-h-[70vh] text-center p-6 bg-military-900 border border-military-850 rounded-3xl m-4">
-            <div className="p-4 bg-military-800 rounded-3xl border border-military-700/60 inline-flex mb-4">
-              <Shield className="w-12 h-12 text-military-300" />
-            </div>
-            <h2 className="text-2xl font-black uppercase tracking-tight text-military-100 mb-6">Verificar CAR</h2>
-
-            <button 
-              onClick={() => setCurrentView('home')}
-              className="px-6 py-3 bg-military-300 hover:bg-military-200 text-military-950 font-black rounded-xl uppercase text-xs tracking-widest shadow-lg transition-all active:scale-95"
-            >
-              Voltar
-            </button>
-          </div>
-        );
       case 'fotopdf':
         return <FotoPDF onBack={() => setCurrentView('home')} />;
       case 'mapas':
         return <PresidentMaps onBack={() => setCurrentView('home')} />;
-      case 'bpaoperacional':
-        return <BpaOperacional onBack={() => setCurrentView('home')} />;
+      case 'validardof':
+        return <ValidarDOF onBack={() => setCurrentView('home')} offlineMode={offlineMode} />;
       default:
         return <Home onNavigate={setCurrentView} offlineMode={offlineMode} />;
     }
@@ -131,7 +108,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-military-900 text-military-100 font-sans selection:bg-military-500 selection:text-white transition-colors duration-200">
       {/* App Header (Sticky when not in custom view layouts) */}
-      {currentView !== 'home' && currentView !== 'camstamp' && currentView !== 'mapas' && currentView !== 'fotopdf' && currentView !== 'cubagem' && currentView !== 'bpaoperacional' && currentView !== 'mandados' && currentView !== 'diariodebordo' && (
+      {currentView !== 'home' && currentView !== 'camstamp' && currentView !== 'mapas' && currentView !== 'fotopdf' && currentView !== 'cubagem' && currentView !== 'validardof' && currentView !== 'mandados' && currentView !== 'diariodebordo' && (
         <header className="sticky top-0 z-50 bg-military-800/80 backdrop-blur-md border-b border-military-700 px-4 py-3 flex items-center justify-between">
           <button 
             onClick={() => setCurrentView('home')}
@@ -157,7 +134,7 @@ export default function App() {
         </header>
       )}
 
-      <main className={`${currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' || currentView === 'mandados' || currentView === 'diariodebordo' ? 'w-full' : 'max-w-md mx-auto'} min-h-screen`}>
+      <main className={`${currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'validardof' || currentView === 'mapas' || currentView === 'mandados' || currentView === 'diariodebordo' ? 'w-full' : 'max-w-md mx-auto'} min-h-screen`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={currentView}
@@ -165,7 +142,7 @@ export default function App() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className={currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'bpaoperacional' || currentView === 'mapas' || currentView === 'mandados' || currentView === 'diariodebordo' ? '' : 'p-4 pt-6'}
+            className={currentView === 'camstamp' || currentView === 'fotopdf' || currentView === 'cubagem' || currentView === 'validardof' || currentView === 'mapas' || currentView === 'mandados' || currentView === 'diariodebordo' ? '' : 'p-4 pt-6'}
           >
             {renderView()}
           </motion.div>

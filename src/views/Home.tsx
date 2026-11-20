@@ -3,20 +3,21 @@ import {
   Camera, 
   Calculator, 
   Shield, 
+  ShieldCheck,
   Map, 
   FileImage, 
   BookOpen, 
-  ChevronRight,
-  Sparkles
+  ChevronRight
 } from 'lucide-react';
 import { PWAInstallButton } from '../components/PWAInstallButton';
-type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'bpaoperacional' | 'verificarcar' | 'diariodebordo';
+type View = 'home' | 'camstamp' | 'cubagem' | 'mandados' | 'fotopdf' | 'mapas' | 'validardof' | 'diariodebordo';
 
 interface MenuItem {
   id: View;
   label: string;
   icon: any;
   isPrimary?: boolean;
+  externalUrl?: string;
 }
 
 interface HomeProps {
@@ -43,9 +44,10 @@ export default function Home({ onNavigate, offlineMode }: HomeProps) {
       icon: Calculator,
     },
     { 
-      id: 'bpaoperacional', 
-      label: 'Buscar Dados do CAR', 
-      icon: Shield,
+      id: 'validardof', 
+      label: 'Validar DOF', 
+      icon: ShieldCheck,
+      externalUrl: 'https://dof.ibama.gov.br/autenticidade/',
     },
     { 
       id: 'mandados', 
@@ -90,23 +92,14 @@ export default function Home({ onNavigate, offlineMode }: HomeProps) {
           {menuItems.map((item, index) => {
             const IconComp = item.icon;
             const isPrimary = item.isPrimary;
+            const sharedClassName = `w-full text-left rounded-2xl p-3.5 flex items-center justify-between gap-3.5 transition-all duration-150 cursor-pointer shadow-lg group border ${
+              isPrimary
+                ? 'bg-military-600 hover:bg-military-500 text-white border-military-500 ring-2 ring-military-500/20 shadow-military-900/40'
+                : 'bg-military-850 hover:bg-military-800 text-military-100 border-military-700/80 hover:border-military-600'
+            }`;
 
-            return (
-              <motion.button
-                key={item.id}
-                onClick={() => onNavigate(item.id)}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.03, duration: 0.15 }}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                className={`w-full text-left rounded-2xl p-3.5 flex items-center justify-between gap-3.5 transition-all duration-150 cursor-pointer shadow-lg group border ${
-                  isPrimary
-                    ? 'bg-military-600 hover:bg-military-500 text-white border-military-500 ring-2 ring-military-500/20 shadow-military-900/40'
-                    : 'bg-military-850 hover:bg-military-800 text-military-100 border-military-700/80 hover:border-military-600'
-                }`}
-                id={`btn-menu-${item.id}`}
-              >
+            const innerContent = (
+              <>
                 {/* Left Icon */}
                 <div className={`p-2.5 rounded-xl shrink-0 transition-colors flex items-center justify-center ${
                   isPrimary
@@ -140,6 +133,43 @@ export default function Home({ onNavigate, offlineMode }: HomeProps) {
                 }`}>
                   <ChevronRight className="w-4 h-4" />
                 </div>
+              </>
+            );
+
+            if (item.externalUrl && !offlineMode) {
+              return (
+                <motion.a
+                  key={item.id}
+                  href={item.externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => onNavigate(item.id)}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.03, duration: 0.15 }}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  className={sharedClassName}
+                  id={`btn-menu-${item.id}`}
+                >
+                  {innerContent}
+                </motion.a>
+              );
+            }
+
+            return (
+              <motion.button
+                key={item.id}
+                onClick={() => onNavigate(item.id)}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.03, duration: 0.15 }}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                className={sharedClassName}
+                id={`btn-menu-${item.id}`}
+              >
+                {innerContent}
               </motion.button>
             );
           })}
