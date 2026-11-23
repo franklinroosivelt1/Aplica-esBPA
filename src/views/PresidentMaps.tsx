@@ -66,7 +66,7 @@ export interface KmlData {
   visible: boolean;
   color?: string;
   thickness?: 'grossa' | 'media' | 'fina';
-  format?: 'kml' | 'gpkg' | 'zip' | 'geojson';
+  format?: 'kml' | 'gpkg' | 'zip' | 'geojson' | 'gpx';
   features: Array<{
     type: 'Point' | 'LineString' | 'Polygon' | 'MultiPolygon';
     name: string;
@@ -282,14 +282,15 @@ function dbCleanupOldTiles(): Promise<void> {
       try {
         const tx = db.transaction('tiles_cache', 'readwrite');
         const store = tx.objectStore('tiles_cache');
-        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        // Keep visited map areas cached for 60 days for reliable offline field operations
+        const sixtyDaysAgo = Date.now() - 60 * 24 * 60 * 60 * 1000;
         const req = store.openCursor();
         let deletedCount = 0;
         req.onsuccess = (event: any) => {
           const cursor = event.target.result;
           if (cursor) {
             const value = cursor.value;
-            if (value.createdAt && value.createdAt < sevenDaysAgo) {
+            if (value.createdAt && value.createdAt < sixtyDaysAgo) {
               cursor.delete();
               deletedCount++;
             }
@@ -993,11 +994,33 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
   // Image caches to hold renders of offline files and tile servers
   const tileCache = useRef<Map<string, HTMLImageElement>>(new Map());
+  const failedTileUrls = useRef<Set<string>>(new Set());
+  const warmedTileUrls = useRef<Set<string>>(new Set());
   const mapImageCache = useRef<Map<string, HTMLImageElement>>(new Map());
 
   // Trigger manual canvas paint
   const [paintCount, setPaintCount] = useState(0);
   const triggerRedraw = () => setPaintCount(prev => prev + 1);
+
+  // Automatically retry failed tiles when connectivity returns
+  useEffect(() => {
+    const handleOnline = () => {
+      failedTileUrls.current.forEach(url => {
+        const img = tileCache.current.get(url);
+        if (img && img.src && img.src.startsWith('blob:')) {
+          URL.revokeObjectURL(img.src);
+        }
+        tileCache.current.delete(url);
+      });
+      failedTileUrls.current.clear();
+      triggerRedraw();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
 
   // Evict old DB tiles in the background when maps open, and clear raw memory on exit
   useEffect(() => {
@@ -1011,6 +1034,8 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         }
       });
       tileCache.current.clear();
+      failedTileUrls.current.clear();
+      warmedTileUrls.current.clear();
 
       mapImageCache.current.forEach(img => {
         if (img.src && img.src.startsWith('blob:')) {
@@ -1235,6 +1260,141 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     ctx.translate(dimensions.width / 2, dimensions.height / 2);
     ctx.rotate(-rotation);
 
+    // Subtle base grid underneath tiles so uncached offline margins stay legible
+    ctx.strokeStyle = '#242814';
+    ctx.lineWidth = 1;
+    const bgStep = 64;
+    const bgRangeX = Math.ceil(dimensions.width / bgStep) + 4;
+    const bgRangeY = Math.ceil(dimensions.height / bgStep) + 4;
+    for (let x = -bgRangeX; x <= bgRangeX; x++) {
+      ctx.beginPath();
+      ctx.moveTo(x * bgStep, -dimensions.height);
+      ctx.lineTo(x * bgStep, dimensions.height);
+      ctx.stroke();
+    }
+    for (let y = -bgRangeY; y <= bgRangeY; y++) {
+      ctx.beginPath();
+      ctx.moveTo(-dimensions.width, y * bgStep);
+      ctx.lineTo(dimensions.width, y * bgStep);
+      ctx.stroke();
+    }
+
+    const resolveTileUrlForType = (type: BaseMapType, tz: number, x: number, y: number): string => {
+      if (type === 'osm') return `https://tile.openstreetmap.org/${tz}/${x}/${y}.png`;
+      if (type === 'satellite') return `https://mt1.google.com/vt/lyrs=s&x=${x}&y=${y}&z=${tz}`;
+      if (type === 'hybrid') return `https://mt1.google.com/vt/lyrs=y&x=${x}&y=${y}&z=${tz}`;
+      return '';
+    };
+
+    const persistGoogleTileOffline = (url: string) => {
+      if (typeof caches === 'undefined' || !navigator.onLine || warmedTileUrls.current.has(url)) return;
+      warmedTileUrls.current.add(url);
+      caches.open('google-tiles-cache').then(async (cache) => {
+        const hit = await cache.match(url);
+        if (!hit) {
+          const res = await fetch(url, { mode: 'no-cors' });
+          if (res && (res.ok || res.type === 'opaque')) {
+            await cache.put(url, res);
+          }
+        }
+      }).catch(() => {});
+    };
+
+    const requestTileImage = (tileUrl: string, offlineCacheOnly = false) => {
+      if (!tileUrl || tileCache.current.has(tileUrl)) return;
+
+      const loadingImg = new Image();
+      if (tileCache.current.size >= 750) {
+        const oldestKey = tileCache.current.keys().next().value;
+        if (oldestKey) {
+          const imgToEvict = tileCache.current.get(oldestKey);
+          if (imgToEvict && imgToEvict.src && imgToEvict.src.startsWith('blob:')) {
+            URL.revokeObjectURL(imgToEvict.src);
+          }
+          tileCache.current.delete(oldestKey);
+        }
+      }
+      tileCache.current.set(tileUrl, loadingImg);
+
+      const isGoogleTile = tileUrl.includes('google.com');
+      if (isGoogleTile) {
+        loadingImg.onload = () => {
+          failedTileUrls.current.delete(tileUrl);
+          if (!offlineCacheOnly) persistGoogleTileOffline(tileUrl);
+          triggerRedraw();
+        };
+        loadingImg.onerror = () => {
+          failedTileUrls.current.add(tileUrl);
+          triggerRedraw();
+        };
+        loadingImg.src = tileUrl;
+        if (!offlineCacheOnly) persistGoogleTileOffline(tileUrl);
+      } else {
+        dbGetTile(tileUrl).then(dataUrlOrBlob => {
+          if (dataUrlOrBlob) {
+            loadingImg.onload = () => {
+              failedTileUrls.current.delete(tileUrl);
+              triggerRedraw();
+            };
+            loadingImg.onerror = () => {
+              failedTileUrls.current.add(tileUrl);
+              triggerRedraw();
+            };
+            loadingImg.src = dataUrlOrBlob instanceof Blob ? URL.createObjectURL(dataUrlOrBlob) : dataUrlOrBlob;
+          } else if (!offlineCacheOnly && navigator.onLine) {
+            fetch(tileUrl)
+              .then(response => {
+                if (!response.ok) throw new Error("HTTP error " + response.status);
+                return response.blob();
+              })
+              .then(blob => {
+                dbSaveTile(tileUrl, blob).catch(err => console.warn("Failed to save tile:", err));
+                const objectUrl = URL.createObjectURL(blob);
+                loadingImg.onload = () => {
+                  failedTileUrls.current.delete(tileUrl);
+                  triggerRedraw();
+                };
+                loadingImg.src = objectUrl;
+              })
+              .catch(() => {
+                loadingImg.crossOrigin = "anonymous";
+                loadingImg.onload = () => {
+                  failedTileUrls.current.delete(tileUrl);
+                  triggerRedraw();
+                };
+                loadingImg.onerror = () => {
+                  failedTileUrls.current.add(tileUrl);
+                  triggerRedraw();
+                };
+                loadingImg.src = tileUrl;
+              });
+          } else {
+            // Offline fallback via Service Worker CacheStorage if present
+            loadingImg.onload = () => {
+              failedTileUrls.current.delete(tileUrl);
+              triggerRedraw();
+            };
+            loadingImg.onerror = () => {
+              failedTileUrls.current.add(tileUrl);
+              triggerRedraw();
+            };
+            loadingImg.src = tileUrl;
+          }
+        }).catch(() => {
+          loadingImg.crossOrigin = "anonymous";
+          loadingImg.onload = () => {
+            failedTileUrls.current.delete(tileUrl);
+            triggerRedraw();
+          };
+          loadingImg.onerror = () => {
+            failedTileUrls.current.add(tileUrl);
+            triggerRedraw();
+          };
+          loadingImg.src = tileUrl;
+        });
+      }
+    };
+
     // 1. CHOOSE BASE MAP TILES
     if (baseMap !== 'none') {
       const tileZoom = Math.floor(zoom);
@@ -1244,6 +1404,19 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
       const gridExtent = 3; // Render a 7x7 grid to cover rotational corners
 
       const numTiles = Math.pow(2, tileZoom);
+
+      // Silently pre-warm immediate parent overview tile when online so zooming in offline still displays imagery
+      if (navigator.onLine && tileZoom > 5) {
+        const parentCenterUrl = resolveTileUrlForType(
+          baseMap,
+          tileZoom - 1,
+          Math.floor(centerTileX / 2),
+          Math.floor(centerTileY / 2)
+        );
+        if (parentCenterUrl && !tileCache.current.has(parentCenterUrl)) {
+          requestTileImage(parentCenterUrl, false);
+        }
+      }
 
       for (let dx = -gridExtent; dx <= gridExtent; dx++) {
         for (let dy = -gridExtent; dy <= gridExtent; dy++) {
@@ -1264,120 +1437,75 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           const screenY = dyFromCenter * scale;
           const drawSize = TILE_SIZE * scale;
 
-          // Resolve tile image
-          let tileUrl = '';
-          if (baseMap === 'osm') {
-            tileUrl = `https://tile.openstreetmap.org/${tileZoom}/${tx}/${ty}.png`;
-          } else if (baseMap === 'satellite') {
-            tileUrl = `https://mt1.google.com/vt/lyrs=s&x=${tx}&y=${ty}&z=${tileZoom}`;
-          } else if (baseMap === 'hybrid') {
-            tileUrl = `https://mt1.google.com/vt/lyrs=y&x=${tx}&y=${ty}&z=${tileZoom}`;
-          }
+          const tileUrl = resolveTileUrlForType(baseMap, tileZoom, tx, ty);
 
           if (tileUrl) {
             const cachedImg = tileCache.current.get(tileUrl);
-            if (cachedImg) {
-              if (cachedImg.complete && cachedImg.naturalWidth !== 0) {
-                ctx.drawImage(cachedImg, screenX, screenY, drawSize, drawSize);
-              }
+            if (cachedImg && cachedImg.complete && cachedImg.naturalWidth !== 0) {
+              ctx.drawImage(cachedImg, screenX, screenY, drawSize, drawSize);
             } else {
-              // Register an empty loading Image object immediately to avoid duplicate database or network requests
-              const loadingImg = new Image();
-              
-              // Prevent cache memory overflow (Max 600 elements) on RAM-constrained devices
-              if (tileCache.current.size >= 600) {
-                const oldestKey = tileCache.current.keys().next().value;
-                if (oldestKey) {
-                  const imgToEvict = tileCache.current.get(oldestKey);
-                  if (imgToEvict && imgToEvict.src && imgToEvict.src.startsWith('blob:')) {
-                    URL.revokeObjectURL(imgToEvict.src);
-                  }
-                  tileCache.current.delete(oldestKey);
+              if (!cachedImg) {
+                requestTileImage(tileUrl, !navigator.onLine);
+              }
+
+              // Fallback 1: Ancestor / Parent tile cropping (up to 4 zoom levels out)
+              let fallbackDrawn = false;
+              const minAncestorZoom = Math.max(4, tileZoom - 4);
+              for (let pz = tileZoom - 1; pz >= minAncestorZoom; pz--) {
+                const factor = Math.pow(2, tileZoom - pz);
+                const px = Math.floor(tx / factor);
+                const py = Math.floor(ty / factor);
+                const parentUrl = resolveTileUrlForType(baseMap, pz, px, py);
+                const parentImg = tileCache.current.get(parentUrl);
+
+                if (parentImg && parentImg.complete && parentImg.naturalWidth > 0) {
+                  const subW = parentImg.naturalWidth / factor;
+                  const subH = parentImg.naturalHeight / factor;
+                  const subX = (tx % factor) * subW;
+                  const subY = (ty % factor) * subH;
+                  ctx.drawImage(parentImg, subX, subY, subW, subH, screenX, screenY, drawSize, drawSize);
+                  fallbackDrawn = true;
+                  break;
+                } else if (!parentImg && (!navigator.onLine || failedTileUrls.current.has(tileUrl))) {
+                  // When offline, pull cached ancestor tiles from IndexedDB/CacheStorage
+                  requestTileImage(parentUrl, true);
                 }
               }
-              tileCache.current.set(tileUrl, loadingImg);
 
-              // Handle non-CORS Google Satellite and Hybrid tiles directly!
-              const isGoogleTile = tileUrl.includes('google.com');
-              if (isGoogleTile) {
-                loadingImg.src = tileUrl;
-                loadingImg.onload = () => {
-                  triggerRedraw();
-                };
-              } else {
-                // Fetch persistently from IndexedDB for robust offline loading (OSM or other CORS-enabled tiles)
-                dbGetTile(tileUrl).then(dataUrlOrBlob => {
-                  if (dataUrlOrBlob) {
-                    if (dataUrlOrBlob instanceof Blob) {
-                      const objectUrl = URL.createObjectURL(dataUrlOrBlob);
-                      loadingImg.src = objectUrl;
-                      loadingImg.onload = () => {
-                        triggerRedraw();
-                      };
-                    } else {
-                      // Legacy support for string-based dataUrIs
-                      loadingImg.src = dataUrlOrBlob;
-                      loadingImg.onload = () => {
-                        triggerRedraw();
-                      };
+              // Fallback 2: Child tile quadrants (zoom + 1) when user viewed higher detail online and zoomed out offline
+              if (!fallbackDrawn && tileZoom < 19) {
+                const cz = tileZoom + 1;
+                const halfDraw = drawSize / 2;
+                for (let cx = 0; cx < 2; cx++) {
+                  for (let cy = 0; cy < 2; cy++) {
+                    const childUrl = resolveTileUrlForType(baseMap, cz, tx * 2 + cx, ty * 2 + cy);
+                    const childImg = tileCache.current.get(childUrl);
+                    if (childImg && childImg.complete && childImg.naturalWidth > 0) {
+                      ctx.drawImage(childImg, screenX + cx * halfDraw, screenY + cy * halfDraw, halfDraw, halfDraw);
+                      fallbackDrawn = true;
                     }
-                  } else {
-                    // Not cached. Fetch online as a blob to save into DB, and set image src
-                    fetch(tileUrl)
-                      .then(response => {
-                        if (!response.ok) throw new Error("HTTP error " + response.status);
-                        return response.blob();
-                      })
-                      .then(blob => {
-                        // Save to IndexedDB asynchronously in the background
-                        dbSaveTile(tileUrl, blob).catch(err => console.warn("Failed to save tile:", err));
-                        
-                        const objectUrl = URL.createObjectURL(blob);
-                        loadingImg.src = objectUrl;
-                        loadingImg.onload = () => {
-                          triggerRedraw();
-                        };
-                      })
-                      .catch(err => {
-                        // Fallback to setting src directly to tileUrl if fetch fails (e.g. CORS or offline preview mode)
-                        loadingImg.crossOrigin = "anonymous";
-                        loadingImg.src = tileUrl;
-                        loadingImg.onload = () => {
-                          triggerRedraw();
-                        };
-                      });
                   }
-                }).catch(e => {
-                  // Offline/Database error fallback: attempt online load directly
-                  loadingImg.crossOrigin = "anonymous";
-                  loadingImg.src = tileUrl;
-                  loadingImg.onload = () => {
-                    triggerRedraw();
-                  };
-                });
+                }
+              }
+
+              // Fallback 3: Cross-basemap offline cache (e.g. viewed Satellite online, switched to Hybrid/OSM offline)
+              if (!fallbackDrawn && (!navigator.onLine || failedTileUrls.current.has(tileUrl))) {
+                const altTypes: BaseMapType[] = (['satellite', 'hybrid', 'osm'] as BaseMapType[]).filter(t => t !== baseMap);
+                for (const altType of altTypes) {
+                  const altUrl = resolveTileUrlForType(altType, tileZoom, tx, ty);
+                  const altImg = tileCache.current.get(altUrl);
+                  if (altImg && altImg.complete && altImg.naturalWidth > 0) {
+                    ctx.drawImage(altImg, screenX, screenY, drawSize, drawSize);
+                    fallbackDrawn = true;
+                    break;
+                  } else if (!altImg && !navigator.onLine) {
+                    requestTileImage(altUrl, true);
+                  }
+                }
               }
             }
           }
         }
-      }
-    } else {
-      // Offline grid style
-      ctx.strokeStyle = '#2d3118';
-      ctx.lineWidth = 1;
-      const step = 64;
-      const rangeX = Math.ceil(dimensions.width / step) + 4;
-      const rangeY = Math.ceil(dimensions.height / step) + 4;
-      for (let x = -rangeX; x <= rangeX; x++) {
-        ctx.beginPath();
-        ctx.moveTo(x * step, -dimensions.height);
-        ctx.lineTo(x * step, dimensions.height);
-        ctx.stroke();
-      }
-      for (let y = -rangeY; y <= rangeY; y++) {
-        ctx.beginPath();
-        ctx.moveTo(-dimensions.width, y * step);
-        ctx.lineTo(dimensions.width, y * step);
-        ctx.stroke();
       }
     }
 
@@ -3473,6 +3601,177 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
           await dbSaveKml(newKml);
           successCount++;
+        } else if (ext === 'gpx') {
+          setVectorUploadStatus(`Lendo arquivo GPX (${file.name})...`);
+          const text = await file.text();
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(text, "text/xml");
+
+          if (xmlDoc.getElementsByTagName("parsererror").length > 0) {
+            throw new Error(`O arquivo GPX '${file.name}' possui XML inválido ou corrompido.`);
+          }
+
+          const getXmlElements = (parent: Document | Element, tagName: string): Element[] => {
+            const byNs = Array.from(parent.getElementsByTagNameNS('*', tagName));
+            if (byNs.length > 0) return byNs;
+            return Array.from(parent.getElementsByTagName(tagName));
+          };
+
+          const getDirectChildText = (parent: Element, tagName: string): string => {
+            const children = Array.from(parent.children);
+            const match = children.find(
+              el => (el.localName || el.tagName).toLowerCase() === tagName.toLowerCase()
+            );
+            return match?.textContent?.trim() || '';
+          };
+
+          const escapeHtml = (val: string): string =>
+            val
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;');
+
+          const computeCoordsBbox = (pts: Array<{ lat: number; lng: number }>): [number, number, number, number] => {
+            let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+            for (const pt of pts) {
+              if (pt.lng < minLng) minLng = pt.lng;
+              if (pt.lat < minLat) minLat = pt.lat;
+              if (pt.lng > maxLng) maxLng = pt.lng;
+              if (pt.lat > maxLat) maxLat = pt.lat;
+            }
+            return [minLng, minLat, maxLng, maxLat];
+          };
+
+          const buildGpxDesc = (desc: string, cmt: string, ele?: string, time?: string): string => {
+            const parts: string[] = [];
+            if (desc) parts.push(`<div><b>Descrição:</b> ${escapeHtml(desc)}</div>`);
+            if (cmt && cmt !== desc) parts.push(`<div><b>Comentário:</b> ${escapeHtml(cmt)}</div>`);
+            if (ele) parts.push(`<div><b>Altitude:</b> ${escapeHtml(ele)} m</div>`);
+            if (time) parts.push(`<div><b>Data/Hora:</b> ${escapeHtml(time)}</div>`);
+            return parts.join('');
+          };
+
+          const features: KmlData['features'] = [];
+
+          // 1. Waypoints (<wpt>)
+          const wpts = getXmlElements(xmlDoc, 'wpt');
+          wpts.forEach((wpt, idx) => {
+            const lat = parseFloat(wpt.getAttribute('lat') || '');
+            const lng = parseFloat(wpt.getAttribute('lon') || '');
+            if (!isNaN(lat) && !isNaN(lng)) {
+              const name = getDirectChildText(wpt, 'name') || `Ponto GPX #${idx + 1}`;
+              const desc = getDirectChildText(wpt, 'desc');
+              const cmt = getDirectChildText(wpt, 'cmt');
+              const ele = getDirectChildText(wpt, 'ele');
+              const time = getDirectChildText(wpt, 'time');
+              features.push({
+                type: 'Point',
+                name,
+                description: buildGpxDesc(desc, cmt, ele, time),
+                coordinates: [{ lat, lng }],
+                bbox: [lng, lat, lng, lat]
+              });
+            }
+          });
+
+          // 2. Tracks (<trk> -> <trkseg> -> <trkpt>)
+          const trks = getXmlElements(xmlDoc, 'trk');
+          trks.forEach((trk, trkIdx) => {
+            const trkName = getDirectChildText(trk, 'name') || `Trilha GPX #${trkIdx + 1}`;
+            const trkDesc = getDirectChildText(trk, 'desc');
+            const trkCmt = getDirectChildText(trk, 'cmt');
+            const segs = getXmlElements(trk, 'trkseg');
+            const pointContainers = segs.length > 0 ? segs : [trk];
+
+            pointContainers.forEach((container, segIdx) => {
+              const trkpts = getXmlElements(container, 'trkpt');
+              const pts: Array<{ lat: number; lng: number }> = [];
+              trkpts.forEach(pt => {
+                const lat = parseFloat(pt.getAttribute('lat') || '');
+                const lng = parseFloat(pt.getAttribute('lon') || '');
+                if (!isNaN(lat) && !isNaN(lng)) {
+                  pts.push({ lat, lng });
+                }
+              });
+
+              if (pts.length >= 2) {
+                const segName = pointContainers.length > 1 ? `${trkName} (Trecho ${segIdx + 1})` : trkName;
+                features.push({
+                  type: 'LineString',
+                  name: segName,
+                  description: buildGpxDesc(trkDesc, trkCmt),
+                  coordinates: pts,
+                  bbox: computeCoordsBbox(pts)
+                });
+              } else if (pts.length === 1) {
+                features.push({
+                  type: 'Point',
+                  name: trkName,
+                  description: buildGpxDesc(trkDesc, trkCmt),
+                  coordinates: pts,
+                  bbox: computeCoordsBbox(pts)
+                });
+              }
+            });
+          });
+
+          // 3. Routes (<rte> -> <rtept>)
+          const rtes = getXmlElements(xmlDoc, 'rte');
+          rtes.forEach((rte, rteIdx) => {
+            const rteName = getDirectChildText(rte, 'name') || `Rota GPX #${rteIdx + 1}`;
+            const rteDesc = getDirectChildText(rte, 'desc');
+            const rteCmt = getDirectChildText(rte, 'cmt');
+            const rtepts = getXmlElements(rte, 'rtept');
+            const pts: Array<{ lat: number; lng: number }> = [];
+
+            rtepts.forEach(pt => {
+              const lat = parseFloat(pt.getAttribute('lat') || '');
+              const lng = parseFloat(pt.getAttribute('lon') || '');
+              if (!isNaN(lat) && !isNaN(lng)) {
+                pts.push({ lat, lng });
+              }
+            });
+
+            if (pts.length >= 2) {
+              features.push({
+                type: 'LineString',
+                name: rteName,
+                description: buildGpxDesc(rteDesc, rteCmt),
+                coordinates: pts,
+                bbox: computeCoordsBbox(pts)
+              });
+            } else if (pts.length === 1) {
+              features.push({
+                type: 'Point',
+                name: rteName,
+                description: buildGpxDesc(rteDesc, rteCmt),
+                coordinates: pts,
+                bbox: computeCoordsBbox(pts)
+              });
+            }
+          });
+
+          if (features.length === 0) {
+            throw new Error(`Nenhum ponto, rota ou trilha compatível encontrado no arquivo GPX '${file.name}'.`);
+          }
+
+          const newGpx: KmlData = {
+            id: file.name + '_' + Date.now() + '_' + i,
+            name: baseName,
+            visible: true,
+            color: '#f97316',
+            thickness: 'grossa',
+            format: 'gpx',
+            features
+          };
+
+          await dbSaveKml(newGpx);
+          successCount++;
+
+          if (fileList.length === 1 && features.length > 0) {
+            focusOnLayer(newGpx);
+          }
         } else if (ext === 'gpkg' || ext === 'zip' || ext === 'geojson' || ext === 'json') {
           // Parse GPKG or Shapefile ZIP or GeoJSON with SICAR Engine
           setVectorUploadStatus(`Carregando banco geoespacial ${ext.toUpperCase()} (${file.name})...`);
@@ -3508,7 +3807,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           successCount++;
           showTemporaryStatus(`${importedCount} proprietário(s) vinculados ao CAR a partir de ${file.name}!`);
         } else {
-          throw new Error(`Formato .${ext} não suportado. Por favor, envie arquivos .gpkg, .zip, .kml ou tabela .csv/.txt.`);
+          throw new Error(`Formato .${ext} não suportado. Por favor, envie arquivos .gpkg, .zip, .kml, .gpx ou tabela .csv/.txt.`);
         }
       }
 
@@ -3670,25 +3969,15 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         }
       `}} />
       
-      {/* 1. LEFT SIDE FLOATING CONTROLS (VOLTAR & MENU) */}
-      <div className="absolute top-4 left-4 z-40 flex flex-col gap-2.5 pointer-events-none">
+      {/* 1. COMPACT TOP-LEFT BACK CONTROL */}
+      <div className="absolute top-3 left-3 z-40 pointer-events-none">
         <button 
           onClick={onBack}
-          className="pointer-events-auto p-2.5 bg-military-800/95 border border-military-700/80 rounded-xl hover:bg-military-700 hover:border-military-500 hover:text-military-200 transition-all flex items-center gap-2 group backdrop-blur-md shadow-lg w-[110px] justify-center"
+          className="pointer-events-auto h-9 px-2.5 bg-military-800/95 border border-military-700/80 rounded-xl hover:bg-military-700 hover:border-military-500 transition-all flex items-center gap-1.5 group backdrop-blur-md shadow-lg cursor-pointer"
           id="btn-back-pm"
         >
           <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform text-military-300 shrink-0" />
           <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-military-200">Voltar</span>
-        </button>
-
-        <button 
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
-          className="pointer-events-auto p-2.5 bg-military-800/95 border border-military-700/80 rounded-xl hover:bg-military-700 hover:border-military-500 hover:text-military-200 transition-all flex items-center gap-2 backdrop-blur-md shadow-lg w-[110px] justify-center"
-          id="btn-menu-pm"
-          title="Menu de Camadas"
-        >
-          {isMenuOpen ? <X className="w-4 h-4 text-military-300 shrink-0" /> : <Menu className="w-4 h-4 text-military-300 shrink-0" />}
-          <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-military-200">Menu</span>
         </button>
       </div>
 
@@ -3731,78 +4020,86 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               <circle cx="50" cy="50" r="32" stroke="white" strokeWidth="1.8" fill="none" />
 
               {/* Precision crosshair tick lines */}
-              {/* Top vertical indicator */}
               <line x1="50" y1="8" x2="50" y2="24" stroke="#3b82f6" strokeWidth="5" strokeLinecap="round" />
               <line x1="50" y1="8" x2="50" y2="24" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-              
-              {/* Bottom vertical indicator */}
               <line x1="50" y1="76" x2="50" y2="92" stroke="#3b82f6" strokeWidth="5" strokeLinecap="round" />
               <line x1="50" y1="76" x2="50" y2="92" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-              
-              {/* Left horizontal indicator */}
               <line x1="8" y1="50" x2="24" y2="50" stroke="#3b82f6" strokeWidth="5" strokeLinecap="round" />
               <line x1="8" y1="50" x2="24" y2="50" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
-              
-              {/* Right horizontal indicator */}
               <line x1="76" y1="50" x2="92" y2="50" stroke="#3b82f6" strokeWidth="5" strokeLinecap="round" />
               <line x1="76" y1="50" x2="92" y2="50" stroke="white" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
           </div>
         )}
 
-        {/* 3. TACTICAL SIDE CONTROLS (ZOOM, COMPASS, GPS PIN) */}
+        {/* 3. COMPACT RIGHT FLOATING DOCK + MAIN MENU BUTTON */}
         <div 
-          className="absolute right-4 bottom-20 flex flex-col gap-3 z-30"
+          className={`absolute right-3 ${measuringMode === 'add_point' ? 'top-3' : 'bottom-14'} z-30 flex flex-col items-end gap-2`}
           onMouseDown={e => e.stopPropagation()}
           onMouseUp={e => e.stopPropagation()}
           onTouchStart={e => e.stopPropagation()}
           onTouchEnd={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
         >
-          <button 
-            onClick={() => setZoom(prev => Math.min(100.0, prev + 1))}
-            className="p-2.5 bg-military-800/95 border border-military-700/80 rounded-xl hover:bg-military-700 hover:text-blue-300 transition-all text-military-300 flex items-center justify-center backdrop-blur-md shadow-lg"
-            title="Aumentar Zoom"
-            id="btn-zoom-in"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
+          {/* Compact Joined Zoom, GPS & Reticle Capsule */}
+          <div className="flex flex-col bg-military-800/95 border border-military-700/80 rounded-2xl shadow-xl backdrop-blur-md overflow-hidden divide-y divide-military-700/70">
+            <button 
+              onClick={() => setZoom(prev => Math.min(100.0, prev + 1))}
+              className="w-10 h-9 hover:bg-military-700 hover:text-blue-400 transition-colors text-military-200 flex items-center justify-center cursor-pointer"
+              title="Aumentar Zoom"
+              id="btn-zoom-in"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
 
-          <button 
-            onClick={() => setZoom(prev => Math.max(1.0, prev - 1))}
-            className="p-2.5 bg-military-800/95 border border-military-700/80 rounded-xl hover:bg-military-700 hover:text-blue-300 transition-all text-military-300 flex items-center justify-center backdrop-blur-md shadow-lg"
-            title="Diminuir Zoom"
-            id="btn-zoom-out"
-          >
-            <Minus className="w-5 h-5" />
-          </button>
+            <button 
+              onClick={() => setZoom(prev => Math.max(1.0, prev - 1))}
+              className="w-10 h-9 hover:bg-military-700 hover:text-blue-400 transition-colors text-military-200 flex items-center justify-center cursor-pointer"
+              title="Diminuir Zoom"
+              id="btn-zoom-out"
+            >
+              <Minus className="w-4 h-4" />
+            </button>
 
-          <button 
-            onClick={centerOnGps}
-            className="p-2.5 bg-military-800/95 border border-military-700/80 rounded-xl hover:bg-military-700 hover:text-blue-300 transition-all text-blue-400 flex items-center justify-center backdrop-blur-md shadow-lg"
-            title="Minha Localização do Telefone"
-            id="btn-gps-pm"
-          >
-            <MapPin className="w-5 h-5" />
-          </button>
+            <button 
+              onClick={centerOnGps}
+              className="w-10 h-9 hover:bg-military-700 text-blue-500 hover:text-blue-400 transition-colors flex items-center justify-center cursor-pointer"
+              title="Minha Localização do Telefone"
+              id="btn-gps-pm"
+            >
+              <MapPin className="w-4 h-4" />
+            </button>
 
-          <button 
-            onClick={() => setShowTargetReticle(!showTargetReticle)}
-            className={`p-2.5 bg-military-800/95 border transition-all flex items-center justify-center backdrop-blur-md shadow-lg rounded-xl ${
-              showTargetReticle 
-                ? 'border-blue-500/50 text-blue-400 bg-blue-950/20' 
-                : 'border-military-700/80 text-military-300 hover:bg-military-700 hover:text-military-205'
-            }`}
-            title="Alternar Retículo de Mira"
-            id="btn-toggle-reticle"
+            <button 
+              onClick={() => setShowTargetReticle(prev => !prev)}
+              className={`w-10 h-9 hover:bg-military-700 transition-colors flex items-center justify-center cursor-pointer ${
+                showTargetReticle ? 'text-blue-500 hover:text-blue-400' : 'text-military-400 hover:text-military-200'
+              }`}
+              title={showTargetReticle ? 'Ocultar Mira Central' : 'Exibir Mira Central'}
+              id="btn-reticle-pm"
+            >
+              <Crosshair className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Main Menu Button */}
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen(true)}
+            className="w-10 h-10 rounded-2xl bg-military-800/95 border border-military-700/80 text-military-100 hover:bg-military-700 hover:border-military-500 shadow-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer relative"
+            title="Menu Principal"
+            id="btn-menu-pm"
           >
-            <Crosshair className="w-5 h-5" />
+            <Menu className="w-4 h-4" />
+            {isRecordingGpsTrack && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 border border-white animate-pulse" />
+            )}
           </button>
         </div>
 
         {/* 4. DMS FIXED COORDINATE READOUT */}
         <div 
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30"
           onMouseDown={e => e.stopPropagation()}
           onMouseUp={e => e.stopPropagation()}
           onTouchStart={e => e.stopPropagation()}
@@ -3811,7 +4108,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         >
           <button 
             onClick={copyCoordinates}
-            className="bg-military-800/95 border border-military-700 hover:border-blue-500 hover:bg-military-700/95 px-3 py-1.5 rounded-full transition-all shadow-lg flex items-center gap-2 backdrop-blur-md whitespace-nowrap"
+            className="bg-military-800/95 border border-military-700 hover:border-blue-500 hover:bg-military-700/95 px-3 py-1.5 rounded-full transition-all shadow-lg flex items-center gap-2 backdrop-blur-md whitespace-nowrap cursor-pointer"
             id="btn-coords-readout"
             title="Clique para Copiar Coordenadas"
           >
@@ -3830,7 +4127,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
         {/* Transient Notifications Banner */}
         {statusMessage && (
           <div 
-            className={`absolute ${(measuringMode === 'measure_distance' || measuringMode === 'measure_area') ? 'top-40' : 'top-20'} left-4 right-4 max-w-md mx-auto z-40 bg-zinc-900/95 text-white text-[11px] font-mono border border-blue-500/50 py-2 px-3 rounded-lg shadow-2xl text-center backdrop-blur-md transition-all`}
+            className={`absolute ${(measuringMode === 'measure_distance' || measuringMode === 'measure_area') ? 'top-40' : 'top-14'} left-4 right-4 max-w-md mx-auto z-40 bg-zinc-900/95 text-white text-[11px] font-mono border border-blue-500/50 py-2 px-3 rounded-lg shadow-2xl text-center backdrop-blur-md transition-all`}
             onMouseDown={e => e.stopPropagation()}
             onMouseUp={e => e.stopPropagation()}
             onTouchStart={e => e.stopPropagation()}
@@ -3977,7 +4274,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             <React.Fragment>
               {/* 1. BALÃO COMPACTO NA PARTE SUPERIOR DA TELA: "Informações do CAR" */}
               <div 
-                className="absolute top-4 left-[132px] right-3 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto sm:w-full sm:max-w-md z-40 pointer-events-auto select-none animate-fade-in"
+                className="absolute top-3 left-[98px] right-3 sm:left-1/2 sm:-translate-x-1/2 sm:right-auto sm:w-full sm:max-w-md z-40 pointer-events-auto select-none animate-fade-in"
                 id="car-top-info-balloon"
                 onMouseDown={e => e.stopPropagation()}
                 onMouseUp={e => e.stopPropagation()}
@@ -5565,7 +5862,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                 )}
               </div>
 
-              {/* SECTION C: CAMADAS VETORIAIS (CAR GPKG / ZIP / KML) */}
+              {/* SECTION C: CAMADAS VETORIAIS */}
               <div className="border border-military-700/60 rounded-xl overflow-hidden bg-military-850/30">
                 <button
                   onClick={() => setIsVectorLayersOpen(!isVectorLayersOpen)}
@@ -5577,7 +5874,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono text-[8px] text-military-200 bg-military-900 border border-military-700 px-1.5 py-0.5 rounded tracking-widest font-black uppercase">
-                      GPKG / ZIP / KML
+                      GPKG / ZIP / KML / GPX
                     </span>
                     {kmlLayers.length > 0 && (
                       <span className="font-mono text-[8px] text-blue-300 bg-blue-950/60 border border-blue-700/80 px-1.5 py-0.5 rounded font-black">
@@ -5599,15 +5896,15 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       </div>
                     )}
 
-                    {/* Upload Multi-format vector input - apenas o botão */}
-                    <label className="flex items-center justify-center gap-2 border border-dashed border-military-650 hover:border-blue-500 hover:bg-military-800/50 transition-all p-3 rounded-xl cursor-pointer bg-military-900/40 text-military-100 group">
-                      <Upload className="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
-                      <span className="font-mono text-[11px] font-black uppercase tracking-wider text-military-100 group-hover:text-blue-300">
-                        Inserir Camada (.GPKG, .ZIP, .KML ou .CSV)
+                    {/* Botão em destaque INSERIR CAMADA */}
+                    <label className="flex items-center justify-center gap-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] border border-blue-700 shadow-md transition-all py-3.5 px-4 rounded-xl cursor-pointer text-white group">
+                      <Upload className="w-4 h-4 text-white group-hover:scale-110 transition-transform shrink-0" />
+                      <span className="font-mono text-xs font-black uppercase tracking-wider text-white">
+                        INSERIR CAMADA
                       </span>
                       <input 
                         type="file" 
-                        accept=".gpkg,.zip,.kml,.kmz,.geojson,.json,.csv,.txt"
+                        accept=".gpkg,.zip,.kml,.kmz,.gpx,.geojson,.json,.csv,.txt,application/gpx+xml,text/xml,application/xml"
                         multiple
                         disabled={isProcessingVectorFile}
                         onChange={handleVectorFileUpload}
@@ -5620,7 +5917,6 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       {kmlLayers.length === 0 ? (
                         <div className="text-center p-3.5 border border-military-800/50 rounded-lg bg-military-800/10">
                           <p className="font-mono text-[9px] text-military-400 tracking-wider">NENHUMA CAMADA VETORIAL ATIVA</p>
-                          <p className="font-mono text-[8px] text-military-500 mt-1">Anexe arquivos .gpkg ou .zip acima para visualizar as propriedades no mapa.</p>
                         </div>
                       ) : (
                         kmlLayers.map(k => {

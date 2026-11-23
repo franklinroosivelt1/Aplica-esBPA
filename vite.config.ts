@@ -27,7 +27,7 @@ export default defineConfig(({mode}) => {
               options: {
                 cacheName: 'osm-tiles-cache',
                 expiration: {
-                  maxEntries: 3000,
+                  maxEntries: 5000,
                   maxAgeSeconds: 60 * 24 * 60 * 60, // 60 days
                 },
                 cacheableResponse: {
@@ -41,7 +41,7 @@ export default defineConfig(({mode}) => {
               options: {
                 cacheName: 'satellite-tiles-cache',
                 expiration: {
-                  maxEntries: 3000,
+                  maxEntries: 5000,
                   maxAgeSeconds: 60 * 24 * 60 * 60,
                 },
                 cacheableResponse: {
@@ -55,7 +55,7 @@ export default defineConfig(({mode}) => {
               options: {
                 cacheName: 'google-tiles-cache',
                 expiration: {
-                  maxEntries: 3000,
+                  maxEntries: 5000,
                   maxAgeSeconds: 60 * 24 * 60 * 60,
                 },
                 cacheableResponse: {
