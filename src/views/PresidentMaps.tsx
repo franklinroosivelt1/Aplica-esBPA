@@ -3059,7 +3059,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           .then(() => {
             wakeLockRef.current = null;
           })
-          .catch((e: any) => console.error(e));
+          .catch((e: any) => console.warn("WakeLock release:", e?.message || e));
       }
 
       // Release Median native screen keep
@@ -3194,34 +3194,65 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
   const centerOnGps = () => {
     showTemporaryStatus("Buscando localização real do smartphone...");
     setSimulatedGps(false);
-    
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          const accuracy = pos.coords.accuracy;
-          setGpsCoords({ lat, lng, accuracy });
-          setCenter({ lat, lng });
-          setZoom(14);
-          showTemporaryStatus(`Localizado com sucesso! (Precisão: ${accuracy.toFixed(1)}m)`);
-        },
-        (err) => {
-          console.error("Erro ao obter posição exata:", err);
-          // Fallback to active gpsCoords watch if we have it
-          if (gpsCoords) {
-            setCenter({ lat: gpsCoords.lat, lng: gpsCoords.lng });
-            setZoom(14);
-            showTemporaryStatus("Centralizado na última posição GPS obtida.");
-          } else {
-            showTemporaryStatus("Falha ao obter sinal de GPS. Verifique se o GPS e as permissões de localização estão ativos.");
-          }
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-      );
-    } else {
+
+    if (!navigator.geolocation) {
       showTemporaryStatus("GPS não suportado neste aparelho.");
+      return;
     }
+
+    const applyPosition = (pos: GeolocationPosition, isApprox = false) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const accuracy = pos.coords.accuracy;
+      setGpsCoords({ lat, lng, accuracy });
+      setCenter({ lat, lng });
+      setZoom(14);
+      showTemporaryStatus(
+        isApprox
+          ? `Localizado por rede/aproximação! (Precisão: ${accuracy.toFixed(0)}m)`
+          : `Localizado com sucesso! (Precisão: ${accuracy.toFixed(1)}m)`
+      );
+    };
+
+    const handleFinalFallback = (err: GeolocationPositionError) => {
+      console.warn(
+        "GPS indisponível para centralização:",
+        err?.code,
+        err?.message || "Sem detalhes"
+      );
+      if (gpsCoords) {
+        setCenter({ lat: gpsCoords.lat, lng: gpsCoords.lng });
+        setZoom(14);
+        showTemporaryStatus("Centralizado na última posição GPS obtida.");
+      } else if (err?.code === 1) {
+        showTemporaryStatus("Permissão de localização negada. Autorize o acesso ao GPS.");
+      } else {
+        showTemporaryStatus("Sinal de GPS indisponível no momento. Verifique o GPS do aparelho.");
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => applyPosition(pos, false),
+      (err) => {
+        // Code 1 = PERMISSION_DENIED: do not retry
+        if (err?.code === 1) {
+          handleFinalFallback(err);
+          return;
+        }
+        // Timeout / Position unavailable: retry with network/cached location
+        console.warn(
+          "GPS exato indisponível, tentando localização aproximada:",
+          err?.code,
+          err?.message || "Sem detalhes"
+        );
+        navigator.geolocation.getCurrentPosition(
+          (pos) => applyPosition(pos, true),
+          handleFinalFallback,
+          { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+        );
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+    );
   };
 
   // Temporary floating user prompts
@@ -4154,7 +4185,37 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             title="Menu Principal"
             id="btn-menu-pm"
           >
-            <Menu className="w-4 h-4" />
+            <svg
+              viewBox="4 4 52 52"
+              className="w-9 h-9"
+              aria-hidden="true"
+            >
+              {/* Teal-Green Gear */}
+              <g transform="translate(30, 30)" fill="#12b886">
+                <circle cx="0" cy="0" r="18.5" />
+                {[0, 36, 72, 108, 144, 180, 216, 252, 288, 324].map(deg => (
+                  <rect
+                    key={deg}
+                    x="-3.6"
+                    y="-24"
+                    width="7.2"
+                    height="9"
+                    rx="2"
+                    transform={`rotate(${deg})`}
+                  />
+                ))}
+                <circle cx="0" cy="0" r="12.5" fill="#ffffff" />
+              </g>
+              {/* Diagonal Navy Wrench with White Cutout Clearance */}
+              <g transform="translate(30, 30) rotate(-45)">
+                <rect x="-5.5" y="1" width="11" height="27" rx="5.5" fill="#ffffff" />
+                <path
+                  d="M-4.5,-10 A8.5,8.5 0 1,0 4.5,-10 L4.5,-3.5 A2,2 0 0,1 2.5,-1.5 L-2.5,-1.5 A2,2 0 0,1 -4.5,-3.5 Z"
+                  fill="#1e2d4d"
+                />
+                <rect x="-3.4" y="1.5" width="6.8" height="24.5" rx="3.4" fill="#1e2d4d" />
+              </g>
+            </svg>
             {isRecordingGpsTrack && (
               <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 border border-white animate-pulse" />
             )}

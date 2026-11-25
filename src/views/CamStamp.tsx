@@ -166,7 +166,7 @@ export default function CamStamp({ onBack }: CamStampProps) {
           lat: position.coords.latitude,
           lng: position.coords.longitude
         });
-      }, (err) => console.error(err), { enableHighAccuracy: true });
+      }, (err) => console.warn("GPS indisponível ou permissão negada:", err?.message || err?.code || "erro"), { enableHighAccuracy: true });
     }
 
     const timer = setInterval(() => {
