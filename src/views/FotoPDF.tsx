@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, ChangeEvent } from 'react';
+import { useState, useRef, useEffect, useCallback, ChangeEvent, PointerEvent } from 'react';
 import { 
   FileImage, 
   Upload, 
@@ -15,7 +15,8 @@ import {
   Share2,
   Maximize,
   Minimize,
-  ChevronLeft
+  ChevronLeft,
+  Crop
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
@@ -77,10 +78,31 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
   const [zoom, setZoom] = useState(1);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null);
+  const [photosPerPage, setPhotosPerPage] = useState<1 | 2>(1);
+
+  // Interactive crop editor state
+  const [cropTarget, setCropTarget] = useState<
+    { type: 'page'; index: number; src: string } | { type: 'review'; src: string } | null
+  >(null);
+  const [cropBox, setCropBox] = useState<{ x: number; y: number; w: number; h: number }>({
+    x: 0.05,
+    y: 0.05,
+    w: 0.9,
+    h: 0.9,
+  });
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cropImgRef = useRef<HTMLImageElement>(null);
+  const cropDragRef = useRef<{
+    mode: 'move' | 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'w' | 'e';
+    startX: number;
+    startY: number;
+    startBox: { x: number; y: number; w: number; h: number };
+    rectW: number;
+    rectH: number;
+  } | null>(null);
 
   const handleGalleryImport = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -237,6 +259,166 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
     imgObj.src = targetImg;
   };
 
+  const openCropForPage = (idx: number) => {
+    const src = images[idx];
+    if (!src) return;
+    setCropBox({ x: 0.05, y: 0.05, w: 0.9, h: 0.9 });
+    setCropTarget({ type: 'page', index: idx, src });
+  };
+
+  const openCropForReview = () => {
+    if (!currentPhoto) return;
+    setCropBox({ x: 0.05, y: 0.05, w: 0.9, h: 0.9 });
+    setCropTarget({ type: 'review', src: currentPhoto });
+  };
+
+  const rotateCropTarget = (direction: 'left' | 'right') => {
+    if (!cropTarget) return;
+    const imgObj = new Image();
+    imgObj.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      canvas.width = imgObj.height;
+      canvas.height = imgObj.width;
+
+      if (direction === 'right') {
+        ctx.translate(canvas.width, 0);
+        ctx.rotate(Math.PI / 2);
+      } else {
+        ctx.translate(0, canvas.height);
+        ctx.rotate(-Math.PI / 2);
+      }
+
+      ctx.drawImage(imgObj, 0, 0);
+      const rotatedDataUrl = canvas.toDataURL('image/jpeg', 0.88);
+      setCropBox({ x: 0.05, y: 0.05, w: 0.9, h: 0.9 });
+      setCropTarget(prev => (prev ? { ...prev, src: rotatedDataUrl } : null));
+    };
+    imgObj.src = cropTarget.src;
+  };
+
+  const handleCropPointerDown = (
+    e: PointerEvent<HTMLDivElement>,
+    mode: 'move' | 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'w' | 'e'
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const imgEl = cropImgRef.current;
+    if (!imgEl) return;
+    const rect = imgEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore if pointer capture is unsupported
+    }
+
+    cropDragRef.current = {
+      mode,
+      startX: e.clientX,
+      startY: e.clientY,
+      startBox: { ...cropBox },
+      rectW: rect.width,
+      rectH: rect.height,
+    };
+  };
+
+  const handleCropPointerMove = (e: PointerEvent<HTMLDivElement>) => {
+    const drag = cropDragRef.current;
+    if (!drag) return;
+    e.preventDefault();
+
+    const dx = (e.clientX - drag.startX) / drag.rectW;
+    const dy = (e.clientY - drag.startY) / drag.rectH;
+    const MIN_SIZE = 0.08;
+    const sb = drag.startBox;
+
+    let nx = sb.x;
+    let ny = sb.y;
+    let nw = sb.w;
+    let nh = sb.h;
+
+    if (drag.mode === 'move') {
+      nx = Math.max(0, Math.min(1 - sb.w, sb.x + dx));
+      ny = Math.max(0, Math.min(1 - sb.h, sb.y + dy));
+    } else {
+      if (drag.mode.includes('w')) {
+        const right = sb.x + sb.w;
+        nx = Math.max(0, Math.min(right - MIN_SIZE, sb.x + dx));
+        nw = right - nx;
+      }
+      if (drag.mode.includes('e')) {
+        nw = Math.max(MIN_SIZE, Math.min(1 - sb.x, sb.w + dx));
+      }
+      if (drag.mode.includes('n')) {
+        const bottom = sb.y + sb.h;
+        ny = Math.max(0, Math.min(bottom - MIN_SIZE, sb.y + dy));
+        nh = bottom - ny;
+      }
+      if (drag.mode.includes('s')) {
+        nh = Math.max(MIN_SIZE, Math.min(1 - sb.y, sb.h + dy));
+      }
+    }
+
+    setCropBox({ x: nx, y: ny, w: nw, h: nh });
+  };
+
+  const handleCropPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    if (cropDragRef.current) {
+      cropDragRef.current = null;
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleApplyCrop = async () => {
+    if (!cropTarget) return;
+    try {
+      const imgObj = await loadImage(cropTarget.src);
+      const natW = imgObj.naturalWidth || imgObj.width;
+      const natH = imgObj.naturalHeight || imgObj.height;
+
+      const sx = Math.max(0, Math.round(cropBox.x * natW));
+      const sy = Math.max(0, Math.round(cropBox.y * natH));
+      const sw = Math.max(1, Math.min(natW - sx, Math.round(cropBox.w * natW)));
+      const sh = Math.max(1, Math.min(natH - sy, Math.round(cropBox.h * natH)));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = sw;
+      canvas.height = sh;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.drawImage(imgObj, sx, sy, sw, sh, 0, 0, sw, sh);
+      const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.88);
+
+      if (cropTarget.type === 'page') {
+        const targetIdx = cropTarget.index;
+        setImages(prev => {
+          const updated = [...prev];
+          updated[targetIdx] = croppedDataUrl;
+          return updated;
+        });
+        if (selectedPageImageIndex === targetIdx) {
+          setSelectedPageImageUrl(croppedDataUrl);
+        }
+      } else {
+        setCurrentPhoto(croppedDataUrl);
+      }
+
+      setCropTarget(null);
+    } catch (err) {
+      console.error('Erro ao cortar imagem:', err);
+      setCropTarget(null);
+    }
+  };
+
   const generatePDF = async () => {
     if (images.length === 0) return;
 
@@ -256,50 +438,83 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
     );
 
     let pdf: jsPDF | null = null;
-    const margin = 4; // Leve borda branca uniforme de 4mm
 
-    for (let i = 0; i < loadedImagesInfo.length; i++) {
-      const { img, naturalWidth, naturalHeight } = loadedImagesInfo[i];
-      const isLandscape = naturalWidth >= naturalHeight;
-      const orientation = isLandscape ? 'landscape' : 'portrait';
+    if (photosPerPage === 2) {
+      // A4 Portrait (210mm x 297mm) with 2 balanced image slots per sheet
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 8;
+      const gap = 6;
+      const slotWidth = pageWidth - margin * 2;
+      const slotHeight = (pageHeight - margin * 2 - gap) / 2;
 
-      let pageWidth: number;
-      let pageHeight: number;
-      let imageWidth: number;
-      let imageHeight: number;
+      for (let i = 0; i < loadedImagesInfo.length; i += 2) {
+        if (i === 0) {
+          pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: [pageWidth, pageHeight]
+          });
+        } else {
+          pdf!.addPage([pageWidth, pageHeight], 'portrait');
+        }
 
-      if (isLandscape) {
-        // Layout Horizontal (Paisagem): preenche a largura padrão horizontal sem faixas verticais excessivas
-        pageWidth = 297;
-        imageWidth = pageWidth - (margin * 2);
-        imageHeight = imageWidth * (naturalHeight / naturalWidth);
-        pageHeight = imageHeight + (margin * 2);
-      } else {
-        // Layout Vertical (Retrato): preenche a largura padrão vertical mantendo proporção fiel
-        pageWidth = 210;
-        imageWidth = pageWidth - (margin * 2);
-        imageHeight = imageWidth * (naturalHeight / naturalWidth);
-        pageHeight = imageHeight + (margin * 2);
-      }
+        const pair = [loadedImagesInfo[i], loadedImagesInfo[i + 1]].filter(Boolean);
+        pair.forEach((item, slotIdx) => {
+          const slotTop = margin + slotIdx * (slotHeight + gap);
+          const scale = Math.min(slotWidth / item.naturalWidth, slotHeight / item.naturalHeight);
+          const drawW = Math.round(item.naturalWidth * scale * 10) / 10;
+          const drawH = Math.round(item.naturalHeight * scale * 10) / 10;
+          const drawX = Math.round((margin + (slotWidth - drawW) / 2) * 10) / 10;
+          const drawY = Math.round((slotTop + (slotHeight - drawH) / 2) * 10) / 10;
 
-      // Arredonda valores para evitar erros de ponto flutuante no jsPDF
-      pageWidth = Math.round(pageWidth * 10) / 10;
-      pageHeight = Math.round(pageHeight * 10) / 10;
-      imageWidth = Math.round(imageWidth * 10) / 10;
-      imageHeight = Math.round(imageHeight * 10) / 10;
-
-      if (i === 0) {
-        pdf = new jsPDF({
-          orientation: orientation,
-          unit: 'mm',
-          format: [pageWidth, pageHeight]
+          const format = item.img.toLowerCase().includes('png') ? 'PNG' : 'JPEG';
+          pdf!.addImage(item.img, format, drawX, drawY, drawW, drawH, undefined, 'FAST');
         });
-      } else {
-        pdf!.addPage([pageWidth, pageHeight], orientation);
       }
+    } else {
+      const margin = 4; // Leve borda branca uniforme de 4mm
 
-      const format = img.toLowerCase().includes('png') ? 'PNG' : 'JPEG';
-      pdf!.addImage(img, format, margin, margin, imageWidth, imageHeight, undefined, 'FAST');
+      for (let i = 0; i < loadedImagesInfo.length; i++) {
+        const { img, naturalWidth, naturalHeight } = loadedImagesInfo[i];
+        const isLandscape = naturalWidth >= naturalHeight;
+        const orientation = isLandscape ? 'landscape' : 'portrait';
+
+        let pageWidth: number;
+        let pageHeight: number;
+        let imageWidth: number;
+        let imageHeight: number;
+
+        if (isLandscape) {
+          pageWidth = 297;
+          imageWidth = pageWidth - (margin * 2);
+          imageHeight = imageWidth * (naturalHeight / naturalWidth);
+          pageHeight = imageHeight + (margin * 2);
+        } else {
+          pageWidth = 210;
+          imageWidth = pageWidth - (margin * 2);
+          imageHeight = imageWidth * (naturalHeight / naturalWidth);
+          pageHeight = imageHeight + (margin * 2);
+        }
+
+        pageWidth = Math.round(pageWidth * 10) / 10;
+        pageHeight = Math.round(pageHeight * 10) / 10;
+        imageWidth = Math.round(imageWidth * 10) / 10;
+        imageHeight = Math.round(imageHeight * 10) / 10;
+
+        if (i === 0) {
+          pdf = new jsPDF({
+            orientation: orientation,
+            unit: 'mm',
+            format: [pageWidth, pageHeight]
+          });
+        } else {
+          pdf!.addPage([pageWidth, pageHeight], orientation);
+        }
+
+        const format = img.toLowerCase().includes('png') ? 'PNG' : 'JPEG';
+        pdf!.addImage(img, format, margin, margin, imageWidth, imageHeight, undefined, 'FAST');
+      }
     }
 
     if (!pdf) return;
@@ -417,21 +632,28 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
           <img src={currentPhoto!} className="max-w-full max-h-full object-contain" alt="Review" />
         </div>
 
-        {/* Rotate controls row - High Contrast Style */}
-        <div className="flex justify-center gap-4 mt-5 mb-2">
+        {/* Rotate & Crop controls row */}
+        <div className="grid grid-cols-3 gap-2.5 mt-5 mb-2 max-w-md mx-auto w-full">
           <button
             onClick={() => rotateImage('left')}
-            className="flex items-center gap-2 px-5 py-3.5 bg-military-800 hover:bg-military-750 text-military-100 rounded-xl font-black text-xs active:scale-95 transition-all cursor-pointer shadow-md border border-military-700"
+            className="flex items-center justify-center gap-1.5 px-3 py-3.5 bg-military-800 hover:bg-military-750 text-military-100 rounded-xl font-black text-[11px] active:scale-95 transition-all cursor-pointer shadow-md border border-military-700"
             title="Girar para Esquerda"
           >
-            <RotateCcw size={16} /> GIRAR ESQUERDA
+            <RotateCcw size={15} /> GIRAR ESQ
           </button>
           <button
             onClick={() => rotateImage('right')}
-            className="flex items-center gap-2 px-5 py-3.5 bg-military-800 hover:bg-military-750 text-military-100 rounded-xl font-black text-xs active:scale-95 transition-all cursor-pointer shadow-md border border-military-700"
+            className="flex items-center justify-center gap-1.5 px-3 py-3.5 bg-military-800 hover:bg-military-750 text-military-100 rounded-xl font-black text-[11px] active:scale-95 transition-all cursor-pointer shadow-md border border-military-700"
             title="Girar para Direita"
           >
-            <RotateCw size={16} /> GIRAR DIREITA
+            <RotateCw size={15} /> GIRAR DIR
+          </button>
+          <button
+            onClick={openCropForReview}
+            className="flex items-center justify-center gap-1.5 px-3 py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-[11px] active:scale-95 transition-all cursor-pointer shadow-md border border-blue-500"
+            title="Cortar Imagem"
+          >
+            <Crop size={15} /> CORTAR
           </button>
         </div>
 
@@ -591,6 +813,16 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
                   <button 
                     onClick={(e) => { 
                       e.stopPropagation(); 
+                      openCropForPage(idx);
+                    }}
+                    className="p-1.5 bg-blue-600/95 border border-blue-500 text-white rounded-lg shadow-md active:scale-90 transition-transform cursor-pointer hover:bg-blue-700"
+                    title="Cortar Imagem"
+                  >
+                    <Crop size={12} />
+                  </button>
+                  <button 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
                       setImages(images.filter((_, i) => i !== idx)); 
                     }}
                     className="p-1.5 bg-red-600 text-white rounded-lg shadow-md active:scale-90 transition-transform cursor-pointer hover:bg-red-500"
@@ -602,7 +834,7 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
 
                 <div className="absolute bottom-0 left-0 right-0 p-2 bg-black/60 backdrop-blur-sm flex justify-between items-center">
                   <p className="text-[10px] font-mono text-white/90 font-bold">PÁG {idx + 1}</p>
-                  <span className="text-[8px] font-bold text-military-300 font-mono uppercase tracking-widest">Ver foto</span>
+                  <span className="text-[8px] font-bold text-military-300 font-mono uppercase tracking-widest">Ajustar / Ver</span>
                 </div>
               </div>
             ))}
@@ -611,6 +843,37 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
 
         {images.length > 0 && (
           <div className="mt-8 space-y-3">
+            {/* Photos per PDF sheet selector */}
+            <div className="bg-military-900/75 border border-military-700 rounded-2xl p-3 space-y-2">
+              <span className="block text-[10px] font-mono font-black uppercase tracking-wider text-military-300 text-center">
+                Imagens por folha no PDF
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPhotosPerPage(1)}
+                  className={`py-2.5 px-3 rounded-xl font-mono text-xs font-black uppercase border transition-all cursor-pointer ${
+                    photosPerPage === 1
+                      ? 'bg-blue-600 border-blue-500 text-white shadow-md'
+                      : 'bg-military-850 border-military-700 text-military-300 hover:bg-military-800'
+                  }`}
+                >
+                  1 por folha
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPhotosPerPage(2)}
+                  className={`py-2.5 px-3 rounded-xl font-mono text-xs font-black uppercase border transition-all cursor-pointer ${
+                    photosPerPage === 2
+                      ? 'bg-blue-600 border-blue-500 text-white shadow-md'
+                      : 'bg-military-850 border-military-700 text-military-300 hover:bg-military-800'
+                  }`}
+                >
+                  2 por folha
+                </button>
+              </div>
+            </div>
+
             <button 
               onClick={generatePDF}
               className="w-full bg-military-600 hover:bg-military-500 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] cursor-pointer"
@@ -646,44 +909,255 @@ export default function FotoPDF({ onBack }: FotoPDFProps) {
             <img src={selectedPageImageUrl} className="max-w-full max-h-[65vh] object-contain rounded-xl" alt="Page Detail" />
           </div>
 
-          {/* Controls next to delete button - Beautiful High Contrast style */}
-          <div className="mt-6 grid grid-cols-4 gap-2.5 w-full max-w-md mx-auto">
+          {/* Controls: Girar Esq, Girar Dir, Cortar, Excluir, Concluir */}
+          <div className="mt-5 space-y-2.5 w-full max-w-md mx-auto">
+            <div className="grid grid-cols-3 gap-2.5">
+              <button
+                onClick={() => handleRotatePageImage(selectedPageImageIndex, 'left')}
+                className="py-3 bg-military-800 hover:bg-military-750 text-military-100 font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-military-700 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
+                title="Girar para Esquerda"
+              >
+                <RotateCcw size={16} />
+                <span>GIRAR ESQ</span>
+              </button>
+              <button
+                onClick={() => handleRotatePageImage(selectedPageImageIndex, 'right')}
+                className="py-3 bg-military-800 hover:bg-military-750 text-military-100 font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-military-700 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
+                title="Girar para Direita"
+              >
+                <RotateCw size={16} />
+                <span>GIRAR DIR</span>
+              </button>
+              <button
+                onClick={() => openCropForPage(selectedPageImageIndex)}
+                className="py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-blue-500 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
+                title="Cortar Imagem"
+              >
+                <Crop size={16} />
+                <span>CORTAR</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                onClick={() => {
+                  setImages(prev => prev.filter((_, i) => i !== selectedPageImageIndex));
+                  setSelectedPageImageIndex(null);
+                  setSelectedPageImageUrl(null);
+                }}
+                className="py-3 bg-red-950/40 hover:bg-red-950/60 border border-red-500/30 text-red-400 font-bold rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs cursor-pointer"
+                title="Excluir esta página"
+              >
+                <Trash2 size={16} />
+                <span>EXCLUIR</span>
+              </button>
+              <button
+                onClick={() => { setSelectedPageImageIndex(null); setSelectedPageImageUrl(null); }}
+                className="py-3 bg-military-600 hover:bg-military-500 text-white font-black rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs cursor-pointer shadow-md"
+                title="Confirmar e voltar"
+              >
+                <Check size={16} />
+                <span>CONCLUIR</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Image Crop Modal */}
+      {cropTarget && (
+        <div className="fixed inset-0 z-[140] bg-black/95 flex flex-col p-4 sm:p-6 select-none">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Crop className="w-4 h-4 text-blue-400" />
+              <span className="text-xs font-mono font-black tracking-wider text-white uppercase">
+                Ajustar Corte da Imagem
+              </span>
+            </div>
             <button
-              onClick={() => handleRotatePageImage(selectedPageImageIndex, 'left')}
-              className="py-3 bg-military-800 hover:bg-military-750 text-military-100 font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-military-700 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
-              title="Girar para Esquerda"
+              type="button"
+              onClick={() => setCropTarget(null)}
+              className="p-2 bg-military-800 hover:bg-military-750 text-military-100 rounded-lg cursor-pointer transition-colors"
+              title="Fechar corte"
             >
-              <RotateCcw size={16} />
-              <span>GIRAR ESQ</span>
+              <X size={20} />
             </button>
-            <button
-              onClick={() => handleRotatePageImage(selectedPageImageIndex, 'right')}
-              className="py-3 bg-military-800 hover:bg-military-750 text-military-100 font-black rounded-xl flex flex-col items-center justify-center gap-1 border border-military-700 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
-              title="Girar para Direita"
-            >
-              <RotateCw size={16} />
-              <span>GIRAR DIR</span>
-            </button>
-            <button
-              onClick={() => {
-                setImages(prev => prev.filter((_, i) => i !== selectedPageImageIndex));
-                setSelectedPageImageIndex(null);
-                setSelectedPageImageUrl(null);
-              }}
-              className="py-3 bg-red-950/40 hover:bg-red-950/60 border border-red-500/30 text-red-400 font-bold rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all text-[10px] cursor-pointer"
-              title="Excluir esta página"
-            >
-              <Trash2 size={16} />
-              <span>EXCLUIR</span>
-            </button>
-            <button
-              onClick={() => { setSelectedPageImageIndex(null); setSelectedPageImageUrl(null); }}
-              className="py-3 bg-military-600 hover:bg-military-500 text-white font-black rounded-xl flex flex-col items-center justify-center gap-1 active:scale-95 transition-all text-[10px] cursor-pointer shadow-md"
-              title="Confirmar e voltar"
-            >
-              <Check size={16} />
-              <span>CONCLUIR</span>
-            </button>
+          </div>
+
+          <p className="text-[11px] font-mono text-military-300 text-center mb-3">
+            Arraste as bordas ou cantos para selecionar a área desejada
+          </p>
+
+          {/* Image Stage */}
+          <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+            <div className="relative inline-block touch-none select-none shadow-2xl">
+              <img
+                ref={cropImgRef}
+                src={cropTarget.src}
+                alt="Cortar foto"
+                className="block max-w-full max-h-[58vh] w-auto h-auto pointer-events-none rounded-lg"
+                draggable={false}
+              />
+
+              {/* Darkened areas outside crop rectangle */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  background: `linear-gradient(to bottom, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.62) 100%)`,
+                  clipPath: `polygon(
+                    0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%,
+                    ${cropBox.x * 100}% ${cropBox.y * 100}%,
+                    ${cropBox.x * 100}% ${(cropBox.y + cropBox.h) * 100}%,
+                    ${(cropBox.x + cropBox.w) * 100}% ${(cropBox.y + cropBox.h) * 100}%,
+                    ${(cropBox.x + cropBox.w) * 100}% ${cropBox.y * 100}%,
+                    ${cropBox.x * 100}% ${cropBox.y * 100}%
+                  )`,
+                }}
+              />
+
+              {/* Active draggable & resizable crop frame */}
+              <div
+                onPointerDown={e => handleCropPointerDown(e, 'move')}
+                onPointerMove={handleCropPointerMove}
+                onPointerUp={handleCropPointerUp}
+                onPointerCancel={handleCropPointerUp}
+                style={{
+                  left: `${cropBox.x * 100}%`,
+                  top: `${cropBox.y * 100}%`,
+                  width: `${cropBox.w * 100}%`,
+                  height: `${cropBox.h * 100}%`,
+                }}
+                className="absolute border-2 border-blue-400 cursor-move touch-none"
+              >
+                {/* Rule-of-thirds guide lines */}
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/25" />
+                  <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/25" />
+                  <div className="absolute top-1/3 left-0 right-0 h-px bg-white/25" />
+                  <div className="absolute top-2/3 left-0 right-0 h-px bg-white/25" />
+                </div>
+
+                {/* Corner Handles */}
+                <div
+                  onPointerDown={e => handleCropPointerDown(e, 'nw')}
+                  onPointerMove={handleCropPointerMove}
+                  onPointerUp={handleCropPointerUp}
+                  onPointerCancel={handleCropPointerUp}
+                  className="absolute -top-3 -left-3 w-7 h-7 flex items-center justify-center cursor-nwse-resize touch-none"
+                >
+                  <span className="w-4 h-4 border-t-[3px] border-l-[3px] border-white rounded-tl-sm block shadow" />
+                </div>
+                <div
+                  onPointerDown={e => handleCropPointerDown(e, 'ne')}
+                  onPointerMove={handleCropPointerMove}
+                  onPointerUp={handleCropPointerUp}
+                  onPointerCancel={handleCropPointerUp}
+                  className="absolute -top-3 -right-3 w-7 h-7 flex items-center justify-center cursor-nesw-resize touch-none"
+                >
+                  <span className="w-4 h-4 border-t-[3px] border-r-[3px] border-white rounded-tr-sm block shadow" />
+                </div>
+                <div
+                  onPointerDown={e => handleCropPointerDown(e, 'sw')}
+                  onPointerMove={handleCropPointerMove}
+                  onPointerUp={handleCropPointerUp}
+                  onPointerCancel={handleCropPointerUp}
+                  className="absolute -bottom-3 -left-3 w-7 h-7 flex items-center justify-center cursor-nesw-resize touch-none"
+                >
+                  <span className="w-4 h-4 border-b-[3px] border-l-[3px] border-white rounded-bl-sm block shadow" />
+                </div>
+                <div
+                  onPointerDown={e => handleCropPointerDown(e, 'se')}
+                  onPointerMove={handleCropPointerMove}
+                  onPointerUp={handleCropPointerUp}
+                  onPointerCancel={handleCropPointerUp}
+                  className="absolute -bottom-3 -right-3 w-7 h-7 flex items-center justify-center cursor-nwse-resize touch-none"
+                >
+                  <span className="w-4 h-4 border-b-[3px] border-r-[3px] border-white rounded-br-sm block shadow" />
+                </div>
+
+                {/* Edge Midpoint Handles */}
+                <div
+                  onPointerDown={e => handleCropPointerDown(e, 'n')}
+                  onPointerMove={handleCropPointerMove}
+                  onPointerUp={handleCropPointerUp}
+                  onPointerCancel={handleCropPointerUp}
+                  className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-10 h-5 flex items-center justify-center cursor-ns-resize touch-none"
+                >
+                  <span className="w-6 h-1 bg-white rounded-full block shadow" />
+                </div>
+                <div
+                  onPointerDown={e => handleCropPointerDown(e, 's')}
+                  onPointerMove={handleCropPointerMove}
+                  onPointerUp={handleCropPointerUp}
+                  onPointerCancel={handleCropPointerUp}
+                  className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-10 h-5 flex items-center justify-center cursor-ns-resize touch-none"
+                >
+                  <span className="w-6 h-1 bg-white rounded-full block shadow" />
+                </div>
+                <div
+                  onPointerDown={e => handleCropPointerDown(e, 'w')}
+                  onPointerMove={handleCropPointerMove}
+                  onPointerUp={handleCropPointerUp}
+                  onPointerCancel={handleCropPointerUp}
+                  className="absolute top-1/2 -left-2.5 -translate-y-1/2 w-5 h-10 flex items-center justify-center cursor-ew-resize touch-none"
+                >
+                  <span className="w-1 h-6 bg-white rounded-full block shadow" />
+                </div>
+                <div
+                  onPointerDown={e => handleCropPointerDown(e, 'e')}
+                  onPointerMove={handleCropPointerMove}
+                  onPointerUp={handleCropPointerUp}
+                  onPointerCancel={handleCropPointerUp}
+                  className="absolute top-1/2 -right-2.5 -translate-y-1/2 w-5 h-10 flex items-center justify-center cursor-ew-resize touch-none"
+                >
+                  <span className="w-1 h-6 bg-white rounded-full block shadow" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Crop Actions */}
+          <div className="mt-4 space-y-2.5 w-full max-w-md mx-auto">
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => rotateCropTarget('left')}
+                className="py-2.5 bg-military-800 hover:bg-military-750 text-military-100 rounded-xl font-black text-[10px] border border-military-700 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <RotateCcw size={14} /> GIRAR ESQ
+              </button>
+              <button
+                type="button"
+                onClick={() => rotateCropTarget('right')}
+                className="py-2.5 bg-military-800 hover:bg-military-750 text-military-100 rounded-xl font-black text-[10px] border border-military-700 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <RotateCw size={14} /> GIRAR DIR
+              </button>
+              <button
+                type="button"
+                onClick={() => setCropBox({ x: 0, y: 0, w: 1, h: 1 })}
+                className="py-2.5 bg-military-800 hover:bg-military-750 text-military-100 rounded-xl font-black text-[10px] border border-military-700 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Maximize size={14} /> INTEIRA
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setCropTarget(null)}
+                className="py-3 bg-military-800 hover:bg-military-750 border border-military-700 text-military-200 font-bold rounded-xl text-xs uppercase cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyCrop}
+                className="py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl text-xs uppercase flex items-center justify-center gap-1.5 shadow-lg cursor-pointer"
+              >
+                <Check size={16} /> Aplicar Corte
+              </button>
+            </div>
           </div>
         </div>
       )}

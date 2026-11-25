@@ -1591,6 +1591,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           const wPx = latLngToWorldPixel(pt.lat, pt.lng, zoom);
           const px = wPx.x - centerPixel.x;
           const py = wPx.y - centerPixel.y;
+          ctx.save();
           ctx.beginPath();
           ctx.arc(px, py, 6, 0, Math.PI * 2);
           ctx.fillStyle = strokeColor;
@@ -1599,10 +1600,15 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
           ctx.lineWidth = 1.5;
           ctx.stroke();
 
-          // Render Point Label
+          // Render Point Label with dark halo for crisp contrast over satellite maps
+          const label = feat.name || 'Ponto';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+          ctx.strokeText(label, px + 9, py + 4);
           ctx.fillStyle = '#ffffff';
-          ctx.font = '10px monospace';
-          ctx.fillText(feat.name || 'Ponto', px + 8, py + 4);
+          ctx.fillText(label, px + 9, py + 4);
+          ctx.restore();
         } else if (feat.type === 'LineString') {
           ctx.beginPath();
           const wPx0 = latLngToWorldPixel(feat.coordinates[0].lat, feat.coordinates[0].lng, zoom);
@@ -3491,9 +3497,19 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
     try {
       for (let i = 0; i < fileList.length; i++) {
         const file = fileList[i];
-        const ext = file.name.toLowerCase().split('.').pop() || '';
+        const lowerName = file.name.toLowerCase();
+        const ext = lowerName.split('.').pop() || '';
         const baseName = file.name.replace(/\.[^/.]+$/, "");
         setVectorUploadStatus(`[${i + 1}/${fileList.length}] Processando ${file.name}...`);
+
+        let isXmlGpx = ext === 'gpx' || lowerName.endsWith('.gpx.xml') || lowerName.endsWith('.gpx.txt');
+        let preloadedText: string | null = null;
+        if (!isXmlGpx && (ext === 'xml' || ext === 'txt' || ext === '')) {
+          preloadedText = await file.text();
+          if (/<gpx[\s>]/i.test(preloadedText.slice(0, 2000))) {
+            isXmlGpx = true;
+          }
+        }
 
         if (ext === 'kml') {
           setVectorUploadStatus(`Lendo feições KML (${file.name})...`);
@@ -3601,28 +3617,20 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
           await dbSaveKml(newKml);
           successCount++;
-        } else if (ext === 'gpx') {
+        } else if (isXmlGpx) {
           setVectorUploadStatus(`Lendo arquivo GPX (${file.name})...`);
-          const text = await file.text();
-          const parser = new DOMParser();
-          const xmlDoc = parser.parseFromString(text, "text/xml");
+          const rawText = (preloadedText ?? await file.text()).replace(/^\uFEFF/, '').trim();
+          const sanitizedText = rawText.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[\da-fA-F]+;)/g, '&amp;');
 
+          const parser = new DOMParser();
+          let xmlDoc = parser.parseFromString(rawText, "text/xml");
           if (xmlDoc.getElementsByTagName("parsererror").length > 0) {
-            throw new Error(`O arquivo GPX '${file.name}' possui XML inválido ou corrompido.`);
+            xmlDoc = parser.parseFromString(sanitizedText, "text/xml");
           }
 
-          const getXmlElements = (parent: Document | Element, tagName: string): Element[] => {
-            const byNs = Array.from(parent.getElementsByTagNameNS('*', tagName));
-            if (byNs.length > 0) return byNs;
-            return Array.from(parent.getElementsByTagName(tagName));
-          };
-
-          const getDirectChildText = (parent: Element, tagName: string): string => {
-            const children = Array.from(parent.children);
-            const match = children.find(
-              el => (el.localName || el.tagName).toLowerCase() === tagName.toLowerCase()
-            );
-            return match?.textContent?.trim() || '';
+          const parseCoordNum = (val: string | null | undefined): number => {
+            if (!val) return NaN;
+            return parseFloat(val.trim().replace(',', '.'));
           };
 
           const escapeHtml = (val: string): string =>
@@ -3654,103 +3662,200 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
           const features: KmlData['features'] = [];
 
-          // 1. Waypoints (<wpt>)
-          const wpts = getXmlElements(xmlDoc, 'wpt');
-          wpts.forEach((wpt, idx) => {
-            const lat = parseFloat(wpt.getAttribute('lat') || '');
-            const lng = parseFloat(wpt.getAttribute('lon') || '');
-            if (!isNaN(lat) && !isNaN(lng)) {
-              const name = getDirectChildText(wpt, 'name') || `Ponto GPX #${idx + 1}`;
-              const desc = getDirectChildText(wpt, 'desc');
-              const cmt = getDirectChildText(wpt, 'cmt');
-              const ele = getDirectChildText(wpt, 'ele');
-              const time = getDirectChildText(wpt, 'time');
-              features.push({
-                type: 'Point',
-                name,
-                description: buildGpxDesc(desc, cmt, ele, time),
-                coordinates: [{ lat, lng }],
-                bbox: [lng, lat, lng, lat]
+          if (xmlDoc.getElementsByTagName("parsererror").length === 0) {
+            const getXmlElements = (parent: Document | Element, tagName: string): Element[] => {
+              const all = Array.from(parent.getElementsByTagName('*'));
+              return all.filter(el => (el.localName || el.tagName).toLowerCase() === tagName.toLowerCase());
+            };
+
+            const getDirectChildText = (parent: Element, tagName: string): string => {
+              const children = Array.from(parent.children);
+              const match = children.find(
+                el => (el.localName || el.tagName).toLowerCase() === tagName.toLowerCase()
+              );
+              return match?.textContent?.trim() || '';
+            };
+
+            // 1. Waypoints (<wpt>)
+            const wpts = getXmlElements(xmlDoc, 'wpt');
+            wpts.forEach((wpt, idx) => {
+              const lat = parseCoordNum(wpt.getAttribute('lat'));
+              const lng = parseCoordNum(wpt.getAttribute('lon') || wpt.getAttribute('lng'));
+              if (!isNaN(lat) && !isNaN(lng)) {
+                const name = getDirectChildText(wpt, 'name') || `Ponto GPX #${idx + 1}`;
+                const desc = getDirectChildText(wpt, 'desc');
+                const cmt = getDirectChildText(wpt, 'cmt');
+                const ele = getDirectChildText(wpt, 'ele');
+                const time = getDirectChildText(wpt, 'time');
+                features.push({
+                  type: 'Point',
+                  name,
+                  description: buildGpxDesc(desc, cmt, ele, time),
+                  coordinates: [{ lat, lng }],
+                  bbox: [lng, lat, lng, lat]
+                });
+              }
+            });
+
+            // 2. Tracks (<trk> -> <trkseg> -> <trkpt>)
+            const trks = getXmlElements(xmlDoc, 'trk');
+            trks.forEach((trk, trkIdx) => {
+              const trkName = getDirectChildText(trk, 'name') || `Trilha GPX #${trkIdx + 1}`;
+              const trkDesc = getDirectChildText(trk, 'desc');
+              const trkCmt = getDirectChildText(trk, 'cmt');
+              const segs = getXmlElements(trk, 'trkseg');
+              const pointContainers = segs.length > 0 ? segs : [trk];
+
+              pointContainers.forEach((container, segIdx) => {
+                const trkpts = getXmlElements(container, 'trkpt');
+                const pts: Array<{ lat: number; lng: number }> = [];
+                trkpts.forEach(pt => {
+                  const lat = parseCoordNum(pt.getAttribute('lat'));
+                  const lng = parseCoordNum(pt.getAttribute('lon') || pt.getAttribute('lng'));
+                  if (!isNaN(lat) && !isNaN(lng)) {
+                    pts.push({ lat, lng });
+                  }
+                });
+
+                if (pts.length >= 2) {
+                  const segName = pointContainers.length > 1 ? `${trkName} (Trecho ${segIdx + 1})` : trkName;
+                  features.push({
+                    type: 'LineString',
+                    name: segName,
+                    description: buildGpxDesc(trkDesc, trkCmt),
+                    coordinates: pts,
+                    bbox: computeCoordsBbox(pts)
+                  });
+                } else if (pts.length === 1) {
+                  features.push({
+                    type: 'Point',
+                    name: trkName,
+                    description: buildGpxDesc(trkDesc, trkCmt),
+                    coordinates: pts,
+                    bbox: computeCoordsBbox(pts)
+                  });
+                }
               });
-            }
-          });
+            });
 
-          // 2. Tracks (<trk> -> <trkseg> -> <trkpt>)
-          const trks = getXmlElements(xmlDoc, 'trk');
-          trks.forEach((trk, trkIdx) => {
-            const trkName = getDirectChildText(trk, 'name') || `Trilha GPX #${trkIdx + 1}`;
-            const trkDesc = getDirectChildText(trk, 'desc');
-            const trkCmt = getDirectChildText(trk, 'cmt');
-            const segs = getXmlElements(trk, 'trkseg');
-            const pointContainers = segs.length > 0 ? segs : [trk];
-
-            pointContainers.forEach((container, segIdx) => {
-              const trkpts = getXmlElements(container, 'trkpt');
+            // 3. Routes (<rte> -> <rtept>)
+            const rtes = getXmlElements(xmlDoc, 'rte');
+            rtes.forEach((rte, rteIdx) => {
+              const rteName = getDirectChildText(rte, 'name') || `Rota GPX #${rteIdx + 1}`;
+              const rteDesc = getDirectChildText(rte, 'desc');
+              const rteCmt = getDirectChildText(rte, 'cmt');
+              const rtepts = getXmlElements(rte, 'rtept');
               const pts: Array<{ lat: number; lng: number }> = [];
-              trkpts.forEach(pt => {
-                const lat = parseFloat(pt.getAttribute('lat') || '');
-                const lng = parseFloat(pt.getAttribute('lon') || '');
+
+              rtepts.forEach(pt => {
+                const lat = parseCoordNum(pt.getAttribute('lat'));
+                const lng = parseCoordNum(pt.getAttribute('lon') || pt.getAttribute('lng'));
                 if (!isNaN(lat) && !isNaN(lng)) {
                   pts.push({ lat, lng });
                 }
               });
 
               if (pts.length >= 2) {
-                const segName = pointContainers.length > 1 ? `${trkName} (Trecho ${segIdx + 1})` : trkName;
                 features.push({
                   type: 'LineString',
-                  name: segName,
-                  description: buildGpxDesc(trkDesc, trkCmt),
+                  name: rteName,
+                  description: buildGpxDesc(rteDesc, rteCmt),
                   coordinates: pts,
                   bbox: computeCoordsBbox(pts)
                 });
               } else if (pts.length === 1) {
                 features.push({
                   type: 'Point',
-                  name: trkName,
-                  description: buildGpxDesc(trkDesc, trkCmt),
+                  name: rteName,
+                  description: buildGpxDesc(rteDesc, rteCmt),
                   coordinates: pts,
                   bbox: computeCoordsBbox(pts)
                 });
               }
             });
-          });
+          } else {
+            // Resilient regex fallback for non-strict GPX XML exported by older GPS tools
+            const extractTag = (block: string, tag: string): string => {
+              const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+              return m ? m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim() : '';
+            };
+            const extractCoords = (attrs: string): { lat: number; lng: number } | null => {
+              const latM = attrs.match(/lat=["']([^"']+)["']/i);
+              const lonM = attrs.match(/(?:lon|lng)=["']([^"']+)["']/i);
+              if (!latM || !lonM) return null;
+              const lat = parseCoordNum(latM[1]);
+              const lng = parseCoordNum(lonM[1]);
+              return !isNaN(lat) && !isNaN(lng) ? { lat, lng } : null;
+            };
 
-          // 3. Routes (<rte> -> <rtept>)
-          const rtes = getXmlElements(xmlDoc, 'rte');
-          rtes.forEach((rte, rteIdx) => {
-            const rteName = getDirectChildText(rte, 'name') || `Rota GPX #${rteIdx + 1}`;
-            const rteDesc = getDirectChildText(rte, 'desc');
-            const rteCmt = getDirectChildText(rte, 'cmt');
-            const rtepts = getXmlElements(rte, 'rtept');
-            const pts: Array<{ lat: number; lng: number }> = [];
-
-            rtepts.forEach(pt => {
-              const lat = parseFloat(pt.getAttribute('lat') || '');
-              const lng = parseFloat(pt.getAttribute('lon') || '');
-              if (!isNaN(lat) && !isNaN(lng)) {
-                pts.push({ lat, lng });
+            const wptRegex = /<wpt\b([^>]*)(?:\/>|>([\s\S]*?)<\/wpt>)/gi;
+            let wMatch: RegExpExecArray | null;
+            let wIdx = 0;
+            while ((wMatch = wptRegex.exec(rawText)) !== null) {
+              const coord = extractCoords(wMatch[1]);
+              if (coord) {
+                const body = wMatch[2] || '';
+                wIdx++;
+                features.push({
+                  type: 'Point',
+                  name: extractTag(body, 'name') || `Ponto GPX #${wIdx}`,
+                  description: buildGpxDesc(extractTag(body, 'desc'), extractTag(body, 'cmt'), extractTag(body, 'ele'), extractTag(body, 'time')),
+                  coordinates: [coord],
+                  bbox: [coord.lng, coord.lat, coord.lng, coord.lat]
+                });
               }
-            });
-
-            if (pts.length >= 2) {
-              features.push({
-                type: 'LineString',
-                name: rteName,
-                description: buildGpxDesc(rteDesc, rteCmt),
-                coordinates: pts,
-                bbox: computeCoordsBbox(pts)
-              });
-            } else if (pts.length === 1) {
-              features.push({
-                type: 'Point',
-                name: rteName,
-                description: buildGpxDesc(rteDesc, rteCmt),
-                coordinates: pts,
-                bbox: computeCoordsBbox(pts)
-              });
             }
-          });
+
+            const trkRegex = /<trk\b[^>]*>([\s\S]*?)<\/trk>/gi;
+            let tMatch: RegExpExecArray | null;
+            let tIdx = 0;
+            while ((tMatch = trkRegex.exec(rawText)) !== null) {
+              tIdx++;
+              const trkBody = tMatch[1];
+              const trkName = extractTag(trkBody, 'name') || `Trilha GPX #${tIdx}`;
+              const pts: Array<{ lat: number; lng: number }> = [];
+              const ptRegex = /<trkpt\b([^>]*)(?:\/>|>[\s\S]*?<\/trkpt>)/gi;
+              let pMatch: RegExpExecArray | null;
+              while ((pMatch = ptRegex.exec(trkBody)) !== null) {
+                const coord = extractCoords(pMatch[1]);
+                if (coord) pts.push(coord);
+              }
+              if (pts.length >= 2) {
+                features.push({
+                  type: 'LineString',
+                  name: trkName,
+                  description: buildGpxDesc(extractTag(trkBody, 'desc'), extractTag(trkBody, 'cmt')),
+                  coordinates: pts,
+                  bbox: computeCoordsBbox(pts)
+                });
+              }
+            }
+
+            const rteRegex = /<rte\b[^>]*>([\s\S]*?)<\/rte>/gi;
+            let rMatch: RegExpExecArray | null;
+            let rIdx = 0;
+            while ((rMatch = rteRegex.exec(rawText)) !== null) {
+              rIdx++;
+              const rteBody = rMatch[1];
+              const rteName = extractTag(rteBody, 'name') || `Rota GPX #${rIdx}`;
+              const pts: Array<{ lat: number; lng: number }> = [];
+              const ptRegex = /<rtept\b([^>]*)(?:\/>|>[\s\S]*?<\/rtept>)/gi;
+              let pMatch: RegExpExecArray | null;
+              while ((pMatch = ptRegex.exec(rteBody)) !== null) {
+                const coord = extractCoords(pMatch[1]);
+                if (coord) pts.push(coord);
+              }
+              if (pts.length >= 2) {
+                features.push({
+                  type: 'LineString',
+                  name: rteName,
+                  description: buildGpxDesc(extractTag(rteBody, 'desc'), extractTag(rteBody, 'cmt')),
+                  coordinates: pts,
+                  bbox: computeCoordsBbox(pts)
+                });
+              }
+            }
+          }
 
           if (features.length === 0) {
             throw new Error(`Nenhum ponto, rota ou trilha compatível encontrado no arquivo GPX '${file.name}'.`);
@@ -3760,7 +3865,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
             id: file.name + '_' + Date.now() + '_' + i,
             name: baseName,
             visible: true,
-            color: '#f97316',
+            color: '#3b82f6',
             thickness: 'grossa',
             format: 'gpx',
             features
@@ -3961,7 +4066,7 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
   const dmsLng = decimalToDMS(center.lng, 'lng');
 
   return (
-    <div className="relative h-screen w-full bg-military-900 text-military-100 font-sans overflow-hidden select-none flex flex-col">
+    <div className="relative h-[100dvh] w-full bg-military-900 text-military-100 font-sans overflow-hidden select-none flex flex-col">
       <style dangerouslySetInnerHTML={{ __html: `
         @keyframes marquee {
           0% { transform: translate3d(0, 0, 0); }
@@ -4034,13 +4139,27 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
 
         {/* 3. COMPACT RIGHT FLOATING DOCK + MAIN MENU BUTTON */}
         <div 
-          className={`absolute right-3 ${measuringMode === 'add_point' ? 'top-3' : 'bottom-14'} z-30 flex flex-col items-end gap-2`}
+          className={`absolute right-3 ${measuringMode === 'add_point' ? 'top-3' : 'bottom-[calc(2.75rem+env(safe-area-inset-bottom,0px))]'} z-30 flex flex-col items-end gap-2`}
           onMouseDown={e => e.stopPropagation()}
           onMouseUp={e => e.stopPropagation()}
           onTouchStart={e => e.stopPropagation()}
           onTouchEnd={e => e.stopPropagation()}
           onClick={e => e.stopPropagation()}
         >
+          {/* Main Menu Button (positioned above zoom controls) */}
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen(true)}
+            className="w-10 h-10 rounded-2xl bg-military-800/95 border border-military-700/80 text-military-100 hover:bg-military-700 hover:border-military-500 shadow-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer relative"
+            title="Menu Principal"
+            id="btn-menu-pm"
+          >
+            <Menu className="w-4 h-4" />
+            {isRecordingGpsTrack && (
+              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 border border-white animate-pulse" />
+            )}
+          </button>
+
           {/* Compact Joined Zoom, GPS & Reticle Capsule */}
           <div className="flex flex-col bg-military-800/95 border border-military-700/80 rounded-2xl shadow-xl backdrop-blur-md overflow-hidden divide-y divide-military-700/70">
             <button 
@@ -4081,25 +4200,11 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
               <Crosshair className="w-4 h-4" />
             </button>
           </div>
-
-          {/* Main Menu Button */}
-          <button
-            type="button"
-            onClick={() => setIsMenuOpen(true)}
-            className="w-10 h-10 rounded-2xl bg-military-800/95 border border-military-700/80 text-military-100 hover:bg-military-700 hover:border-military-500 shadow-xl backdrop-blur-md flex items-center justify-center transition-all cursor-pointer relative"
-            title="Menu Principal"
-            id="btn-menu-pm"
-          >
-            <Menu className="w-4 h-4" />
-            {isRecordingGpsTrack && (
-              <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 border border-white animate-pulse" />
-            )}
-          </button>
         </div>
 
         {/* 4. DMS FIXED COORDINATE READOUT */}
         <div 
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30"
+          className="absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-30"
           onMouseDown={e => e.stopPropagation()}
           onMouseUp={e => e.stopPropagation()}
           onTouchStart={e => e.stopPropagation()}
@@ -5904,7 +6009,6 @@ export default function PresidentMaps({ onBack }: PresidentMapsProps) {
                       </span>
                       <input 
                         type="file" 
-                        accept=".gpkg,.zip,.kml,.kmz,.gpx,.geojson,.json,.csv,.txt,application/gpx+xml,text/xml,application/xml"
                         multiple
                         disabled={isProcessingVectorFile}
                         onChange={handleVectorFileUpload}

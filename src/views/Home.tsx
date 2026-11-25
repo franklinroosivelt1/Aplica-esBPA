@@ -16,7 +16,6 @@ interface MenuItem {
   id: View;
   label: string;
   icon: any;
-  isPrimary?: boolean;
   externalUrl?: string;
 }
 
@@ -31,7 +30,6 @@ export default function Home({ onNavigate, offlineMode }: HomeProps) {
       id: 'camstamp', 
       label: 'Foto Georreferenciada', 
       icon: Camera,
-      isPrimary: true
     },
     { 
       id: 'mapas', 
@@ -91,46 +89,26 @@ export default function Home({ onNavigate, offlineMode }: HomeProps) {
         <div className="w-full space-y-2 px-0.5" id="menu-list-container">
           {menuItems.map((item, index) => {
             const IconComp = item.icon;
-            const isPrimary = item.isPrimary;
-            const sharedClassName = `w-full text-left rounded-2xl p-3.5 flex items-center justify-between gap-3.5 transition-all duration-150 cursor-pointer shadow-lg group border ${
-              isPrimary
-                ? 'bg-military-600 hover:bg-military-500 text-white border-military-500 ring-2 ring-military-500/20 shadow-military-900/40'
-                : 'bg-military-850 hover:bg-military-800 text-military-100 border-military-700/80 hover:border-military-600'
-            }`;
+            const sharedClassName = 'w-full text-left rounded-2xl p-3.5 flex items-center justify-between gap-3.5 transition-all duration-150 cursor-pointer shadow-lg group border bg-military-850 hover:bg-military-800 text-military-100 border-military-700/80 hover:border-military-600';
 
             const innerContent = (
               <>
                 {/* Left Icon */}
-                <div className={`p-2.5 rounded-xl shrink-0 transition-colors flex items-center justify-center ${
-                  isPrimary
-                    ? 'bg-military-700/70 text-white border border-military-400/40'
-                    : 'bg-military-900 text-military-300 border border-military-750 group-hover:text-military-100 group-hover:border-military-600'
-                }`}>
+                <div className="p-2.5 rounded-xl shrink-0 transition-colors flex items-center justify-center bg-military-900 text-military-300 border border-military-750 group-hover:text-military-100 group-hover:border-military-600">
                   <IconComp className="w-5 h-5" strokeWidth={2.2} />
                 </div>
 
                 {/* Center Content - Apenas o nome principal do botão */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className={`font-black text-sm sm:text-base uppercase tracking-wide leading-tight truncate ${
-                      isPrimary ? 'text-white' : 'text-military-100 group-hover:text-white'
-                    }`}>
+                    <h3 className="font-black text-sm sm:text-base uppercase tracking-wide leading-tight truncate text-military-100 group-hover:text-white">
                       {item.label}
                     </h3>
-                    {isPrimary && (
-                      <span className="bg-white/20 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0">
-                        Principal
-                      </span>
-                    )}
                   </div>
                 </div>
 
                 {/* Right Arrow / Action Indicator */}
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                  isPrimary
-                    ? 'bg-military-500/60 text-white group-hover:translate-x-0.5'
-                    : 'bg-military-900 border border-military-750 text-military-300 group-hover:text-military-100 group-hover:border-military-600 group-hover:translate-x-0.5'
-                }`}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-all bg-military-900 border border-military-750 text-military-300 group-hover:text-military-100 group-hover:border-military-600 group-hover:translate-x-0.5">
                   <ChevronRight className="w-4 h-4" />
                 </div>
               </>
